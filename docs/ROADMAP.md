@@ -1,14 +1,17 @@
 # Lộ trình
 
-- [ ] **M0 — Nền tảng kỹ thuật** (đang làm)
+- [x] **M0 — Nền tảng kỹ thuật**
   - [x] Khung repo, CLAUDE.md, README
-  - [x] Workflow CI và build NSIS
-  - [x] Prototype: toolbar React + 2 tab WebView2 native (chưa compile)
-  - [ ] Pin commit SHA cho action (hiện đang dùng tag `@v4`)
-  - [ ] Commit `package-lock.json` và `Cargo.lock` (CI đang dùng `npm install` tạm thời khi chưa có lockfile)
-  - [ ] Chạy CI trên GitHub và ghi kết quả
+  - [x] Workflow CI (ci.yml xanh: frontend + rust)
+  - [x] Prototype đa WebView2 (chưa chạy thật trên Windows)
+  - [ ] Pin commit SHA cho action
   - [ ] Nghiệm thu trên Windows: resize, DPI, focus, chuyển tab
-- [ ] M1 — Nền tảng trình duyệt (chưa bắt đầu)
+- [~] **M1 — Nền tảng trình duyệt** (đang làm, chưa kiểm chứng trên Windows)
+  - [x] Thanh địa chỉ, back/forward/reload, thêm/đóng/chuyển tab
+  - [x] Trang tab mới (`about:blank`), chặn giao thức nguy hiểm
+  - [x] Unit test cho chuẩn hóa địa chỉ (`navigation.rs`)
+  - [ ] Phím tắt
+  - [ ] Popup handling
 - [ ] M2 — Dữ liệu và profile
 - [ ] M3 — Quản lý tải xuống
 - [ ] M4 — Quyền riêng tư và bảo mật

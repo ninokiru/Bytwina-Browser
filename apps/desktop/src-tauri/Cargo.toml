@@ -9,6 +9,7 @@ tauri-build = "2"
 [dependencies]
 # "unstable" bật Window::add_child (xem docs/DECISIONS.md, ADR-001).
 tauri = { version = "2", features = ["unstable"] }
+serde = { version = "1", features = ["derive"] }
 
 [profile.release]
 codegen-units = 1
