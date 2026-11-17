@@ -1,0 +1,41 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - name: Install frontend deps
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build installer (NSIS)
+        working-directory: apps/desktop
+        run: npx tauri build --bundles nsis --target x86_64-pc-windows-msvc
+      - name: Locate installer
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem -Recurse -Filter *-setup.exe apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis | Select-Object -First 1
+          if (-not $f) { throw "NSIS installer not found" }
+          echo "INSTALLER=$($f.FullName)" >> $env:GITHUB_ENV
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nova-browser-windows-x64
+          path: ${{ env.INSTALLER }}
+          if-no-files-found: error
