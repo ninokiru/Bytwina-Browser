@@ -1,6 +1,6 @@
 # Lộ trình
 
-- [ ] **M0 — Nền tảng kỹ thuật** (đang làm)
+- [ ] **M0 — Nền tảng kỹ thuật** (dừng ở mức code; chưa có bằng chứng nghiệm thu GUI)
   - [x] Khung repo, CLAUDE.md, README
   - [x] Workflow CI và build NSIS
   - [x] Prototype: toolbar React + 2 tab WebView2 native
@@ -8,10 +8,25 @@
   - [ ] Commit `package-lock.json` và `Cargo.lock`
   - [ ] Chạy CI trên GitHub và ghi kết quả
   - [ ] Nghiệm thu trên Windows: resize, DPI, focus, chuyển tab
-- [ ] M1 — Nền tảng trình duyệt (chưa bắt đầu)
-- [ ] M2 — Dữ liệu và profile
-- [ ] M3 — Quản lý tải xuống
-- [ ] M4 — Quyền riêng tư và bảo mật
-- [ ] M5 — Tính năng nâng cao
-- [ ] M6 — Hiệu năng
-- [ ] M7 — Phát hành
+- [ ] **M1 — Nền tảng trình duyệt** (code xong, chưa test runtime)
+  - [x] Toolbar: tab bar (thêm/đóng/chuyển), address bar, back/forward/reload/stop
+  - [x] Tab manager backend (`tabs.rs`/`browser.rs`): id, url, title, loading, created, history
+  - [x] Navigation manager (`navigation.rs`): parse ô địa chỉ → URL/tìm kiếm, chặn scheme lạ
+  - [x] Điều hướng in-page bị chặn (ADR-003) — link trong trang chưa bấm được, cần cơ chế allowlist origin ở M4/M5
+  - [x] Popup handling (ADR-004)
+  - [x] Phím tắt khi focus toolbar: Ctrl+T/L/R, Alt+←/→, Ctrl+Tab, Esc. Ctrl+W/Ctrl+Tab toàn cục cần plugin global-shortcut (chưa làm)
+  - [ ] New tab page thật (hiện là about:blank)
+  - [ ] Build + test trên CI và trên Windows
+- [ ] **M2 — Dữ liệu và profile** (code xong, chưa test runtime)
+  - [x] SQLite rusqlite bundled, WAL, schema_version migrations (ADR-005)
+  - [x] Bookmarks: thêm/xóa/danh sách + UI panel
+  - [x] History: tự ghi khi tải trang, tìm kiếm, xóa + UI panel
+  - [x] Preferences: settings key-value (trang chủ) + UI panel
+  - [x] Session restoration: lưu tab khi đóng cửa sổ, khôi phục khi khởi động. Chỉ khôi phục URL + tiêu đề; KHÔNG khôi phục state trong bộ nhớ của website (form chưa gửi, cuộn, JS)
+  - [ ] Profile separation (nhiều hồ sơ người dùng) — chưa làm, giữ lại M2
+  - [ ] Build + test trên CI và trên Windows
+- [ ] M3 — Quản lý tải xuống (chưa bắt đầu)
+- [ ] M4 — Quyền riêng tư và bảo mật (chưa bắt đầu)
+- [ ] M5 — Tính năng nâng cao (chưa bắt đầu)
+- [ ] M6 — Hiệu năng (chưa bắt đầu)
+- [ ] M7 — Phát hành (chưa bắt đầu)

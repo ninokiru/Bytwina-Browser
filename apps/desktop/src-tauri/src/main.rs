@@ -1,93 +1,129 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, WindowEvent,
-};
+use std::sync::atomic::AtomicBool;
 
-const TOOLBAR_HEIGHT: f64 = 48.0;
-const TAB_URLS: [&str; 2] = ["https://example.com/", "https://example.org/"];
+use tauri::{LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
 
-/// Chuyển tab: hiện webview tab được chọn, ẩn các tab còn lại.
-/// Là command async để tránh deadlock của add_child khi gọi từ handler đồng bộ.
-#[tauri::command]
-async fn switch_tab(app: AppHandle, id: u32) -> Result<(), String> {
-    for n in 1..=TAB_URLS.len() as u32 {
-        let label = format!("tab-{n}");
-        let webview = app
-            .get_webview(&label)
-            .ok_or_else(|| format!("không tìm thấy {label}"))?;
-        if n == id {
-            webview.show().map_err(|e| e.to_string())?;
-        } else {
-            webview.hide().map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}
+mod browser;
+mod commands;
+mod db;
+mod navigation;
+mod tabs;
 
-/// Đặt lại vị trí và kích thước: toolbar ở trên, các tab bên dưới toolbar.
-fn layout(app: &AppHandle) -> tauri::Result<()> {
-    let Some(window) = app.get_window("main") else {
-        return Ok(());
-    };
-    let scale = window.scale_factor()?;
-    let size = window.inner_size()?.to_logical::<f64>(scale);
-    let content_height = (size.height - TOOLBAR_HEIGHT).max(0.0);
-
-    if let Some(toolbar) = app.get_webview("toolbar") {
-        toolbar.set_size(LogicalSize::new(size.width, TOOLBAR_HEIGHT))?;
-    }
-    for n in 1..=TAB_URLS.len() {
-        if let Some(tab) = app.get_webview(&format!("tab-{n}")) {
-            tab.set_position(LogicalPosition::new(0.0, TOOLBAR_HEIGHT))?;
-            tab.set_size(LogicalSize::new(size.width, content_height))?;
-        }
-    }
-    Ok(())
-}
+use browser::BrowserState;
+use db::DbState;
+use navigation::PopupQueue;
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![switch_tab])
+        .manage(BrowserState::new())
+        .manage(PopupQueue::default())
+        .manage(AtomicBool::new(false))
+        .invoke_handler(tauri::generate_handler![commands::browser_command])
+        .on_page_load(|webview, payload| {
+            let app = webview.app_handle().clone();
+            browser::on_page_load(&app, payload.event(), webview.label(), &payload.url().clone());
+        })
         .setup(|app| {
+            let state: BrowserState = app.state();
+            // M2: DB bật cho mọi tính năng lưu trữ; lỗi mở DB chỉ tắt M2, không chết app.
+            let storage = app
+                .path()
+                .app_data_dir()
+                .ok()
+                .and_then(db::open)
+                .map(DbState);
+            app.manage(storage.unwrap_or_default());
+
             let window = tauri::window::WindowBuilder::new(app, "main")
                 .title("Nova Browser")
                 .inner_size(1200.0, 800.0)
                 .build()?;
 
-            // Thanh công cụ: webview tin cậy, nạp giao diện React cục bộ.
+            // Thanh công cụ: webview tin cậy duy nhất được nạp giao diện cục bộ và gọi IPC.
             window.add_child(
                 WebviewBuilder::new("toolbar", WebviewUrl::App("index.html".into())),
                 LogicalPosition::new(0.0, 0.0),
-                LogicalSize::new(1200.0, TOOLBAR_HEIGHT),
+                LogicalSize::new(1200.0, browser::TOOLBAR_HEIGHT),
             )?;
 
-            // Các tab: webview nội dung từ xa, không có quyền IPC.
-            for (i, url) in TAB_URLS.iter().enumerate() {
-                let parsed = tauri::Url::parse(url)?;
-                window.add_child(
-                    WebviewBuilder::new(
-                        format!("tab-{}", i + 1),
-                        WebviewUrl::External(parsed),
-                    ),
-                    LogicalPosition::new(0.0, TOOLBAR_HEIGHT),
-                    LogicalSize::new(1200.0, 752.0),
-                )?;
-            }
-
-            // Tab 2 ẩn lúc khởi động (lazy: tab 1 là tab hiện hành).
-            if let Some(tab2) = app.get_webview("tab-2") {
-                tab2.hide()?;
+            // M2: khôi phục phiên trước; nếu không có thì mở tab HOME_URL.
+            let (tabs, active_idx): (Vec<db::SessionTab>, i64) = app
+                .state::<DbState>()
+                .0
+                .as_ref()
+                .and_then(|d| d.load_session().ok())
+                .unwrap_or_default();
+            if tabs.is_empty() {
+                let id = state.add_tab(navigation::HOME_URL.to_string());
+                state.activate(id).ok();
+                open_first(app.handle(), &state, id, navigation::HOME_URL);
+            } else {
+                let mut first_id = None;
+                for (i, t) in tabs.iter().enumerate() {
+                    let id = state.add_restored_tab(t.url.clone(), t.title.clone());
+                    if i as i64 == active_idx || first_id.is_none() {
+                        first_id = Some(id);
+                    }
+                }
+                if let Some(id) = first_id {
+                    state.activate(id).ok();
+                    open_first(app.handle(), &state, id, "");
+                }
             }
 
             let handle = app.handle().clone();
+            let layout_state = state.clone();
             window.on_window_event(move |event| {
-                if let WindowEvent::Resized(_) = event {
-                    let _ = layout(&handle);
+                match event {
+                    WindowEvent::Resized(_) => browser::layout(&handle, &layout_state),
+                    // M2: lưu danh sách tab khi người dùng đóng cửa sổ.
+                    WindowEvent::CloseRequested { .. } => {
+                        if let Some(db) = handle.state::<DbState>().0.as_ref() {
+                            let snap = layout_state.snapshot();
+                            let active_index = snap
+                                .active_tab
+                                .and_then(|a| snap.tabs.iter().position(|t| t.id == a))
+                                .map(|p| p as i64)
+                                .unwrap_or(-1);
+                            let _ = db.save_session(
+                                &snap
+                                    .tabs
+                                    .iter()
+                                    .map(|t| db::SessionTab {
+                                        url: t.url.clone(),
+                                        title: t.title.clone(),
+                                    })
+                                    .collect::<Vec<_>>(),
+                                active_index,
+                            );
+                        }
+                    }
+                    _ => {}
                 }
             });
+            browser::emit_state(app.handle(), &state);
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy Nova Browser");
+}
+
+/// Tạo webview cho tab đầu tiên và nạp URL (kể cả URL khôi phục).
+fn open_first(app: &tauri::AppHandle, state: &BrowserState, id: u32, fallback_url: &str) {
+    browser::ensure_webview(app, state, id);
+    let url = if fallback_url.is_empty() {
+        state
+            .snapshot()
+            .tabs
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.url.clone())
+            .unwrap_or_default()
+    } else {
+        fallback_url.to_string()
+    };
+    if let (Some(wv), Ok(parsed)) = (app.get_webview(&format!("tab-{id}")), url.parse()) {
+        let _ = wv.navigate(parsed);
+    }
 }

@@ -1,0 +1,40 @@
+use serde::{Deserialize, Serialize};
+
+/// Một mục trong danh sách URL gần nhất của tab (history + forward gộp lại).
+#[derive(Clone, Debug)]
+pub struct HistoryEntry {
+    pub url: String,
+    #[allow(dead_code)] // tiêu đề trang: dùng cho M2 (lịch sử) và M5.
+    pub title: String,
+}
+
+/// Trạng thái một tab, mô tả đủ cho frontend vẽ tab bar và address bar.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabInfo {
+    pub id: u32,
+    pub label: String,
+    pub url: String,
+    pub title: String,
+    pub loading: bool,
+    /// false khi tab chưa tạo webview (lazy creation — hoàn tác ở M6).
+    pub created: bool,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
+}
+
+/// Thông tin cần để khôi phục tab lúc khởi động (M2 — session restoration).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedTab {
+    pub url: String,
+    #[allow(dead_code)] // ghi DB ở M2.
+    pub title: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatePayload {
+    pub tabs: Vec<TabInfo>,
+    pub active_tab: Option<u32>,
+}
