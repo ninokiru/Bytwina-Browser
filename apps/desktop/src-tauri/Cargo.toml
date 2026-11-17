@@ -1,0 +1,15 @@
+[package]
+name = "nova-browser"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = "2.12.6"
+
+[dependencies]
+# "unstable" bật Window::add_child (xem docs/DECISIONS.md, ADR-001).
+tauri = { version = "2.12.6", features = ["unstable"] }
+
+[profile.release]
+codegen-units = 1
+lto = true

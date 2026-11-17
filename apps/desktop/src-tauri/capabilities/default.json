@@ -1,0 +1,6 @@
+{
+  "identifier": "toolbar",
+  "description": "Thanh công cụ tin cậy: chỉ webview 'toolbar' được gọi IPC.",
+  "webviews": ["toolbar"],
+  "permissions": ["core:default"]
+}
