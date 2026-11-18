@@ -72,6 +72,39 @@ pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     })
 }
 
+/// Bảng nền tảng (v1). Chạy lại mỗi lần mở DB bằng `IF NOT EXISTS` để DB bị
+/// thiếu bảng (bản cũ, migration đứt gãy) vẫn tự phục hồi.
+const CORE_TABLES: &str = "
+    CREATE TABLE IF NOT EXISTS bookmarks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL UNIQUE,
+        folder TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL,
+        visited_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_history_visited ON history (visited_at DESC);
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS session_tabs (
+        ord INTEGER PRIMARY KEY,
+        url TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        pinned INTEGER NOT NULL DEFAULT 0,
+        group_name TEXT
+    );
+    CREATE TABLE IF NOT EXISTS session_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );";
+
 /// Bảng thêm ở M3/M10 — tách riêng để DB tạo bởi bản cũ vẫn có đủ.
 const TABLES_M3_M10: &str = "
     CREATE TABLE IF NOT EXISTS downloads (
@@ -107,41 +140,14 @@ fn add_column(conn: &Connection, table: &str, column: &str, decl: &str) -> rusql
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);")?;
+    // Luôn đảm bảo bảng nền tảng tồn tại, kể cả khi version đã ghi là 1/2.
+    conn.execute_batch(CORE_TABLES)?;
     let version: i64 = conn
         .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
         .unwrap_or(0);
     if version < 1 {
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS bookmarks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL DEFAULT '',
-                url TEXT NOT NULL UNIQUE,
-                folder TEXT NOT NULL DEFAULT '',
-                created_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL DEFAULT '',
-                url TEXT NOT NULL,
-                visited_at INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_history_visited ON history (visited_at DESC);
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS session_tabs (
-                ord INTEGER PRIMARY KEY,
-                url TEXT NOT NULL,
-                title TEXT NOT NULL DEFAULT '',
-                pinned INTEGER NOT NULL DEFAULT 0,
-                group_name TEXT
-            );
-            CREATE TABLE IF NOT EXISTS session_meta (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );",
-        )?;
+        // Cột pinned/group_name đã nằm trong CORE_TABLES khi tạo mới; DB v1 cũ
+        // được thêm ở bước v2 bên dưới.
         // Ghi phiên bản SAU khi tạo bảng; trước đây ghi trước nên nhánh tạo bảng không bao giờ chạy.
         conn.execute("INSERT INTO schema_version (version) VALUES (1)", [])?;
     }
