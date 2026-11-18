@@ -96,8 +96,7 @@ fn migrate_reading(conn: &Connection) -> rusqlite::Result<()> {
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
-         INSERT INTO schema_version (version) SELECT 1 WHERE (SELECT COUNT(*) FROM schema_version) = 0;",
+        "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);",
     )?;
     let version: i64 = conn
         .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
@@ -132,6 +131,8 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
                 value TEXT NOT NULL
             );",
         )?;
+        // Ghi phiên bản SAU khi tạo bảng; trước đây ghi trước nên nhánh tạo bảng không bao giờ chạy.
+        conn.execute("INSERT INTO schema_version (version) VALUES (1)", [])?;
     }
     Ok(())
 }
