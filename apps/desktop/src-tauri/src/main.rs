@@ -48,7 +48,10 @@ fn main() {
                 .and_then(db::open)
                 .map(DbState);
             if storage.is_none() {
-                diagnostics::log("error", "không mở được CSDL; tắt lịch sử, dấu trang và phiên");
+                diagnostics::log(
+                    "error",
+                    "không mở được CSDL; tắt lịch sử, dấu trang và phiên",
+                );
             }
             app.manage(storage.unwrap_or_default());
 
@@ -95,7 +98,9 @@ fn main() {
                 match event {
                     WindowEvent::Resized(_) => browser::layout(&handle, &layout_state),
                     // M2: lưu danh sách tab khi người dùng đóng cửa sổ.
-                    WindowEvent::CloseRequested { .. } => browser::persist_session(&handle, &layout_state),
+                    WindowEvent::CloseRequested { .. } => {
+                        browser::persist_session(&handle, &layout_state)
+                    }
                     _ => {}
                 }
             });
