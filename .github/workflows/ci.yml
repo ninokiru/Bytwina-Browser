@@ -75,4 +75,21 @@ jobs:
       - name: Check
         run: cargo check --all-targets
       - name: Tests
-        run: cargo test --all-targets
+        shell: bash
+        run: |
+          set +e
+          cargo test --all-targets 2>&1 | tee test.txt
+          status=${PIPESTATUS[0]}
+          # Xuất tên test hỏng và thông điệp panic thành annotation để đọc từ API.
+          hits=$(grep -E '^test .* FAILED|^---- |panicked at|^assertion' test.txt | head -n 20)
+          if [ -z "$hits" ]; then hits=$(grep -E 'error' test.txt | head -n 20); fi
+          printf '%s\n' "$hits" | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          {
+            echo '### Tests'
+            echo '```'
+            tail -c 40000 test.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
