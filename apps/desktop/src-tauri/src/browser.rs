@@ -696,7 +696,7 @@ fn on_download(app: &AppHandle, event: DownloadEvent<'_>) -> bool {
             if let Ok(dir) = download_dir(app) {
                 let name = url
                     .path_segments()
-                    .and_then(|segs| segs.filter(|p| !p.is_empty()).next_back())
+                    .and_then(|mut segs| segs.rfind(|p| !p.is_empty()))
                     .map(sanitize_file_name)
                     .unwrap_or_else(|| "download".to_string());
                 let name = if is_risky_file(&name) {

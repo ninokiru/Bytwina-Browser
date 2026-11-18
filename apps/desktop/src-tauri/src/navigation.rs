@@ -15,6 +15,7 @@ const SEARCH_ENGINE: &str = "https://duckduckgo.com/?q=";
 /// - scheme khác (file, javascript, data…) → từ chối, coi như tìm kiếm;
 /// - trông như tên miền (không khoảng trắng, có dấu chấm) → https;
 /// - còn lại → tìm kiếm DuckDuckGo.
+///
 /// Như `to_url_with`, dùng công cụ tìm kiếm mặc định (DuckDuckGo).
 #[allow(dead_code)]
 pub fn to_url(input: &str) -> String {
