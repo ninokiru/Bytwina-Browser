@@ -30,6 +30,7 @@ export default function Settings({
   const [zoom, setZoom] = useState("100");
   const [theme, setTheme] = useState("system");
   const [clearOnExit, setClearOnExit] = useState(false);
+  const [sleep, setSleep] = useState("0");
   const [message, setMessage] = useState("");
   const [diag, setDiag] = useState<Diagnostics | null>(null);
 
@@ -46,7 +47,8 @@ export default function Settings({
       get("zoom"),
       get("theme"),
       get("clearOnExit"),
-    ]).then(([h, e, s, d, z, th, c]) => {
+      get("sleepMinutes"),
+    ]).then(([h, e, s, d, z, th, c, sl]) => {
       if (h) setHome(h);
       if (e) setEngine(e);
       if (s) setStartup(s);
@@ -54,6 +56,7 @@ export default function Settings({
       if (z) setZoom(z);
       if (th) setTheme(th);
       setClearOnExit(c === "1");
+      if (sl) setSleep(sl);
     });
   }, []);
 
@@ -135,6 +138,21 @@ export default function Settings({
           <input value={home} onChange={(e) => setHome(e.target.value)} onBlur={saveHome} />
         </label>
         <small style={hint}>{t("settings.homeHint")}</small>
+        <label style={row}>
+          {t("settings.sleep")}
+          <select
+            value={sleep}
+            onChange={(e) => {
+              setSleep(e.target.value);
+              save("sleepMinutes", e.target.value);
+            }}
+          >
+            <option value="0">{t("settings.sleepOff")}</option>
+            <option value="5">5 min</option>
+            <option value="15">15 min</option>
+            <option value="30">30 min</option>
+          </select>
+        </label>
       </Section>
 
       <Section title={t("settings.appearance")}>

@@ -215,6 +215,12 @@ export default function App() {
           🕶
         </button>
         <button
+          onClick={() => setPanel(panel === "dictionary" ? null : "dictionary")}
+          title={t("bar.dictionary")}
+        >
+          📘
+        </button>
+        <button
           onClick={() => setPanel(panel === "settings" ? null : "settings")}
           title={t("bar.settings")}
         >

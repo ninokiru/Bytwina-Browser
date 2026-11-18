@@ -123,6 +123,7 @@ fn main() {
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(30));
                 browser::persist_session(&autosave_handle, &autosave_state);
+                browser::sleep_idle_tabs(&autosave_handle, &autosave_state);
             });
             Ok(())
         })

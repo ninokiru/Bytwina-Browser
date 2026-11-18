@@ -24,7 +24,14 @@ interface ReadingItem {
   addedAt: number;
 }
 
-export type PanelKind = "bookmarks" | "history" | "downloads" | "reading" | "tabs" | "settings";
+export type PanelKind =
+  | "bookmarks"
+  | "history"
+  | "downloads"
+  | "reading"
+  | "tabs"
+  | "settings"
+  | "dictionary";
 
 interface DownloadItem {
   id: number;
@@ -56,6 +63,21 @@ export default function Panel({
   const [reading, setReading] = useState<ReadingItem[]>([]);
   const [siteHost, setSiteHost] = useState("");
   const [query, setQuery] = useState("");
+  const [word, setWord] = useState("");
+  const [dictLang, setDictLang] = useState<"en" | "vi">("en");
+
+  // Mở trang Wiktionary của từ trong tab mới rồi kích hoạt tab đó.
+  const lookup = () => {
+    const w = word.trim();
+    if (!w) return;
+    const base =
+      dictLang === "vi" ? "https://vi.wiktionary.org/wiki/" : "https://en.wiktionary.org/wiki/";
+    void cmd("new_tab", { url: base + encodeURIComponent(w) }).then((r) => {
+      const tabId = (r as { tabId: number }).tabId;
+      return cmd("activate_tab", { id: String(tabId) });
+    });
+    onClose();
+  };
 
   const reload = async () => {
     if (kind === "bookmarks") {
@@ -196,6 +218,24 @@ export default function Panel({
         </>
       )}
 
+      {kind === "dictionary" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          <input
+            placeholder={t("dict.placeholder")}
+            value={word}
+            onChange={(e) => setWord(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") lookup();
+            }}
+          />
+          <select value={dictLang} onChange={(e) => setDictLang(e.target.value as "en" | "vi")}>
+            <option value="en">{t("dict.en")}</option>
+            <option value="vi">{t("dict.vi")}</option>
+          </select>
+          <button onClick={lookup}>{t("dict.lookup")}</button>
+        </div>
+      )}
+
       {kind === "settings" && (
         <div style={{ marginTop: 8 }}>
           <Settings privateMode={privateMode} onHomeChange={onHomeChange} />
@@ -217,6 +257,8 @@ function titleKey(kind: PanelKind): Key {
       return "title.tabs";
     case "reading":
       return "title.reading";
+    case "dictionary":
+      return "title.dictionary";
     default:
       return "title.settings";
   }

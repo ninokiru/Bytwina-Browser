@@ -48,6 +48,8 @@ struct Tab {
     hist_idx: usize,
     pinned: bool,
     group: Option<String>,
+    /// Lần cuối tab được kích hoạt (dùng cho tab ngủ).
+    last_active: std::time::Instant,
 }
 
 impl Tab {
@@ -62,6 +64,7 @@ impl Tab {
             hist_idx: 0,
             pinned: false,
             group: None,
+            last_active: std::time::Instant::now(),
         }
     }
 
@@ -163,6 +166,9 @@ impl BrowserState {
             return Err(format!("không tìm thấy tab {id}"));
         }
         inner.active = Some(id);
+        if let Some(t) = inner.tabs.iter_mut().find(|t| t.id == id) {
+            t.last_active = std::time::Instant::now();
+        }
         Ok(())
     }
 
@@ -180,6 +186,28 @@ impl BrowserState {
         if let Some(t) = inner.tabs.iter_mut().find(|t| t.id == id) {
             t.loading = loading;
         }
+    }
+
+    /// Đánh dấu tab đã ngủ: webview đã đóng, lịch sử giữ nguyên.
+    pub fn mark_sleeping(&self, id: u32) {
+        let mut inner = self.lock();
+        if let Some(t) = inner.tabs.iter_mut().find(|t| t.id == id) {
+            t.created = false;
+        }
+    }
+
+    /// Tab đã có webview, không đang hoạt động, không tải, và rảnh quá `limit`.
+    pub fn idle_candidates(&self, limit: std::time::Duration) -> Vec<u32> {
+        let inner = self.lock();
+        let active = inner.active;
+        inner
+            .tabs
+            .iter()
+            .filter(|t| {
+                t.created && !t.loading && Some(t.id) != active && t.last_active.elapsed() >= limit
+            })
+            .map(|t| t.id)
+            .collect()
     }
 
     pub fn mark_created(&self, id: u32) {
@@ -540,6 +568,27 @@ pub fn on_page_load<R: tauri::Runtime>(
         }
     }
     emit_state(app, &state);
+}
+
+/// Tab ngủ (cài đặt `sleepMinutes`, 0 = tắt): đóng webview của tab rảnh quá lâu.
+/// Khi kích hoạt lại, tab nạp lại URL hiện hành (mất trạng thái tạm như vị trí cuộn).
+/// Gọi đóng webview từ luồng nền: chưa kiểm chứng trên Windows.
+pub fn sleep_idle_tabs(app: &AppHandle, state: &BrowserState) {
+    let minutes = app
+        .try_state::<DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("sleepMinutes").ok().flatten())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0);
+    if minutes == 0 {
+        return;
+    }
+    let limit = std::time::Duration::from_secs(minutes.saturating_mul(60));
+    for id in state.idle_candidates(limit) {
+        close_webview(app, id);
+        state.mark_sleeping(id);
+    }
+    emit_state(app, state);
 }
 
 /// Hệ số phóng to đang lưu (cài đặt `zoom`, phần trăm). Mặc định 100%.
