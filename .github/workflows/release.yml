@@ -1,7 +1,7 @@
 name: Release
 
-# Chỉ chạy khi bạn tự đẩy tag phiên bản (ví dụ v0.1.0).
-# Release được tạo ở trạng thái DRAFT: bạn kiểm tra rồi bấm Publish thủ công.
+# Chỉ chạy khi bạn tự đẩy tag phiên bản (ví dụ v0.0.2).
+# Release được tạo và PHÁT HÀNH NGAY; step "Verify assets" in danh sách tệp đã tải lên.
 on:
   push:
     tags:
@@ -40,9 +40,14 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 $f.FullName).Hash.ToLower()
           "$hash  $($f.Name)" | Out-File -Encoding ascii SHA256SUMS.txt
           echo "INSTALLER=$($f.FullName)" >> $env:GITHUB_ENV
-      - name: Create draft release
+      - name: Create release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" --draft --title "Bytwina Browser ${{ github.ref_name }}" --generate-notes "$env:INSTALLER" SHA256SUMS.txt
+          gh release create "${{ github.ref_name }}" --title "Bytwina Browser ${{ github.ref_name }}" --generate-notes --latest "$env:INSTALLER" SHA256SUMS.txt
+      - name: Verify assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name'
