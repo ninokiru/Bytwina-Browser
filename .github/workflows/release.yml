@@ -45,4 +45,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" --draft --title "Nova Browser ${{ github.ref_name }}" --generate-notes "$env:INSTALLER" SHA256SUMS.txt
+          gh release create "${{ github.ref_name }}" --draft --title "Bytwina Browser ${{ github.ref_name }}" --generate-notes "$env:INSTALLER" SHA256SUMS.txt

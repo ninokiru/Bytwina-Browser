@@ -39,6 +39,6 @@ jobs:
           echo "INSTALLER=$($f.FullName)" >> $env:GITHUB_ENV
       - uses: actions/upload-artifact@v4
         with:
-          name: nova-browser-windows-x64
+          name: bytwina-browser-windows-x64
           path: ${{ env.INSTALLER }}
           if-no-files-found: error

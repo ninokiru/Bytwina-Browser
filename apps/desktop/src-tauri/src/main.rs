@@ -60,7 +60,7 @@ fn main() {
             browser::set_toolbar_full(!accepted);
 
             let window = tauri::window::WindowBuilder::new(app, "main")
-                .title("Nova Browser")
+                .title("Bytwina Browser")
                 .inner_size(1200.0, 800.0)
                 .build()?;
 
@@ -121,7 +121,7 @@ fn main() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("lỗi khi chạy Nova Browser");
+        .expect("lỗi khi chạy Bytwina Browser");
 }
 
 /// Tạo webview cho tab đầu tiên và nạp URL (kể cả URL khôi phục).

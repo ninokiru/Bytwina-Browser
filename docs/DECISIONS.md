@@ -37,7 +37,7 @@
 
 - **Trạng thái:** Chấp nhận (M2).
 - **Bối cảnh:** Spec yêu cầu SQLite cho bookmarks/history/preferences/session, có migrations, WAL, transaction, không block UI thread.
-- **Quyết định:** `rusqlite` bản `bundled` (compile SQLite kèm app — không phụ thuộc runtime hệ thống), kết nối bọc `Arc<Mutex<Connection>>`, mở tại `app_data_dir/nova.db`, WAL + synchronous=NORMAL, bảng `schema_version` cho versioning. Lệnh DB chạy trong command async (luồng tokio), giữ khóa mutex ngắn.
+- **Quyết định:** `rusqlite` bản `bundled` (compile SQLite kèm app — không phụ thuộc runtime hệ thống), kết nối bọc `Arc<Mutex<Connection>>`, mở tại `app_data_dir/bytwina.db`, WAL + synchronous=NORMAL, bảng `schema_version` cho versioning. Lệnh DB chạy trong command async (luồng tokio), giữ khóa mutex ngắn.
 - **Lý do chọn rusqlite thay vì sqlx/diesel:** đồng bộ, ít phụ thuộc, hợp máy dev 8 GB; sqlx async-heavy và diesel thiên về server SQL lớn.
 - **Giới hạn:** Một connection duy nhất; nếu M6 đo thấy contention thì tách read pool.
 

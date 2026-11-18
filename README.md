@@ -1,4 +1,4 @@
-# Nova Browser (Bytwina Browser)
+# Bytwina Browser
 
 Trình duyệt desktop cho Windows x64, xây dựng bằng Rust + Tauri 2 + WebView2.
 

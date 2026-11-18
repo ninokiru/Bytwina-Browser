@@ -1,6 +1,6 @@
-# M6: đo RAM làm việc của Nova Browser sau một khoảng nghỉ.
+# M6: đo RAM làm việc của Bytwina Browser sau một khoảng nghỉ.
 # Cách dùng (PowerShell trên Windows):
-#   pwsh scripts/bench.ps1 -Exe "C:\path\nova-browser.exe" -IdleSeconds 30
+#   pwsh scripts/bench.ps1 -Exe "C:\path\bytwina-browser.exe" -IdleSeconds 30
 # Lưu ý: msedgewebview2 có thể được trình duyệt Edge/ứng dụng khác dùng chung,
 # nên số đo WebView2 chỉ đáng tin khi đóng các ứng dụng WebView2 khác.
 param(

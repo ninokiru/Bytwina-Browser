@@ -128,7 +128,7 @@ export default function App() {
   return (
     <div style={bar}>
       <div style={row}>
-        <strong style={{ padding: "0 8px" }}>Nova{state.private ? " · Riêng tư" : ""}</strong>
+        <strong style={{ padding: "0 8px" }}>Bytwina{state.private ? " · Riêng tư" : ""}</strong>
         <div style={tabList}>
           {state.tabs.map((t) => (
             <button

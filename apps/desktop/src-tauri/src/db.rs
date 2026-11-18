@@ -57,7 +57,7 @@ fn now() -> i64 {
 /// (mọi tính năng M2 tự tắt, trình duyệt nền vẫn chạy).
 pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     let _ = std::fs::create_dir_all(&app_data_dir);
-    let conn = Connection::open(app_data_dir.join("nova.db")).ok()?;
+    let conn = Connection::open(app_data_dir.join("bytwina.db")).ok()?;
     conn.pragma_update(None, "journal_mode", "WAL").ok()?;
     conn.pragma_update(None, "synchronous", "NORMAL").ok()?;
     migrate(&conn).ok()?;
@@ -312,7 +312,7 @@ mod tests {
         static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let dir = std::env::temp_dir().join(format!(
-            "nova-test-{tag}-{}-{}-{n}",
+            "bytwina-test-{tag}-{}-{}-{n}",
             std::process::id(),
             now_nanos()
         ));
@@ -504,7 +504,7 @@ mod tests {
 
     /// CSDL tạm trong thư mục hệ thống, mỗi test một thư mục riêng.
     fn temp_db(name: &str) -> (Db, PathBuf) {
-        let dir = std::env::temp_dir().join(format!("nova-test-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("bytwina-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let db = open(dir.clone()).expect("mở CSDL test");
         (db, dir)
@@ -626,7 +626,7 @@ mod security_tests {
 
     #[test]
     fn site_history_clear_matches_exact_host_only() {
-        let dir = std::env::temp_dir().join(format!("nova-test-site-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("bytwina-test-site-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let db = open(dir.clone()).expect("mở CSDL test");
         db.record_history("a", "https://example.com/x").unwrap();

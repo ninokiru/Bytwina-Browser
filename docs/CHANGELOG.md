@@ -7,7 +7,7 @@
 - Tải xuống: danh sách, không ghi đè file.
 - Riêng tư: không ghi lịch sử; xóa dữ liệu duyệt web.
 - Danh sách đọc.
-- Chẩn đoán và nhật ký `nova.log`.
+- Chẩn đoán và nhật ký `bytwina.log`.
 - Chặn popup theo danh sách tối thiểu.
 
 ### Biết trước (chưa sửa)

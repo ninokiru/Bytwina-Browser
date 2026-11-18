@@ -8,5 +8,5 @@
 ## Giới hạn đã biết
 - Bộ cài **chưa được ký số**: Windows SmartScreen sẽ cảnh báo. Cần chứng chỉ code signing (quyết định của chủ dự án).
 - **Chưa có cập nhật tự động.** Cần quyết định hạ tầng cập nhật và khóa ký trước khi làm.
-- Bộ cài **không đóng gói WebView2 Runtime**. Ứng dụng kiểm tra runtime khi khởi động và ghi nhật ký nếu thiếu (xem `nova.log` trong thư mục dữ liệu ứng dụng).
-- Nhật ký `nova.log` không ghi URL; xoay vòng ở 512 KB.
+- Bộ cài **không đóng gói WebView2 Runtime**. Ứng dụng kiểm tra runtime khi khởi động và ghi nhật ký nếu thiếu (xem `bytwina.log` trong thư mục dữ liệu ứng dụng).
+- Nhật ký `bytwina.log` không ghi URL; xoay vòng ở 512 KB.

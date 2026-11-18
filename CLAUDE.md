@@ -1,4 +1,4 @@
-# CLAUDE.md — Quy tắc cho Nova Browser
+# CLAUDE.md — Quy tắc cho Bytwina Browser
 
 - Ngôn ngữ trao đổi với chủ dự án: tiếng Việt, ngắn gọn.
 - Phạm vi hiện tại: M1 + M2 (chủ dự án yêu cầu bỏ qua nghiệm thu M0, làm thẳng M1+M2 — ghi nhận 2026-11-17). Không bắt đầu M3 khi chưa được yêu cầu.

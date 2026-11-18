@@ -21,7 +21,7 @@
 - [ ] Chế độ 🕶: trang mới không vào lịch sử.
 - [ ] Xóa dữ liệu duyệt web: lịch sử, tải xuống, phiên đều trống.
 - [ ] Đóng app bất thường (kết thúc tiến trình): mở lại, tab được khôi phục (tối đa 30 giây mất).
-- [ ] Thiếu WebView2 Runtime: `nova.log` có dòng lỗi rõ ràng.
+- [ ] Thiếu WebView2 Runtime: `bytwina.log` có dòng lỗi rõ ràng.
 - [ ] Cài đặt, gỡ cài đặt NSIS: không để lại lỗi; dữ liệu người dùng có/không bị xóa (ghi rõ).
 - [ ] Nâng cấp từ bản cũ sang bản mới: CSDL được giữ nguyên.
 - [ ] Profile: hai cửa sổ không dùng chung lịch sử riêng tư (hiện CHƯA cô lập cookie; xem SECURITY.md).

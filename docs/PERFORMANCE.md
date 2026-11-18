@@ -4,7 +4,7 @@
 
 ## Cách đo
 1. Đóng các ứng dụng dùng WebView2 khác (Teams, Outlook mới, v.v.).
-2. Build bản release và chạy: `pwsh scripts/bench.ps1 -Exe "...\nova-browser.exe" -IdleSeconds 30`.
+2. Build bản release và chạy: `pwsh scripts/bench.ps1 -Exe "...\bytwina-browser.exe" -IdleSeconds 30`.
 3. Ghi kèm: phiên bản WebView2 (cột `WebView2Runtime`), số tab, cấu hình máy.
 
 ## Chỉ số cần đo (theo spec)

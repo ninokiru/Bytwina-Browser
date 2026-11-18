@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 
-/// Ngưỡng xoay vòng: vượt quá thì đổi tên thành nova.log.old và ghi file mới.
+/// Ngưỡng xoay vòng: vượt quá thì đổi tên thành bytwina.log.old và ghi file mới.
 const MAX_LOG_BYTES: u64 = 512 * 1024;
 
 static LOG_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -16,7 +16,7 @@ static LOG_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 pub fn init(dir: PathBuf) {
     let _ = std::fs::create_dir_all(&dir);
     if let Ok(mut p) = LOG_PATH.lock() {
-        *p = Some(dir.join("nova.log"));
+        *p = Some(dir.join("bytwina.log"));
     }
 }
 
