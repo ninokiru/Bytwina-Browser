@@ -21,6 +21,10 @@ pub struct TabInfo {
     pub created: bool,
     pub can_go_back: bool,
     pub can_go_forward: bool,
+    /// M5: tab được ghim (hiển thị đầu thanh tab).
+    pub pinned: bool,
+    /// M5: tên nhóm tab; None là không thuộc nhóm nào.
+    pub group: Option<String>,
 }
 
 /// Thông tin cần để khôi phục tab lúc khởi động (M2 — session restoration).
@@ -37,4 +41,6 @@ pub struct PersistedTab {
 pub struct StatePayload {
     pub tabs: Vec<TabInfo>,
     pub active_tab: Option<u32>,
+    /// M4: cửa sổ đang ở chế độ riêng tư (không ghi lịch sử).
+    pub private: bool,
 }

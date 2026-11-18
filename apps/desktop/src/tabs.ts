@@ -9,11 +9,14 @@ export interface TabInfo {
   created: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  pinned: boolean;
+  group: string | null;
 }
 
 export interface BrowserStatePayload {
   tabs: TabInfo[];
   activeTab: number | null;
+  private: boolean;
 }
 
 // Toàn bộ IPC của trình duyệt đi qua một lệnh duy nhất, có kiểm soát (ADR-002).

@@ -61,9 +61,24 @@ pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     conn.pragma_update(None, "journal_mode", "WAL").ok()?;
     conn.pragma_update(None, "synchronous", "NORMAL").ok()?;
     migrate(&conn).ok()?;
+    migrate_downloads(&conn).ok()?;
     Some(Db {
         conn: std::sync::Arc::new(Mutex::new(conn)),
     })
+}
+
+/// M3: bảng tải xuống. Dùng CREATE IF NOT EXISTS nên chạy lại an toàn.
+/// TODO: gộp vào hệ thống schema_version khi có migration thứ hai.
+fn migrate_downloads(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS downloads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            path TEXT NOT NULL DEFAULT '',
+            success INTEGER NOT NULL,
+            finished_at INTEGER NOT NULL
+        );",
+    )
 }
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -134,7 +149,9 @@ impl Db {
     pub fn list_bookmarks(&self) -> Result<Vec<Bookmark>, String> {
         let c = self.conn();
         let mut stmt = c
-            .prepare("SELECT id, title, url, folder, created_at FROM bookmarks ORDER BY created_at ASC")
+            .prepare(
+                "SELECT id, title, url, folder, created_at FROM bookmarks ORDER BY created_at ASC",
+            )
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |r| {
@@ -221,7 +238,8 @@ impl Db {
     pub fn save_session(&self, tabs: &[SessionTab], active_index: i64) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_tabs", []).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_tabs", [])
+            .map_err(|e| e.to_string())?;
         for (i, t) in tabs.iter().enumerate() {
             tx.execute(
                 "INSERT INTO session_tabs (ord, url, title) VALUES (?1, ?2, ?3)",
@@ -268,8 +286,10 @@ impl Db {
     pub fn clear_session(&self) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_tabs", []).map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_meta", []).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_tabs", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_meta", [])
+            .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())
     }
 }
@@ -302,7 +322,8 @@ mod tests {
         let db = temp_db("bm");
         db.add_bookmark("Một", "https://a.test/", "").unwrap();
         // URL trùng → cập nhật tiêu đề, không tạo bản ghi mới.
-        db.add_bookmark("Một mới", "https://a.test/", "ĐỌC").unwrap();
+        db.add_bookmark("Một mới", "https://a.test/", "ĐỌC")
+            .unwrap();
         db.add_bookmark("Hai", "https://b.test/", "").unwrap();
         let all = db.list_bookmarks().unwrap();
         assert_eq!(all.len(), 2);
@@ -341,8 +362,14 @@ mod tests {
     fn session_save_load_clear() {
         let db = temp_db("sess");
         let tabs = vec![
-            SessionTab { url: "https://a.test/".into(), title: "A".into() },
-            SessionTab { url: "https://b.test/".into(), title: "B".into() },
+            SessionTab {
+                url: "https://a.test/".into(),
+                title: "A".into(),
+            },
+            SessionTab {
+                url: "https://b.test/".into(),
+                title: "B".into(),
+            },
         ];
         db.save_session(&tabs, 1).unwrap();
         let (loaded, active) = db.load_session().unwrap();
@@ -356,5 +383,57 @@ mod tests {
         let (loaded, active) = db.load_session().unwrap();
         assert!(loaded.is_empty());
         assert_eq!(active, -1);
+    }
+}
+
+/// Một lần tải xuống đã hoàn tất (M3).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadItem {
+    pub id: i64,
+    pub url: String,
+    pub path: String,
+    pub success: bool,
+    pub finished_at: i64,
+}
+
+impl Db {
+    pub fn record_download(&self, url: &str, path: &str, success: bool) -> Result<(), String> {
+        self.conn()
+            .execute(
+                "INSERT INTO downloads (url, path, success, finished_at) VALUES (?1, ?2, ?3, ?4)",
+                params![url, path, success, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_downloads(&self) -> Result<Vec<DownloadItem>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT id, url, path, success, finished_at FROM downloads ORDER BY id DESC LIMIT 200")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(DownloadItem {
+                    id: r.get(0)?,
+                    url: r.get(1)?,
+                    path: r.get(2)?,
+                    success: r.get::<_, i64>(3)? != 0,
+                    finished_at: r.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        let out = rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string());
+        out
+    }
+
+    pub fn clear_downloads(&self) -> Result<(), String> {
+        self.conn()
+            .execute("DELETE FROM downloads", [])
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 }

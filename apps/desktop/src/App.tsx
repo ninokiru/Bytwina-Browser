@@ -6,7 +6,7 @@ import Panel, { type PanelKind } from "./Panel";
 
 // Toolbar là webview tin cậy duy nhất được phép gọi IPC (capabilities/default.json).
 export default function App() {
-  const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null });
+  const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null, private: false });
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<PanelKind | null>(null);
@@ -88,7 +88,7 @@ export default function App() {
   return (
     <div style={bar}>
       <div style={row}>
-        <strong style={{ padding: "0 8px" }}>Nova</strong>
+        <strong style={{ padding: "0 8px" }}>Nova{state.private ? " · Riêng tư" : ""}</strong>
         <div style={tabList}>
           {state.tabs.map((t) => (
             <button
@@ -100,7 +100,18 @@ export default function App() {
               <span
                 style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
               >
+                {t.group ? `[${t.group}] ` : ""}
                 {t.title || t.url}
+              </span>
+              <span
+                style={{ marginLeft: 6, opacity: t.pinned ? 1 : 0.4 }}
+                title={t.pinned ? "Bỏ ghim" : "Ghim tab"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void cmd("pin_tab", { id: String(t.id), on: t.pinned ? "0" : "1" });
+                }}
+              >
+                📌
               </span>
               <span
                 style={{ marginLeft: 6, opacity: 0.6 }}
@@ -119,6 +130,14 @@ export default function App() {
         </div>
         <button onClick={() => setPanel(panel === "bookmarks" ? null : "bookmarks")}>★</button>
         <button onClick={() => setPanel(panel === "history" ? null : "history")}>🕘</button>
+        <button onClick={() => setPanel(panel === "downloads" ? null : "downloads")} title="Tải xuống">⤓</button>
+        <button
+          onClick={() => void cmd("private_set", { on: state.private ? "0" : "1" })}
+          title="Chế độ riêng tư (không ghi lịch sử)"
+          style={{ fontWeight: state.private ? 700 : 400 }}
+        >
+          🕶
+        </button>
         <button onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙</button>
       </div>
       <div style={row}>
@@ -145,6 +164,20 @@ export default function App() {
           onKeyDown={(e) => {
             if (e.key === "Enter") go();
             if (e.key === "Escape") setEditing(false);
+          }}
+        />
+        <input
+          style={{ width: 110 }}
+          placeholder="Nhóm tab"
+          aria-label="Nhóm tab"
+          key={active?.id}
+          defaultValue={active?.group ?? ""}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && active)
+              void cmd("set_group", {
+                id: String(active.id),
+                group: (e.target as HTMLInputElement).value,
+              });
           }}
         />
         <button

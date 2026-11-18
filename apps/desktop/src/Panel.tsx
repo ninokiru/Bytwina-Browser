@@ -15,7 +15,15 @@ interface HistoryItem {
   visitedAt: number;
 }
 
-export type PanelKind = "bookmarks" | "history" | "settings";
+export type PanelKind = "bookmarks" | "history" | "downloads" | "settings";
+
+interface DownloadItem {
+  id: number;
+  url: string;
+  path: string;
+  success: boolean;
+  finishedAt: number;
+}
 
 export default function Panel({
   kind,
@@ -28,6 +36,8 @@ export default function Panel({
 }) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  const [diag, setDiag] = useState<string>("");
   const [query, setQuery] = useState("");
   const [home, setHome] = useState("https://example.com/");
 
@@ -38,6 +48,8 @@ export default function Panel({
       setHistory(
         ((await cmd("history_search", { query })) as HistoryItem[]) ?? [],
       );
+    } else if (kind === "downloads") {
+      setDownloads(((await cmd("downloads_list")) as DownloadItem[]) ?? []);
     } else {
       const v = (await cmd("settings_get", { key: "homeUrl" })) as string | null;
       if (v) setHome(v);
@@ -94,6 +106,20 @@ export default function Panel({
         </>
       )}
 
+      {kind === "downloads" && (
+        <>
+          <ul style={list}>
+            {downloads.map((d) => (
+              <li key={d.id} title={d.path}>
+                {d.success ? "✓ " : "✗ "}
+                {d.path ? d.path.split(/[\\/]/).pop() : d.url}
+              </li>
+            ))}
+          </ul>
+          <button onClick={() => void cmd("downloads_clear").then(reload)}>Xóa danh sách</button>
+        </>
+      )}
+
       {kind === "settings" && (
         <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           Trang chủ
@@ -104,12 +130,38 @@ export default function Panel({
           />
         </label>
       )}
+
+      {kind === "settings" && (
+        <button
+          style={{ marginTop: 8 }}
+          onClick={() => void cmd("clear_data")}
+        >
+          Xóa dữ liệu duyệt web (lịch sử, tải xuống, phiên)
+        </button>
+      )}
+
+      {kind === "settings" && (
+        <>
+          <button
+            style={{ marginTop: 8 }}
+            onClick={() =>
+              void cmd("diagnostics").then((d) => setDiag(JSON.stringify(d, null, 2)))
+            }
+          >
+            Chẩn đoán
+          </button>
+          {diag && <pre style={{ whiteSpace: "pre-wrap", fontSize: 11 }}>{diag}</pre>}
+        </>
+      )}
     </div>
   );
 }
 
 function title(kind: PanelKind): string {
-  return kind === "bookmarks" ? "Đã lưu" : kind === "history" ? "Lịch sử" : "Cài đặt";
+  if (kind === "bookmarks") return "Đã lưu";
+  if (kind === "history") return "Lịch sử";
+  if (kind === "downloads") return "Tải xuống";
+  return "Cài đặt";
 }
 
 const panel: CSSProperties = {

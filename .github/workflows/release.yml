@@ -1,0 +1,48 @@
+name: Release
+
+# Chỉ chạy khi bạn tự đẩy tag phiên bản (ví dụ v0.1.0).
+# Release được tạo ở trạng thái DRAFT: bạn kiểm tra rồi bấm Publish thủ công.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - name: Install frontend deps
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          if (Test-Path package-lock.json) { npm ci } else { npm install }
+      - name: Build installer (NSIS)
+        working-directory: apps/desktop
+        run: npx tauri build --bundles nsis --target x86_64-pc-windows-msvc
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem -Recurse -Filter *-setup.exe apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis | Select-Object -First 1
+          if (-not $f) { throw "NSIS installer not found" }
+          $hash = (Get-FileHash -Algorithm SHA256 $f.FullName).Hash.ToLower()
+          "$hash  $($f.Name)" | Out-File -Encoding ascii SHA256SUMS.txt
+          echo "INSTALLER=$($f.FullName)" >> $env:GITHUB_ENV
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" --draft --title "Nova Browser ${{ github.ref_name }}" --generate-notes "$env:INSTALLER" SHA256SUMS.txt
