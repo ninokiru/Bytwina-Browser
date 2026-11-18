@@ -191,6 +191,17 @@ async fn browser_command(
             browser::emit_state(&app, &state);
             Ok(Value::Null)
         }
+        // ===== M7: chẩn đoán =====
+        "diagnostics" => {
+            let db_available = app
+                .try_state::<crate::db::DbState>()
+                .map(|s| s.0.is_some())
+                .unwrap_or(false);
+            Ok(
+                serde_json::to_value(crate::diagnostics::collect(db_available))
+                    .unwrap_or(Value::Null),
+            )
+        }
         other => Err(format!("lệnh không biết: {other}")),
     }
 }

@@ -37,6 +37,7 @@ export default function Panel({
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  const [diag, setDiag] = useState<string>("");
   const [query, setQuery] = useState("");
   const [home, setHome] = useState("https://example.com/");
 
@@ -137,6 +138,20 @@ export default function Panel({
         >
           Xóa dữ liệu duyệt web (lịch sử, tải xuống, phiên)
         </button>
+      )}
+
+      {kind === "settings" && (
+        <>
+          <button
+            style={{ marginTop: 8 }}
+            onClick={() =>
+              void cmd("diagnostics").then((d) => setDiag(JSON.stringify(d, null, 2)))
+            }
+          >
+            Chẩn đoán
+          </button>
+          {diag && <pre style={{ whiteSpace: "pre-wrap", fontSize: 11 }}>{diag}</pre>}
+        </>
       )}
     </div>
   );

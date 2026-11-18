@@ -1,0 +1,44 @@
+name: Security
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+  push:
+    paths:
+      - "**/Cargo.lock"
+      - "**/package-lock.json"
+      - ".github/workflows/security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Cargo audit
+        run: |
+          # Chưa commit Cargo.lock thì không có gì để kiểm tra; ghi rõ để không báo xanh giả.
+          if [ -f Cargo.lock ]; then cargo audit; else echo "::warning::Thiếu Cargo.lock, bỏ qua cargo audit"; fi
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit
+        run: |
+          if [ -f package-lock.json ]; then npm audit --audit-level=high; else echo "::warning::Thiếu package-lock.json, bỏ qua npm audit"; fi

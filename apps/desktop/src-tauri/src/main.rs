@@ -7,6 +7,7 @@ use tauri::{LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, W
 mod browser;
 mod commands;
 mod db;
+mod diagnostics;
 mod navigation;
 mod tabs;
 
@@ -32,12 +33,23 @@ fn main() {
         .setup(|app| {
             let state: BrowserState = app.state();
             // M2: DB bật cho mọi tính năng lưu trữ; lỗi mở DB chỉ tắt M2, không chết app.
+            if let Ok(dir) = app.path().app_data_dir() {
+                diagnostics::init(dir);
+            }
+            // M7: kiểm tra WebView2 Runtime ngay khi khởi động để ghi nhật ký rõ ràng.
+            match tauri::webview_version() {
+                Ok(v) => diagnostics::log("info", &format!("WebView2 {v}")),
+                Err(e) => diagnostics::log("error", &format!("không đọc được WebView2: {e}")),
+            }
             let storage = app
                 .path()
                 .app_data_dir()
                 .ok()
                 .and_then(db::open)
                 .map(DbState);
+            if storage.is_none() {
+                diagnostics::log("error", "không mở được CSDL; tắt lịch sử, dấu trang và phiên");
+            }
             app.manage(storage.unwrap_or_default());
 
             let window = tauri::window::WindowBuilder::new(app, "main")
@@ -83,31 +95,18 @@ fn main() {
                 match event {
                     WindowEvent::Resized(_) => browser::layout(&handle, &layout_state),
                     // M2: lưu danh sách tab khi người dùng đóng cửa sổ.
-                    WindowEvent::CloseRequested { .. } => {
-                        if let Some(db) = handle.state::<DbState>().0.as_ref() {
-                            let snap = layout_state.snapshot();
-                            let active_index = snap
-                                .active_tab
-                                .and_then(|a| snap.tabs.iter().position(|t| t.id == a))
-                                .map(|p| p as i64)
-                                .unwrap_or(-1);
-                            let _ = db.save_session(
-                                &snap
-                                    .tabs
-                                    .iter()
-                                    .map(|t| db::SessionTab {
-                                        url: t.url.clone(),
-                                        title: t.title.clone(),
-                                    })
-                                    .collect::<Vec<_>>(),
-                                active_index,
-                            );
-                        }
-                    }
+                    WindowEvent::CloseRequested { .. } => browser::persist_session(&handle, &layout_state),
                     _ => {}
                 }
             });
             browser::emit_state(app.handle(), &state);
+            // M6: lưu phiên định kỳ (30 giây) để không mất tab khi app thoát bất thường.
+            let autosave_handle = app.handle().clone();
+            let autosave_state = state.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                browser::persist_session(&autosave_handle, &autosave_state);
+            });
             Ok(())
         })
         .run(tauri::generate_context!())

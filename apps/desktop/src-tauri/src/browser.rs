@@ -515,6 +515,29 @@ pub fn on_page_load<R: tauri::Runtime>(
     emit_state(app, &state);
 }
 
+/// M2/M6: lưu danh sách tab hiện tại vào DB (phiên). Gọi khi đóng cửa sổ và định kỳ.
+pub fn persist_session(app: &AppHandle, state: &BrowserState) {
+    if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.as_ref()) {
+        let snap = state.snapshot();
+        let active_index = snap
+            .active_tab
+            .and_then(|a| snap.tabs.iter().position(|t| t.id == a))
+            .map(|p| p as i64)
+            .unwrap_or(-1);
+        let tabs: Vec<crate::db::SessionTab> = snap
+            .tabs
+            .iter()
+            .map(|t| crate::db::SessionTab {
+                url: t.url.clone(),
+                title: t.title.clone(),
+            })
+            .collect();
+        if let Err(e) = db.save_session(&tabs, active_index) {
+            crate::diagnostics::log("error", &format!("lưu phiên thất bại: {e}"));
+        }
+    }
+}
+
 /// M3: xử lý sự kiện tải xuống. Lưu vào thư mục Downloads của người dùng,
 /// không ghi đè file cũ, và ghi lịch sử tải vào DB khi hoàn tất.
 fn on_download(app: &AppHandle, event: DownloadEvent<'_>) -> bool {
