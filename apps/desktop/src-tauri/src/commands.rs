@@ -153,6 +153,44 @@ async fn browser_command(
             db.clear_session()?;
             Ok(())
         })?,
+        // ===== M3: tải xuống =====
+        "downloads_list" => with_db(&app, |db| db.list_downloads())?,
+        "downloads_clear" => with_db(&app, |db| {
+            db.clear_downloads()?;
+            Ok(())
+        })?,
+        // ===== M4: riêng tư và xóa dữ liệu =====
+        "private_set" => {
+            state.set_private(arg("on")? == "1");
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "clear_data" => with_db(&app, |db| {
+            db.clear_history()?;
+            db.clear_downloads()?;
+            db.clear_session()?;
+            Ok(())
+        })?,
+        // ===== M5: ghim tab và nhóm tab =====
+        "pin_tab" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            state.set_pinned(id, arg("on")? == "1")?;
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "set_group" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            let group = arg("group").unwrap_or_default();
+            let group = group.trim();
+            let value = if group.is_empty() {
+                None
+            } else {
+                Some(group.chars().take(24).collect::<String>())
+            };
+            state.set_group(id, value)?;
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
         other => Err(format!("lệnh không biết: {other}")),
     }
 }

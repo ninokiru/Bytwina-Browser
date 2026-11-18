@@ -97,10 +97,50 @@ mod tests {
     }
 
     #[test]
+    fn blocklist_matches_subdomains_only() {
+        assert!(is_blocked_host(
+            &Url::parse("https://ad.doubleclick.net/x").unwrap()
+        ));
+        assert!(is_blocked_host(
+            &Url::parse("https://doubleclick.net/").unwrap()
+        ));
+        assert!(!is_blocked_host(
+            &Url::parse("https://notdoubleclick.net/").unwrap()
+        ));
+        assert!(!is_blocked_host(
+            &Url::parse("https://example.com/").unwrap()
+        ));
+    }
+
+    #[test]
     fn urlencoding_spaces_and_utf8() {
         assert_eq!(urlencode("a b"), "a%20b");
         assert_eq!(urlencode("dà"), "d%C3%A0");
     }
+}
+
+/// M4: danh sách chặn quảng cáo/theo dõi tối thiểu, khớp theo hậu tố tên miền.
+/// Đây KHÔNG phải filter list được bảo trì. Hiện chỉ áp dụng cho popup;
+/// chặn tài nguyên trong trang cần WebResourceRequested (chưa có trong Tauri stable).
+const BLOCKED_HOST_SUFFIXES: &[&str] = &[
+    "doubleclick.net",
+    "googlesyndication.com",
+    "googleadservices.com",
+    "adservice.google.com",
+    "taboola.com",
+    "outbrain.com",
+    "scorecardresearch.com",
+    "criteo.com",
+    "adnxs.com",
+];
+
+pub fn is_blocked_host(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    BLOCKED_HOST_SUFFIXES
+        .iter()
+        .any(|s| host == *s || host.ends_with(&format!(".{s}")))
 }
 
 /// Chặn mọi điều hướng phía trang: webview nội dung không tự đổi location,
@@ -140,7 +180,7 @@ pub fn handle_new_window<R: tauri::Runtime>(
     allow_next: &std::sync::atomic::AtomicBool,
     url: Url,
 ) -> NewWindowResponse<'static, R> {
-    if allow_next.swap(false, std::sync::atomic::Ordering::SeqCst) {
+    if allow_next.swap(false, std::sync::atomic::Ordering::SeqCst) && !is_blocked_host(&url) {
         queue.push(url);
     }
     NewWindowResponse::Deny

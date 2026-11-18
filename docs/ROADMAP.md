@@ -1,32 +1,32 @@
 # Lộ trình
 
-- [ ] **M0 — Nền tảng kỹ thuật** (dừng ở mức code; chưa có bằng chứng nghiệm thu GUI)
-  - [x] Khung repo, CLAUDE.md, README
-  - [x] Workflow CI và build NSIS
-  - [x] Prototype: toolbar React + 2 tab WebView2 native
-  - [ ] Pin commit SHA cho action
-  - [ ] Commit `package-lock.json` và `Cargo.lock`
-  - [ ] Chạy CI trên GitHub và ghi kết quả
-  - [ ] Nghiệm thu trên Windows: resize, DPI, focus, chuyển tab
-- [ ] **M1 — Nền tảng trình duyệt** (code xong, chưa test runtime)
-  - [x] Toolbar: tab bar (thêm/đóng/chuyển), address bar, back/forward/reload/stop
-  - [x] Tab manager backend (`tabs.rs`/`browser.rs`): id, url, title, loading, created, history
-  - [x] Navigation manager (`navigation.rs`): parse ô địa chỉ → URL/tìm kiếm, chặn scheme lạ
-  - [x] Điều hướng in-page bị chặn (ADR-003) — link trong trang chưa bấm được, cần cơ chế allowlist origin ở M4/M5
-  - [x] Popup handling (ADR-004)
-  - [x] Phím tắt khi focus toolbar: Ctrl+T/L/R, Alt+←/→, Ctrl+Tab, Esc. Ctrl+W/Ctrl+Tab toàn cục cần plugin global-shortcut (chưa làm)
-  - [ ] New tab page thật (hiện là about:blank)
-  - [ ] Build + test trên CI và trên Windows
-- [ ] **M2 — Dữ liệu và profile** (code xong, chưa test runtime)
-  - [x] SQLite rusqlite bundled, WAL, schema_version migrations (ADR-005)
-  - [x] Bookmarks: thêm/xóa/danh sách + UI panel
-  - [x] History: tự ghi khi tải trang, tìm kiếm, xóa + UI panel
-  - [x] Preferences: settings key-value (trang chủ) + UI panel
-  - [x] Session restoration: lưu tab khi đóng cửa sổ, khôi phục khi khởi động. Chỉ khôi phục URL + tiêu đề; KHÔNG khôi phục state trong bộ nhớ của website (form chưa gửi, cuộn, JS)
-  - [ ] Profile separation (nhiều hồ sơ người dùng) — chưa làm, giữ lại M2
-  - [ ] Build + test trên CI và trên Windows
-- [ ] M3 — Quản lý tải xuống (chưa bắt đầu)
-- [ ] M4 — Quyền riêng tư và bảo mật (chưa bắt đầu)
-- [ ] M5 — Tính năng nâng cao (chưa bắt đầu)
-- [ ] M6 — Hiệu năng (chưa bắt đầu)
-- [ ] M7 — Phát hành (chưa bắt đầu)
+Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M5 (không có crates.io/npm trong môi trường làm việc; CI là nơi kiểm tra duy nhất).
+
+- [x] M0 — Nền tảng kỹ thuật (prototype đa WebView2; chưa nghiệm thu trên Windows)
+- [~] M1 — Nền tảng trình duyệt: thanh địa chỉ, điều hướng, tab, trang tab mới (`about:blank`)
+  - [ ] Phím tắt toàn cục (Ctrl+T/W/L/R hiện chỉ hoạt động khi focus vào toolbar)
+  - [~] Popup: chặn mặc định, mở tab nền khi giữ Ctrl (đã có hàng đợi)
+- [~] M2 — Dữ liệu: SQLite (bookmark, lịch sử, cài đặt, phiên). Mã M2 có sẵn trên `main`, còn lỗi biên dịch.
+  - [ ] Sao lưu/khôi phục DB, WAL checkpoint khi thoát
+  - [ ] Tách profile (cần nghiên cứu WebView2 user data folder)
+- [~] M3 — Tải xuống
+  - [x] Sự kiện `on_download`: chọn thư mục Downloads, tránh ghi đè, ghi lịch sử tải vào DB
+  - [x] Danh sách tải xuống trong panel "⤓"; xóa danh sách
+  - [ ] Hiển thị tiến độ, hủy tải, mở thư mục chứa file
+  - [ ] Kiểm tra toàn vẹn file (checksum)
+- [~] M4 — Riêng tư và bảo mật
+  - [x] Chế độ riêng tư: không ghi lịch sử (cookie vẫn được lưu; xem docs/SECURITY.md)
+  - [x] Xóa dữ liệu duyệt web (lịch sử, tải xuống, phiên)
+  - [x] Chặn popup theo danh sách quảng cáo tối thiểu (không phải filter list bảo trì)
+  - [ ] Chặn tài nguyên quảng cáo/tracker trong trang (cần WebResourceRequested)
+  - [ ] Quản lý quyền site (WebView2 permission handler, chưa khảo sát)
+  - [ ] Điều hướng link trong trang: hiện đang bị chặn bởi `deny_all` (xem ADR-003)
+- [~] M5 — Tính năng nâng cao
+  - [x] Ghim tab (tab ghim nằm đầu thanh tab)
+  - [x] Nhóm tab (gán tên nhóm, hiển thị tiền tố `[nhóm]`)
+  - [ ] Tab dọc (cần thay đổi bố cục Rust: toolbar hiện có chiều cao cố định)
+  - [ ] Reader mode (cần chèn script vào trang; chưa quyết định)
+  - [ ] PDF: phụ thuộc WebView2, chưa kiểm tra
+  - [ ] Trang tab mới có giao diện riêng
+- [ ] M6 — Hiệu năng (chưa có số đo)
+- [ ] M7 — Phát hành

@@ -40,3 +40,10 @@
 - **Quyết định:** `rusqlite` bản `bundled` (compile SQLite kèm app — không phụ thuộc runtime hệ thống), kết nối bọc `Arc<Mutex<Connection>>`, mở tại `app_data_dir/nova.db`, WAL + synchronous=NORMAL, bảng `schema_version` cho versioning. Lệnh DB chạy trong command async (luồng tokio), giữ khóa mutex ngắn.
 - **Lý do chọn rusqlite thay vì sqlx/diesel:** đồng bộ, ít phụ thuộc, hợp máy dev 8 GB; sqlx async-heavy và diesel thiên về server SQL lớn.
 - **Giới hạn:** Một connection duy nhất; nếu M6 đo thấy contention thì tách read pool.
+
+## ADR-003: Điều hướng trong trang đang bị chặn (`deny_all`)
+
+- **Trạng thái:** Cần quyết định. Hiện tại: giữ nguyên.
+- **Bối cảnh:** `on_navigation(deny_all)` trả về `false`, nên link trong trang và `target=_blank` không hoạt động. Chỉ thanh địa chỉ (IPC) được đổi URL.
+- **Hệ quả:** Trình duyệt chưa thể duyệt web bình thường qua link. Nếu bỏ chặn, cần kiểm tra xem `on_navigation` có áp dụng cả cho `webview.navigate()` từ Rust hay không.
+- **Phương án:** (a) cho phép http/https và áp dụng danh sách chặn; (b) giữ chặn và chỉ dùng thanh địa chỉ.
