@@ -22,7 +22,12 @@ fn main() {
         .invoke_handler(tauri::generate_handler![commands::browser_command])
         .on_page_load(|webview, payload| {
             let app = webview.app_handle().clone();
-            browser::on_page_load(&app, payload.event(), webview.label(), &payload.url().clone());
+            browser::on_page_load(
+                &app,
+                payload.event(),
+                webview.label(),
+                &payload.url().clone(),
+            );
         })
         .setup(|app| {
             let state: BrowserState = app.state();

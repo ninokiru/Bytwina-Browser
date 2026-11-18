@@ -1,7 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl,
+};
 
 use crate::navigation;
 use crate::tabs::{HistoryEntry, PersistedTab, StatePayload, TabInfo};
@@ -204,7 +206,10 @@ impl BrowserState {
             .tabs
             .iter()
             .map(|t| PersistedTab {
-                url: t.current().map(|e| e.url.clone()).unwrap_or_else(|| t.url.clone()),
+                url: t
+                    .current()
+                    .map(|e| e.url.clone())
+                    .unwrap_or_else(|| t.url.clone()),
                 title: t.title.clone(),
             })
             .collect()
@@ -229,7 +234,10 @@ impl BrowserState {
                 .map(|t| TabInfo {
                     id: t.id,
                     label: t.label(),
-                    url: t.current().map(|e| e.url.clone()).unwrap_or_else(|| t.url.clone()),
+                    url: t
+                        .current()
+                        .map(|e| e.url.clone())
+                        .unwrap_or_else(|| t.url.clone()),
                     title: t.title.clone(),
                     loading: t.loading,
                     created: t.created,
@@ -289,17 +297,18 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
                 // clone() để không giữ tham chiếu State qua hết vòng lặp message
                 // loop — manager có thể giải chấp state giữa chừng.
                 let queue = app.state::<navigation::PopupQueue>().inner().clone();
-                let allow = app
-                    .state::<std::sync::atomic::AtomicBool>()
-                    .inner()
-                    .clone();
+                let allow = app.state::<std::sync::atomic::AtomicBool>().inner().clone();
                 navigation::handle_new_window(&queue, &allow, url)
             }
         });
     let Some(window) = app.get_window("main") else {
         return;
     };
-    match window.add_child(builder, LogicalPosition::new(0.0, TOOLBAR_HEIGHT), content_size(app)) {
+    match window.add_child(
+        builder,
+        LogicalPosition::new(0.0, TOOLBAR_HEIGHT),
+        content_size(app),
+    ) {
         Ok(_) => state.mark_created(id),
         Err(e) => log::error!("không tạo được webview {label}: {e}"),
     }
@@ -441,7 +450,10 @@ pub fn on_page_load<R: tauri::Runtime>(
             }
             state.set_loading(id, false);
             // M2: ghi lịch sử toàn cục khi DB khả dụng.
-            if let Some(db) = app.try_state::<crate::db::DbState>().and_then(|d| d.0.as_ref()) {
+            if let Some(db) = app
+                .try_state::<crate::db::DbState>()
+                .and_then(|d| d.0.as_ref())
+            {
                 let title = state.title_of(id);
                 let _ = db.record_history(&title, url.as_str());
             }

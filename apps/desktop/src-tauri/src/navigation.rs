@@ -72,7 +72,10 @@ mod tests {
     fn explicit_http_kept() {
         assert_eq!(to_url("http://example.com"), "http://example.com");
         // url::Url chuẩn hóa scheme + host sang chữ thường, giữ nguyên đường dẫn.
-        assert_eq!(to_url("HTTPS://Example.com/Path"), "https://example.com/Path");
+        assert_eq!(
+            to_url("HTTPS://Example.com/Path"),
+            "https://example.com/Path"
+        );
     }
 
     #[test]

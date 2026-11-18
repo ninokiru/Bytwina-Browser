@@ -134,7 +134,9 @@ impl Db {
     pub fn list_bookmarks(&self) -> Result<Vec<Bookmark>, String> {
         let c = self.conn();
         let mut stmt = c
-            .prepare("SELECT id, title, url, folder, created_at FROM bookmarks ORDER BY created_at ASC")
+            .prepare(
+                "SELECT id, title, url, folder, created_at FROM bookmarks ORDER BY created_at ASC",
+            )
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |r| {
@@ -221,7 +223,8 @@ impl Db {
     pub fn save_session(&self, tabs: &[SessionTab], active_index: i64) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_tabs", []).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_tabs", [])
+            .map_err(|e| e.to_string())?;
         for (i, t) in tabs.iter().enumerate() {
             tx.execute(
                 "INSERT INTO session_tabs (ord, url, title) VALUES (?1, ?2, ?3)",
@@ -268,8 +271,10 @@ impl Db {
     pub fn clear_session(&self) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_tabs", []).map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_meta", []).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_tabs", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_meta", [])
+            .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())
     }
 }
@@ -302,7 +307,8 @@ mod tests {
         let db = temp_db("bm");
         db.add_bookmark("Một", "https://a.test/", "").unwrap();
         // URL trùng → cập nhật tiêu đề, không tạo bản ghi mới.
-        db.add_bookmark("Một mới", "https://a.test/", "ĐỌC").unwrap();
+        db.add_bookmark("Một mới", "https://a.test/", "ĐỌC")
+            .unwrap();
         db.add_bookmark("Hai", "https://b.test/", "").unwrap();
         let all = db.list_bookmarks().unwrap();
         assert_eq!(all.len(), 2);
@@ -341,8 +347,14 @@ mod tests {
     fn session_save_load_clear() {
         let db = temp_db("sess");
         let tabs = vec![
-            SessionTab { url: "https://a.test/".into(), title: "A".into() },
-            SessionTab { url: "https://b.test/".into(), title: "B".into() },
+            SessionTab {
+                url: "https://a.test/".into(),
+                title: "A".into(),
+            },
+            SessionTab {
+                url: "https://b.test/".into(),
+                title: "B".into(),
+            },
         ];
         db.save_session(&tabs, 1).unwrap();
         let (loaded, active) = db.load_session().unwrap();

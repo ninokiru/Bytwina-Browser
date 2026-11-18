@@ -102,7 +102,11 @@ async fn browser_command(
         }
         // ===== M2: bookmarks / history / settings / session =====
         "bookmark_add" => with_db(&app, |db| {
-            db.add_bookmark(&arg("title")?, &arg("url")?, &arg("folder").unwrap_or_default())?;
+            db.add_bookmark(
+                &arg("title")?,
+                &arg("url")?,
+                &arg("folder").unwrap_or_default(),
+            )?;
             Ok(())
         })?,
         "bookmark_remove" => with_db(&app, |db| {
