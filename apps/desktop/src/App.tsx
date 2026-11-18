@@ -1,11 +1,32 @@
 import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  BookIcon,
+  BookTextIcon,
+  BookmarkPlusIcon,
+  ClockIcon,
+  CloseIcon,
+  DownloadIcon,
+  GlassesIcon,
+  GlobeIcon,
+  GridIcon,
+  HomeIcon,
+  LockIcon,
+  PinIcon,
+  PlusIcon,
+  ReloadIcon,
+  SettingsIcon,
+  StarIcon,
+  StopIcon,
+  TagIcon,
+} from "./Icons";
 
 const DEFAULT_HOME = "https://example.com/";
 
@@ -68,7 +89,7 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Phím tắt toàn cục của ứng dụng. Webview nội dung không nhận mấy tổ hợp này
+  // Phím tắt của ứng dụng. Webview nội dung không nhận mấy tổ hợp này
   // vì không có bridge Tauri ở phía trang; Ctrl+T/W/L/R phải đăng ký qua plugin
   // global-shortcut (M1 follow-up) — hiện chỉ hoạt động khi focus vào toolbar.
   useEffect(() => {
@@ -97,14 +118,21 @@ export default function App() {
         e.preventDefault();
         void cycle(state, e.shiftKey ? -1 : 1);
       } else if (e.key === "Escape") {
-        void cmd("stop");
+        if (panel) setPanel(null);
+        else void cmd("stop");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [state]);
+  }, [state, panel]);
+
+  // Bảng nổi nằm trong webview thanh công cụ: mở bảng thì nới webview này
+  // phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả lại bố cục cũ.
+  useEffect(() => {
+    void cmd("panel_open", { on: panel ? "1" : "0" }).catch(() => undefined);
+  }, [panel]);
 
   const go = () => {
     if (active == null) return;
@@ -112,200 +140,308 @@ export default function App() {
     void cmd("navigate", { id: String(active.id), input });
   };
 
-  // Trang web không có bridge Tauri nên không thể tự xin popup;
-  // permission manager hoàn thiện ở M4.
+  const toggle = (kind: PanelKind) => setPanel((cur) => (cur === kind ? null : kind));
 
   if (termsOk === null) return null;
   if (termsOk === false) {
     return (
-      <div style={termsBox}>
-        <h2 style={{ margin: "0 0 8px" }}>{t("terms.title")}</h2>
-        <div style={{ flex: 1, overflowY: "auto", paddingRight: 8 }}>
-          {TERMS_SECTIONS.map((sec) => (
-            <section key={sec.title} style={{ marginBottom: 12 }}>
-              <strong>{sec.title}</strong>
-              <p style={{ margin: "4px 0" }}>{sec.body}</p>
-            </section>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", paddingTop: 8 }}>
-          <button onClick={() => void cmd("terms_decline")}>{t("terms.decline")}</button>
-          <button
-            style={{ fontWeight: 700 }}
-            onClick={() =>
-              void cmd("terms_accept").then(() => {
-                setTermsOk(true);
-                return cmd("state").then((s) => setState(s as BrowserStatePayload));
-              })
-            }
-          >
-            {t("terms.accept")}
-          </button>
+      <div className="terms-screen">
+        <div className="terms-card">
+          <div className="terms-head">
+            <div className="terms-logo">
+              <img src="/brand-mark.png" alt="" />
+            </div>
+            <h1>{t("terms.title")}</h1>
+          </div>
+          <div className="terms-scroll">
+            {TERMS_SECTIONS.map((sec) => (
+              <section key={sec.title}>
+                <strong>{sec.title}</strong>
+                <p>{sec.body}</p>
+              </section>
+            ))}
+          </div>
+          <div className="terms-actions">
+            <button className="btn" onClick={() => void cmd("terms_decline")}>
+              {t("terms.decline")}
+            </button>
+            <button
+              className="btn primary"
+              onClick={() =>
+                void cmd("terms_accept").then(() => {
+                  setTermsOk(true);
+                  return cmd("state").then((s) => setState(s as BrowserStatePayload));
+                })
+              }
+            >
+              {t("terms.accept")}
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={bar}>
-      <div style={row}>
-        <strong style={{ padding: "0 8px" }}>
-          Bytwina{state.private ? ` · ${t("app.private")}` : ""}
-        </strong>
-        <div style={tabList}>
-          {state.tabs.map((tb) => (
-            <button
-              key={tb.id}
-              onClick={() => void cmd("activate_tab", { id: String(tb.id) })}
-              style={tb.id === state.activeTab ? tabActive : tab}
-              title={tb.url}
-            >
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {tb.group ? `[${tb.group}] ` : ""}
-                {tb.title || tb.url}
-              </span>
-              <span
-                style={{ marginLeft: 6, opacity: tb.pinned ? 1 : 0.4 }}
-                title={tb.pinned ? t("bar.unpin") : t("bar.pin")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void cmd("pin_tab", { id: String(tb.id), on: tb.pinned ? "0" : "1" });
+    <div className="chrome">
+      <header className="tabbar">
+        <div className={`brand${state.private ? " private" : ""}`} title="Bytwina Browser">
+          <img src="/brand-mark.png" alt="Bytwina" />
+        </div>
+        {state.private && (
+          <span className="private-pill">
+            <GlassesIcon /> {t("app.private")}
+          </span>
+        )}
+        <div className="tabs">
+          {state.tabs.map((tb) => {
+            const isActive = tb.id === state.activeTab;
+            return (
+              <div
+                key={tb.id}
+                className={[
+                  "tab",
+                  isActive ? "active" : "",
+                  tb.pinned ? "pinned" : "",
+                  tb.loading ? "tab-loading" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => void cmd("activate_tab", { id: String(tb.id) })}
+                onAuxClick={(e) => {
+                  if (e.button === 1) void cmd("close_tab", { id: String(tb.id) });
+                }}
+                title={tb.url}
+                role="tab"
+                aria-selected={isActive}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    void cmd("activate_tab", { id: String(tb.id) });
+                  }
                 }}
               >
-                📌
-              </span>
-              <span
-                style={{ marginLeft: 6, opacity: 0.6 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void cmd("close_tab", { id: String(tb.id) });
-                }}
-              >
-                ×
-              </span>
-            </button>
-          ))}
-          <button onClick={() => void cmd("new_tab")} title={`${t("bar.newTab")} (Ctrl+T)`} style={tab}>
-            ＋
+                <span
+                  className="tab-fav"
+                  style={{ ["--fav" as string]: favColor(tb.url + tb.id) }}
+                >
+                  {favLetter(tb)}
+                </span>
+                <span className="tab-label">{tabTitle(tb)}</span>
+                {tb.group ? <span className="tab-group-dot" title={tb.group} /> : null}
+                <button
+                  className="tab-btn pin"
+                  title={tb.pinned ? t("bar.unpin") : t("bar.pin")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void cmd("pin_tab", { id: String(tb.id), on: tb.pinned ? "0" : "1" });
+                  }}
+                >
+                  <PinIcon />
+                </button>
+                <button
+                  className="tab-btn close"
+                  title={t("panel.close")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void cmd("close_tab", { id: String(tb.id) });
+                  }}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+            );
+          })}
+          <button
+            className="tab-new"
+            onClick={() => void cmd("new_tab")}
+            title={`${t("bar.newTab")} (Ctrl+T)`}
+          >
+            <PlusIcon />
           </button>
         </div>
-        <button onClick={() => setPanel(panel === "bookmarks" ? null : "bookmarks")}>★</button>
-        <button onClick={() => setPanel(panel === "history" ? null : "history")}>🕘</button>
-        <button
-          onClick={() => setPanel(panel === "tabs" ? null : "tabs")}
-          title={t("bar.findTabs")}
-        >
-          ⊞
-        </button>
-        <button
-          onClick={() => setPanel(panel === "reading" ? null : "reading")}
-          title={t("bar.reading")}
-        >
-          📖
-        </button>
-        <button
-          onClick={() => setPanel(panel === "downloads" ? null : "downloads")}
-          title={t("bar.downloads")}
-        >
-          ⤓
-        </button>
-        <button
-          onClick={() => void cmd("private_set", { on: state.private ? "0" : "1" })}
-          title={t("bar.privateToggle")}
-          style={{ fontWeight: state.private ? 700 : 400 }}
-        >
-          🕶
-        </button>
-        <button
-          onClick={() => setPanel(panel === "dictionary" ? null : "dictionary")}
-          title={t("bar.dictionary")}
-        >
-          📘
-        </button>
-        <button
-          onClick={() => setPanel(panel === "settings" ? null : "settings")}
-          title={t("bar.settings")}
-        >
-          ⚙
-        </button>
+        <div className="tools">
+          <button
+            className={`icon-btn${panel === "bookmarks" ? " active" : ""}`}
+            title={t("title.bookmarks")}
+            onClick={() => toggle("bookmarks")}
+          >
+            <StarIcon />
+          </button>
+          <button
+            className={`icon-btn${panel === "history" ? " active" : ""}`}
+            title={t("title.history")}
+            onClick={() => toggle("history")}
+          >
+            <ClockIcon />
+          </button>
+          <button
+            className={`icon-btn${panel === "tabs" ? " active" : ""}`}
+            title={t("bar.findTabs")}
+            onClick={() => toggle("tabs")}
+          >
+            <GridIcon />
+          </button>
+          <button
+            className={`icon-btn${panel === "reading" ? " active" : ""}`}
+            title={t("bar.reading")}
+            onClick={() => toggle("reading")}
+          >
+            <BookIcon />
+          </button>
+          <button
+            className={`icon-btn${panel === "downloads" ? " active" : ""}`}
+            title={t("bar.downloads")}
+            onClick={() => toggle("downloads")}
+          >
+            <DownloadIcon />
+          </button>
+          <button
+            className={`icon-btn${state.private ? " private-on" : ""}`}
+            title={t("bar.privateToggle")}
+            onClick={() => void cmd("private_set", { on: state.private ? "0" : "1" })}
+          >
+            <GlassesIcon />
+          </button>
+          <button
+            className={`icon-btn${panel === "dictionary" ? " active" : ""}`}
+            title={t("bar.dictionary")}
+            onClick={() => toggle("dictionary")}
+          >
+            <BookTextIcon />
+          </button>
+          <button
+            className={`icon-btn${panel === "settings" ? " active" : ""}`}
+            title={t("bar.settings")}
+            onClick={() => toggle("settings")}
+          >
+            <SettingsIcon />
+          </button>
+        </div>
+      </header>
+
+      <div className="navbar">
+        <div className="nav-group">
+          <button
+            className="icon-btn"
+            disabled={!active?.canGoBack}
+            onClick={() => void cmd("back")}
+            title="Alt+←"
+          >
+            <ArrowLeftIcon />
+          </button>
+          <button
+            className="icon-btn"
+            disabled={!active?.canGoForward}
+            onClick={() => void cmd("forward")}
+            title="Alt+→"
+          >
+            <ArrowRightIcon />
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => void cmd(active?.loading ? "stop" : "reload")}
+            title="Ctrl+R / Esc"
+          >
+            {active?.loading ? <StopIcon /> : <ReloadIcon />}
+          </button>
+        </div>
+
+        <div className="omnibox">
+          <span className={`omni-icon${isSecure(active?.url) ? " secure" : ""}`}>
+            {isSecure(active?.url) ? <LockIcon /> : <GlobeIcon />}
+          </span>
+          <input
+            id="address"
+            value={input}
+            placeholder={t("bar.address")}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => {
+              setInput(e.target.value);
+              setEditing(true);
+            }}
+            onFocus={(e) => {
+              setEditing(true);
+              e.currentTarget.select();
+            }}
+            onBlur={() => setEditing(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") go();
+              if (e.key === "Escape") setEditing(false);
+            }}
+          />
+          {active?.loading && <span className="omni-spinner" />}
+        </div>
+
+        <label className="group-field" title={t("bar.group")}>
+          <TagIcon />
+          <input
+            placeholder={t("bar.group")}
+            aria-label={t("bar.group")}
+            key={active?.id}
+            defaultValue={active?.group ?? ""}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && active)
+                void cmd("set_group", {
+                  id: String(active.id),
+                  group: (e.target as HTMLInputElement).value,
+                });
+            }}
+          />
+        </label>
+
+        <div className="nav-group">
+          <button
+            className="icon-btn"
+            title={t("bar.home")}
+            onClick={() => {
+              if (active) void cmd("navigate", { id: String(active.id), input: home });
+            }}
+          >
+            <HomeIcon />
+          </button>
+          <button
+            className="icon-btn"
+            title={t("bar.bookmark")}
+            onClick={() => {
+              if (active)
+                void cmd("bookmark_add", { title: active.title, url: active.url, folder: "" });
+            }}
+          >
+            <StarIcon />
+          </button>
+          <button
+            className="icon-btn"
+            title={t("bar.addReading")}
+            onClick={() => {
+              if (active) void cmd("reading_add", { title: active.title, url: active.url });
+            }}
+          >
+            <BookmarkPlusIcon />
+          </button>
+        </div>
       </div>
-      <div style={row}>
-        <button disabled={!active?.canGoBack} onClick={() => void cmd("back")}>
-          ←
-        </button>
-        <button disabled={!active?.canGoForward} onClick={() => void cmd("forward")}>
-          →
-        </button>
-        <button onClick={() => void cmd(active?.loading ? "stop" : "reload")} title="Ctrl+R / Esc">
-          {active?.loading ? "■" : "⟳"}
-        </button>
-        <button
-          title={t("bar.home")}
-          onClick={() => {
-            if (active) void cmd("navigate", { id: String(active.id), input: home });
-          }}
-        >
-          🏠
-        </button>
-        <input
-          id="address"
-          style={address}
-          value={input}
-          placeholder={t("bar.address")}
-          onChange={(e) => {
-            setInput(e.target.value);
-            setEditing(true);
-          }}
-          onFocus={() => setEditing(true)}
-          onBlur={() => setEditing(false)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") go();
-            if (e.key === "Escape") setEditing(false);
-          }}
-        />
-        <input
-          style={{ width: 110 }}
-          placeholder={t("bar.group")}
-          aria-label={t("bar.group")}
-          key={active?.id}
-          defaultValue={active?.group ?? ""}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && active)
-              void cmd("set_group", {
-                id: String(active.id),
-                group: (e.target as HTMLInputElement).value,
-              });
-          }}
-        />
-        <button
-          title={t("bar.addReading")}
-          onClick={() => {
-            if (active) void cmd("reading_add", { title: active.title, url: active.url });
-          }}
-        >
-          🔖
-        </button>
-        <button
-          title={t("bar.bookmark")}
-          onClick={() => {
-            if (active)
-              void cmd("bookmark_add", { title: active.title, url: active.url, folder: "" });
-          }}
-        >
-          ☆
-        </button>
-      </div>
+
       {panel && (
-        <Panel
-          kind={panel}
-          onClose={() => setPanel(null)}
-          onNavigate={(url) => {
-            setPanel(null);
-            if (active) void cmd("navigate", { id: String(active.id), input: url });
+        <div
+          className="scrim"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPanel(null);
           }}
-          privateMode={state.private}
-          onHomeChange={setHome}
-        />
+        >
+          <Panel
+            kind={panel}
+            onClose={() => setPanel(null)}
+            onNavigate={(url) => {
+              setPanel(null);
+              if (active) void cmd("navigate", { id: String(active.id), input: url });
+            }}
+            privateMode={state.private}
+            onHomeChange={setHome}
+          />
+        </div>
       )}
     </div>
   );
@@ -318,63 +454,33 @@ async function cycle(state: BrowserStatePayload, dir: number) {
   await cmd("activate_tab", { id: String(next.id) });
 }
 
-const termsBox: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  height: "100vh",
-  boxSizing: "border-box",
-  padding: 24,
-  fontFamily: "system-ui",
-  fontSize: 14,
-  background: "var(--surface)",
-  color: "var(--text)",
-};
+function isSecure(url: string | undefined): boolean {
+  return typeof url === "string" && url.startsWith("https://");
+}
 
-const bar: CSSProperties = {
-  position: "relative",
-  display: "flex",
-  flexDirection: "column",
-  height: "100vh",
-  boxSizing: "border-box",
-  fontFamily: "system-ui",
-  fontSize: 13,
-  background: "var(--bg)",
-  color: "var(--text)",
-  borderBottom: "1px solid var(--border)",
-};
-const row: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-  padding: "4px 6px",
-  minHeight: 40,
-  boxSizing: "border-box",
-};
-const tabList: CSSProperties = { display: "flex", gap: 4, overflowX: "auto", flex: 1 };
-const tab: CSSProperties = {
-  width: 160,
-  flexShrink: 0,
-  padding: "4px 8px",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  background: "var(--surface)",
-  color: "var(--text)",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-};
-const tabActive: CSSProperties = {
-  ...tab,
-  background: "var(--accent-bg)",
-  borderColor: "var(--accent-border)",
-};
-const address: CSSProperties = {
-  flex: 1,
-  padding: "6px 10px",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  background: "var(--surface)",
-  color: "var(--text)",
-  fontSize: 13,
-};
+function tabTitle(tb: TabInfo): string {
+  if (tb.title) return tb.title;
+  if (tb.pinned) return tb.label || "Tab";
+  return hostOf(tb.url) || tb.url;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function favLetter(tb: TabInfo): string {
+  const host = hostOf(tb.url);
+  const letter = (host || tb.title || "?").trim().charAt(0);
+  return letter || "?";
+}
+
+// Màu ổn định theo URL để mỗi trang có "favicon" riêng mà không cần tải mạng.
+function favColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) % 360;
+  return `hsl(${hash} 62% 52%)`;
+}

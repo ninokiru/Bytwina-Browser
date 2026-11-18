@@ -131,3 +131,15 @@
   - `private_set` đóng mọi webview và tạo lại, tab nạp lại URL hiện hành với profile InPrivate (hoặc profile thường khi tắt).
 - **Đánh đổi:** đổi chế độ riêng tư làm mất trạng thái tạm của trang (vị trí cuộn, form đang nhập). Chấp nhận vì đúng ngữ nghĩa riêng tư hơn là giữ trạng thái mà cookie vẫn dùng chung.
 - **Giới hạn còn lại:** WebView2 vẫn dùng chung user data folder trên đĩa; chưa tách profile (xem ROADMAP M2).
+
+## ADR-013: Bảng nổi phủ toàn cửa sổ bằng cách nới webview toolbar
+
+- **Trạng thái:** Chấp nhận (2026-11-18). Thay cách render bảng nổi cũ.
+- **Bối cảnh:** Giao diện và mọi bảng (dấu trang, lịch sử, cài đặt…) nằm trong webview `toolbar` cao đúng `TOOLBAR_HEIGHT = 96`. Bảng đặt `position: absolute` bên trong bị cắt ở 96 px, gần như không dùng được. Webview con của Tauri xếp theo thứ tự tạo và không có API đổi z-order, nên không thể vẽ bảng đè lên webview nội dung.
+- **Quyết định:**
+  - Thêm cờ `PANEL_OPEN`; khi bật, `toolbar_height_for` trả về toàn bộ chiều cao cửa sổ, `layout` nới webview toolbar và ẩn mọi webview nội dung đã tạo.
+  - Lệnh `panel_open` bật/tắt cờ này; đóng bảng thì `layout` trả toolbar về 96 px và gọi `focus_tab` để hiện lại tab đang hoạt động.
+  - `focus_tab` giữ tab mới ở trạng thái ẩn khi `PANEL_OPEN` bật, tránh webview vừa tạo che bảng.
+  - Frontend vẽ lớp phủ `.scrim` bắt đầu từ 96 px, nên hai hàng thanh công cụ vẫn bấm được (đổi bảng, đóng bảng).
+- **Đánh đổi:** Trong lúc mở bảng, nội dung trang bị ẩn (không phải thu nhỏ) và không thể cuộn/đọc song song; đổi lại bảng có đủ chiều cao và hoạt động ổn định trên WebView2 mà không cần cửa sổ phụ.
+- **Hướng thay thế sau này:** cửa sổ/webview riêng cho bảng, hoặc webview toolbar trong suốt phủ toàn cửa sổ nếu WebView2 cho phép hit-test theo vùng.

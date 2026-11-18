@@ -54,6 +54,8 @@ fn main() {
             let window = tauri::window::WindowBuilder::new(app, "main")
                 .title("Bytwina Browser")
                 .inner_size(1200.0, 800.0)
+                // Dưới ngưỡng này thanh công cụ hai hàng sẽ chồng lên nhau.
+                .min_inner_size(900.0, 560.0)
                 .build()?;
 
             // Thanh công cụ: webview tin cậy duy nhất được nạp giao diện cục bộ và gọi IPC.

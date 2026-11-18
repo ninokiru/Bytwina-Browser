@@ -11,8 +11,11 @@ use crate::tabs::{HistoryEntry, StatePayload, TabInfo};
 
 pub const TOOLBAR_HEIGHT: f64 = 96.0;
 
-/// Khi true, thanh công cụ phủ toàn cửa sổ (màn hình điều khoản khi chưa chấp nhận).
+/// Khi true, thanh công cụ phủ toàn cửa sổ (màn hình điều khoản chưa chấp nhận).
 static TOOLBAR_FULL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Khi true, thanh công cụ phủ toàn cửa sổ để hiển thị bảng nổi (đã mở rộng).
+static PANEL_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn set_toolbar_full(on: bool) {
     TOOLBAR_FULL.store(on, std::sync::atomic::Ordering::SeqCst);
@@ -20,7 +23,9 @@ pub fn set_toolbar_full(on: bool) {
 
 /// Chiều cao thanh công cụ theo chiều cao cửa sổ hiện hành.
 pub fn toolbar_height_for(window_height: f64) -> f64 {
-    if TOOLBAR_FULL.load(std::sync::atomic::Ordering::SeqCst) {
+    let full = TOOLBAR_FULL.load(std::sync::atomic::Ordering::SeqCst)
+        || PANEL_OPEN.load(std::sync::atomic::Ordering::SeqCst);
+    if full {
         window_height
     } else {
         TOOLBAR_HEIGHT
@@ -357,9 +362,11 @@ fn content_size(app: &AppHandle) -> LogicalSize<f64> {
         .and_then(|w| {
             let scale = w.scale_factor().ok()?;
             let s = w.inner_size().ok()?.to_logical::<f64>(scale);
+            // Vùng nội dung luôn bắt đầu dưới thanh công cụ chuẩn, kể cả khi bảng
+            // nổi tạm phủ toàn cửa sổ — webview nội dung chỉ bị ẩn, không đổi cỡ.
             Some(LogicalSize::new(
                 s.width,
-                (s.height - toolbar_height_for(s.height)).max(0.0),
+                (s.height - TOOLBAR_HEIGHT).max(0.0),
             ))
         })
         .unwrap_or(LogicalSize::new(1200.0, 704.0))
@@ -480,8 +487,26 @@ pub fn hide_others(app: &AppHandle, state: &BrowserState, active: u32) {
 
 /// Gọi khi chuyển tab: ẩn các webview khác, hiện (và tạo nếu cần) webview tab mới.
 pub fn focus_tab(app: &AppHandle, state: &BrowserState, id: u32) {
-    hide_others(app, state, id);
     let label = format!("tab-{id}");
+    // Bảng nổi đang phủ cửa sổ: vẫn tạo/nạp tab mới nhưng giữ ẩn, nếu không
+    // webview vừa tạo sẽ nằm trên và che mất bảng.
+    if PANEL_OPEN.load(std::sync::atomic::Ordering::SeqCst) {
+        let url = state
+            .snapshot()
+            .tabs
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.url.clone());
+        ensure_webview(app, state, id);
+        if let (Some(u), Some(wv)) = (url, app.get_webview(&label)) {
+            if let Ok(parsed) = u.parse() {
+                let _ = wv.navigate(parsed);
+            }
+            let _ = wv.hide();
+        }
+        return;
+    }
+    hide_others(app, state, id);
     if let Some(wv) = app.get_webview(&label) {
         let _ = wv.show();
         let _ = wv.set_focus();
@@ -534,6 +559,28 @@ pub fn layout(app: &AppHandle, state: &BrowserState) {
             let _ = wv.set_position(LogicalPosition::new(0.0, TOOLBAR_HEIGHT));
             let _ = wv.set_size(content_size(app));
         }
+    }
+}
+
+/// Mở/đóng bảng nổi. Khi mở, webview toolbar phủ toàn cửa sổ (để bảng đủ chỗ)
+/// và các webview nội dung được ẩn — webview con luôn nằm trên toolbar theo thứ
+/// tự tạo, nên nếu không ẩn chúng sẽ che mất bảng.
+pub fn set_panel_open(app: &AppHandle, state: &BrowserState, on: bool) {
+    PANEL_OPEN.store(on, std::sync::atomic::Ordering::SeqCst);
+    if on {
+        for tab in state.snapshot().tabs {
+            if let Some(wv) = app.get_webview(&tab.label) {
+                let _ = wv.hide();
+            }
+        }
+    }
+    layout(app, state);
+    if on {
+        if let Some(toolbar) = app.get_webview("toolbar") {
+            let _ = toolbar.set_focus();
+        }
+    } else if let Some(id) = state.active_id() {
+        focus_tab(app, state, id);
     }
 }
 

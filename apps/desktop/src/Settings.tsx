@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cmd } from "./tabs";
 import { getLang, setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
+import { CheckCircleIcon, DownloadIcon, TrashIcon } from "./Icons";
 
 interface Diagnostics {
   appVersion: string;
@@ -95,16 +96,16 @@ export default function Settings({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="settings">
       <Section title={t("settings.general")}>
-        <label style={row}>
+        <label className="settings-row">
           {t("settings.language")}
           <select value={lang} onChange={(e) => changeLang(e.target.value as Lang)}>
             <option value="vi">{t("settings.langVi")}</option>
             <option value="en">{t("settings.langEn")}</option>
           </select>
         </label>
-        <label style={row}>
+        <label className="settings-row">
           {t("settings.searchEngine")}
           <select
             value={engine}
@@ -119,7 +120,7 @@ export default function Settings({
             <option value="brave">{t("settings.engineBrave")}</option>
           </select>
         </label>
-        <label style={row}>
+        <label className="settings-row">
           {t("settings.startup")}
           <select
             value={startup}
@@ -133,12 +134,17 @@ export default function Settings({
             <option value="blank">{t("settings.startupBlank")}</option>
           </select>
         </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <label className="settings-stack">
           {t("settings.homepage")}
-          <input value={home} onChange={(e) => setHome(e.target.value)} onBlur={saveHome} />
+          <input
+            className="field"
+            value={home}
+            onChange={(e) => setHome(e.target.value)}
+            onBlur={saveHome}
+          />
         </label>
-        <small style={hint}>{t("settings.homeHint")}</small>
-        <label style={row}>
+        <p className="hint">{t("settings.homeHint")}</p>
+        <label className="settings-row">
           {t("settings.sleep")}
           <select
             value={sleep}
@@ -156,7 +162,7 @@ export default function Settings({
       </Section>
 
       <Section title={t("settings.appearance")}>
-        <label style={row}>
+        <label className="settings-row">
           {t("settings.theme")}
           <select value={theme} onChange={(e) => changeTheme(e.target.value)}>
             <option value="system">{t("settings.themeSystem")}</option>
@@ -164,7 +170,7 @@ export default function Settings({
             <option value="dark">{t("settings.themeDark")}</option>
           </select>
         </label>
-        <label style={row}>
+        <label className="settings-row">
           {t("settings.zoom")}
           <select value={zoom} onChange={(e) => changeZoom(e.target.value)}>
             {ZOOM_OPTIONS.map((z) => (
@@ -177,7 +183,7 @@ export default function Settings({
       </Section>
 
       <Section title={t("settings.privacy")}>
-        <label style={row}>
+        <label className="settings-row">
           {t("settings.privateMode")}
           <input
             type="checkbox"
@@ -185,8 +191,8 @@ export default function Settings({
             onChange={(e) => void cmd("private_set", { on: e.target.checked ? "1" : "0" })}
           />
         </label>
-        <small style={hint}>{t("settings.privateHint")}</small>
-        <label style={row}>
+        <p className="hint">{t("settings.privateHint")}</p>
+        <label className="settings-row">
           {t("settings.clearOnExit")}
           <input
             type="checkbox"
@@ -197,45 +203,46 @@ export default function Settings({
             }}
           />
         </label>
-        <small style={hint}>{t("settings.clearOnExitHint")}</small>
-        <small style={hint}>
+        <p className="hint">{t("settings.clearOnExitHint")}</p>
+        <p className="hint">
           {t("settings.cookies")}: {t("settings.cookiesNote")}
-        </small>
-        <button onClick={clearData}>{t("settings.clearData")}</button>
-        {message && <small style={hint}>{message}</small>}
+        </p>
+        <button type="button" className="btn danger block" onClick={clearData}>
+          <TrashIcon /> {t("settings.clearData")}
+        </button>
+        {message && (
+          <p className="hint ok">
+            <CheckCircleIcon /> {message}
+          </p>
+        )}
       </Section>
 
       <Section title={t("settings.downloads")}>
         <input
+          className="field"
           value={downloadDir}
           placeholder={t("settings.downloadDirPlaceholder")}
           onChange={(e) => setDownloadDir(e.target.value)}
           onBlur={() => save("downloadDir", downloadDir.trim())}
         />
-        <small style={hint}>{t("settings.downloadDirHint")}</small>
-        <small style={hint}>{t("settings.downloadsHint")}</small>
+        <p className="hint">
+          <DownloadIcon /> {t("settings.downloadDirHint")}
+        </p>
+        <p className="hint">{t("settings.downloadsHint")}</p>
       </Section>
 
       <Section title={t("settings.about")}>
-        <button onClick={loadDiagnostics}>{t("settings.diagnostics")}</button>
+        <button type="button" className="btn" onClick={loadDiagnostics}>
+          {t("settings.diagnostics")}
+        </button>
         {diag && (
-          <dl
-            style={{
-              margin: 0,
-              display: "grid",
-              gridTemplateColumns: "auto 1fr",
-              gap: "4px 10px",
-              fontSize: 12,
-            }}
-          >
+          <dl className="diag">
             <dt>{t("settings.version")}</dt>
-            <dd style={{ margin: 0 }}>{diag.appVersion}</dd>
+            <dd>{diag.appVersion}</dd>
             <dt>{t("settings.webview")}</dt>
-            <dd style={{ margin: 0, wordBreak: "break-all" }}>{diag.webviewVersion}</dd>
+            <dd>{diag.webviewVersion}</dd>
             <dt>{t("settings.storage")}</dt>
-            <dd style={{ margin: 0 }}>
-              {diag.dbAvailable ? t("settings.storageOk") : t("settings.storageOff")}
-            </dd>
+            <dd>{diag.dbAvailable ? t("settings.storageOk") : t("settings.storageOff")}</dd>
           </dl>
         )}
       </Section>
@@ -245,17 +252,9 @@ export default function Settings({
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <strong style={{ fontSize: 12, color: "var(--muted)" }}>{title}</strong>
+    <section className="settings-section">
+      <h2 className="settings-title">{title}</h2>
       {children}
     </section>
   );
 }
-
-const row: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 8,
-};
-const hint: CSSProperties = { color: "var(--muted)", lineHeight: 1.4 };

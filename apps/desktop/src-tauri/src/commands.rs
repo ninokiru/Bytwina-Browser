@@ -227,6 +227,11 @@ pub async fn browser_command(
             app.exit(0);
             Ok(Value::Null)
         }
+        // Bảng nổi (dấu trang, lịch sử, cài đặt…): nới webview toolbar khi mở.
+        "panel_open" => {
+            browser::set_panel_open(&app, &state, arg("on")? == "1");
+            Ok(Value::Null)
+        }
         // ===== M15: xóa dữ liệu theo tên miền =====
         "site_clear_data" => with_db(&app, |db| db.clear_history_for_host(&arg("host")?)),
         // ===== M10: danh sách đọc =====
