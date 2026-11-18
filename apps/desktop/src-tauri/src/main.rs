@@ -1,7 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::atomic::AtomicBool;
-
 use tauri::{LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
 
 mod browser;
@@ -20,7 +18,6 @@ fn main() {
     tauri::Builder::default()
         .manage(BrowserState::new())
         .manage(PopupQueue::default())
-        .manage(AtomicBool::new(false))
         .invoke_handler(tauri::generate_handler![commands::browser_command])
         .on_page_load(|webview, payload| {
             let app = webview.app_handle().clone();
@@ -92,7 +89,12 @@ fn main() {
             } else {
                 let mut first_id = None;
                 for (i, t) in tabs.iter().enumerate() {
-                    let id = state.add_restored_tab(t.url.clone(), t.title.clone());
+                    let id = state.add_restored_tab(
+                        t.url.clone(),
+                        t.title.clone(),
+                        t.pinned,
+                        t.group.clone(),
+                    );
                     if i as i64 == active_idx || first_id.is_none() {
                         first_id = Some(id);
                     }

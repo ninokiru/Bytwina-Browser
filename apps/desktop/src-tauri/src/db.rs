@@ -41,6 +41,12 @@ pub struct HistoryItem {
 pub struct SessionTab {
     pub url: String,
     pub title: String,
+    /// Tab được ghim (M5) — cần lưu để khôi phục đúng thứ tự.
+    #[serde(default)]
+    pub pinned: bool,
+    /// Tên nhóm tab (M5); None là không thuộc nhóm nào.
+    #[serde(default)]
+    pub group: Option<String>,
 }
 
 #[derive(Default)]
@@ -61,37 +67,42 @@ pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     conn.pragma_update(None, "journal_mode", "WAL").ok()?;
     conn.pragma_update(None, "synchronous", "NORMAL").ok()?;
     migrate(&conn).ok()?;
-    migrate_downloads(&conn).ok()?;
-    migrate_reading(&conn).ok()?;
     Some(Db {
         conn: std::sync::Arc::new(Mutex::new(conn)),
     })
 }
 
-/// M3: bảng tải xuống. Dùng CREATE IF NOT EXISTS nên chạy lại an toàn.
-/// TODO: gộp vào hệ thống schema_version khi có migration thứ hai.
-fn migrate_downloads(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS downloads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT NOT NULL,
-            path TEXT NOT NULL DEFAULT '',
-            success INTEGER NOT NULL,
-            finished_at INTEGER NOT NULL
-        );",
-    )
-}
+/// Bảng thêm ở M3/M10 — tách riêng để DB tạo bởi bản cũ vẫn có đủ.
+const TABLES_M3_M10: &str = "
+    CREATE TABLE IF NOT EXISTS downloads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL,
+        path TEXT NOT NULL DEFAULT '',
+        success INTEGER NOT NULL,
+        finished_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS reading_list (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL UNIQUE,
+        added_at INTEGER NOT NULL
+    );";
 
-/// M10: bảng danh sách đọc. Cũng dùng CREATE IF NOT EXISTS.
-fn migrate_reading(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS reading_list (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL DEFAULT '',
-            url TEXT NOT NULL UNIQUE,
-            added_at INTEGER NOT NULL
-        );",
-    )
+/// Thêm cột nếu chưa có (SQLite không có `ADD COLUMN IF NOT EXISTS`).
+fn add_column(conn: &Connection, table: &str, column: &str, decl: &str) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(());
+        }
+    }
+    conn.execute(
+        &format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"),
+        [],
+    )?;
+    Ok(())
 }
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -122,7 +133,9 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE IF NOT EXISTS session_tabs (
                 ord INTEGER PRIMARY KEY,
                 url TEXT NOT NULL,
-                title TEXT NOT NULL DEFAULT ''
+                title TEXT NOT NULL DEFAULT '',
+                pinned INTEGER NOT NULL DEFAULT 0,
+                group_name TEXT
             );
             CREATE TABLE IF NOT EXISTS session_meta (
                 key TEXT PRIMARY KEY,
@@ -131,6 +144,14 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
         // Ghi phiên bản SAU khi tạo bảng; trước đây ghi trước nên nhánh tạo bảng không bao giờ chạy.
         conn.execute("INSERT INTO schema_version (version) VALUES (1)", [])?;
+    }
+    if version < 2 {
+        // v2: lưu trạng thái ghim/nhóm của tab và đưa bảng M3/M10 vào cùng
+        // hệ thống migration thay vì tạo rời rạc.
+        add_column(conn, "session_tabs", "pinned", "INTEGER NOT NULL DEFAULT 0")?;
+        add_column(conn, "session_tabs", "group_name", "TEXT")?;
+        conn.execute_batch(TABLES_M3_M10)?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
     }
     Ok(())
 }
@@ -250,8 +271,9 @@ impl Db {
             .map_err(|e| e.to_string())?;
         for (i, t) in tabs.iter().enumerate() {
             tx.execute(
-                "INSERT INTO session_tabs (ord, url, title) VALUES (?1, ?2, ?3)",
-                params![i as i64, t.url, t.title],
+                "INSERT INTO session_tabs (ord, url, title, pinned, group_name)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![i as i64, t.url, t.title, t.pinned as i64, t.group],
             )
             .map_err(|e| e.to_string())?;
         }
@@ -267,13 +289,15 @@ impl Db {
     pub fn load_session(&self) -> Result<(Vec<SessionTab>, i64), String> {
         let c = self.conn();
         let mut stmt = c
-            .prepare("SELECT url, title FROM session_tabs ORDER BY ord ASC")
+            .prepare("SELECT url, title, pinned, group_name FROM session_tabs ORDER BY ord ASC")
             .map_err(|e| e.to_string())?;
         let tabs = stmt
             .query_map([], |r| {
                 Ok(SessionTab {
                     url: r.get(0)?,
                     title: r.get(1)?,
+                    pinned: r.get::<_, i64>(2)? != 0,
+                    group: r.get(3)?,
                 })
             })
             .map_err(|e| e.to_string())?
@@ -373,15 +397,21 @@ mod tests {
             SessionTab {
                 url: "https://a.test/".into(),
                 title: "A".into(),
+                pinned: true,
+                group: Some("ĐỌC".into()),
             },
             SessionTab {
                 url: "https://b.test/".into(),
                 title: "B".into(),
+                pinned: false,
+                group: None,
             },
         ];
         db.save_session(&tabs, 1).unwrap();
         let (loaded, active) = db.load_session().unwrap();
         assert_eq!(loaded.len(), 2);
+        assert!(loaded[0].pinned);
+        assert_eq!(loaded[0].group.as_deref(), Some("ĐỌC"));
         assert_eq!(active, 1);
         // Ghi đè: danh sách mới thay thế hoàn toàn.
         db.save_session(&tabs[..1], 0).unwrap();
@@ -391,6 +421,69 @@ mod tests {
         let (loaded, active) = db.load_session().unwrap();
         assert!(loaded.is_empty());
         assert_eq!(active, -1);
+    }
+
+    #[test]
+    fn downloads_round_trip() {
+        let db = temp_db("dl");
+        db.record_download("https://f.test/a.zip", "C:\\Users\\x\\a.zip", true)
+            .unwrap();
+        let list = db.list_downloads().unwrap();
+        assert_eq!(list.len(), 1);
+        assert!(list[0].success);
+        db.clear_downloads().unwrap();
+        assert!(db.list_downloads().unwrap().is_empty());
+    }
+
+    #[test]
+    fn reading_list_dedupes_by_url() {
+        let db = temp_db("rd");
+        db.add_reading("Bài 1", "https://r.test/1").unwrap();
+        db.add_reading("Bài 1 (sửa)", "https://r.test/1").unwrap();
+        let list = db.list_reading().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].title, "Bài 1 (sửa)");
+        db.remove_reading(list[0].id).unwrap();
+        assert!(db.list_reading().unwrap().is_empty());
+    }
+
+    #[test]
+    fn migration_from_v1_adds_session_columns() {
+        // DB kiểu bản cũ: chỉ có bảng v1, chưa có cột ghim/nhóm và bảng M3/M10.
+        let dir = std::env::temp_dir().join(format!(
+            "bytwina-test-v1-{}-{}",
+            std::process::id(),
+            now_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        {
+            let conn = Connection::open(dir.join("bytwina.db")).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);
+                 INSERT INTO schema_version (version) VALUES (1);
+                 CREATE TABLE session_tabs (
+                    ord INTEGER PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    title TEXT NOT NULL DEFAULT ''
+                 );",
+            )
+            .unwrap();
+        }
+        let db = open(dir.clone()).expect("mở DB cũ");
+        let tabs = vec![SessionTab {
+            url: "https://a.test/".into(),
+            title: "A".into(),
+            pinned: true,
+            group: Some("G".into()),
+        }];
+        db.save_session(&tabs, 0).unwrap();
+        let (loaded, _) = db.load_session().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert!(loaded[0].pinned);
+        // Bảng M3/M10 được tạo trong cùng migration.
+        assert!(db.list_downloads().unwrap().is_empty());
+        assert!(db.list_reading().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
 
@@ -490,101 +583,6 @@ impl Db {
             .execute("DELETE FROM reading_list WHERE id = ?1", params![id])
             .map_err(|e| e.to_string())?;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests_extra {
-    use super::*;
-
-    /// CSDL tạm trong thư mục hệ thống, mỗi test một thư mục riêng.
-    fn temp_db(name: &str) -> (Db, PathBuf) {
-        let dir = std::env::temp_dir().join(format!("bytwina-test-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let db = open(dir.clone()).expect("mở CSDL test");
-        (db, dir)
-    }
-
-    #[test]
-    fn bookmarks_round_trip() {
-        let (db, dir) = temp_db("bookmarks");
-        db.add_bookmark("Trang A", "https://a.test/", "").unwrap();
-        let list = db.list_bookmarks().unwrap();
-        assert_eq!(list.len(), 1);
-        assert_eq!(list[0].url, "https://a.test/");
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn history_is_searchable() {
-        let (db, dir) = temp_db("history");
-        db.record_history("Xin chào", "https://x.test/hello")
-            .unwrap();
-        db.record_history("Khác", "https://y.test/").unwrap();
-        let found = db.search_history("x.test", 10).unwrap();
-        assert_eq!(found.len(), 1);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn settings_round_trip() {
-        let (db, dir) = temp_db("settings");
-        db.set_setting("homeUrl", "https://home.test/").unwrap();
-        assert_eq!(
-            db.get_setting("homeUrl").unwrap().as_deref(),
-            Some("https://home.test/")
-        );
-        assert_eq!(db.get_setting("khongco").unwrap(), None);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn session_round_trip() {
-        let (db, dir) = temp_db("session");
-        let tabs = vec![
-            SessionTab {
-                url: "https://one.test/".into(),
-                title: "Một".into(),
-            },
-            SessionTab {
-                url: "https://two.test/".into(),
-                title: "Hai".into(),
-            },
-        ];
-        db.save_session(&tabs, 1).unwrap();
-        let (loaded, active) = db.load_session().unwrap();
-        assert_eq!(loaded.len(), 2);
-        assert_eq!(loaded[1].url, "https://two.test/");
-        assert_eq!(active, 1);
-        db.clear_session().unwrap();
-        assert!(db.load_session().unwrap().0.is_empty());
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn downloads_round_trip() {
-        let (db, dir) = temp_db("downloads");
-        db.record_download("https://f.test/a.zip", "C:\\Users\\x\\a.zip", true)
-            .unwrap();
-        let list = db.list_downloads().unwrap();
-        assert_eq!(list.len(), 1);
-        assert!(list[0].success);
-        db.clear_downloads().unwrap();
-        assert!(db.list_downloads().unwrap().is_empty());
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn reading_list_dedupes_by_url() {
-        let (db, dir) = temp_db("reading");
-        db.add_reading("Bài 1", "https://r.test/1").unwrap();
-        db.add_reading("Bài 1 (sửa)", "https://r.test/1").unwrap();
-        let list = db.list_reading().unwrap();
-        assert_eq!(list.len(), 1);
-        assert_eq!(list[0].title, "Bài 1 (sửa)");
-        db.remove_reading(list[0].id).unwrap();
-        assert!(db.list_reading().unwrap().is_empty());
-        let _ = std::fs::remove_dir_all(dir);
     }
 }
 

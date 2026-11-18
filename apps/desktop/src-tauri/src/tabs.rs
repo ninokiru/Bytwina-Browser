@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Một mục trong danh sách URL gần nhất của tab (history + forward gộp lại).
 #[derive(Clone, Debug)]
@@ -25,16 +25,6 @@ pub struct TabInfo {
     pub pinned: bool,
     /// M5: tên nhóm tab; None là không thuộc nhóm nào.
     pub group: Option<String>,
-}
-
-/// Thông tin cần để khôi phục tab lúc khởi động (M2 — session restoration).
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-pub struct PersistedTab {
-    pub url: String,
-    #[allow(dead_code)] // ghi DB ở M2.
-    pub title: String,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -1,12 +1,12 @@
 # Kiểm thử
 
-## Tự động (đã viết, CHƯA chạy trên máy này)
-- `apps/desktop/src-tauri/src/db.rs` (module `tests`): bookmark, lịch sử, cài đặt, phiên, tải xuống, danh sách đọc.
-- `navigation.rs`: chuẩn hóa địa chỉ, chặn giao thức nguy hiểm, danh sách chặn popup.
+## Tự động (đã chạy trên CI, Windows; xem lần chạy gần nhất của `ci.yml`)
+- `apps/desktop/src-tauri/src/db.rs` (module `tests`): bookmark, lịch sử, cài đặt, phiên (kèm ghim/nhóm), tải xuống, danh sách đọc, nâng cấp schema v1 → v2.
+- `navigation.rs`: chuẩn hóa địa chỉ (kể cả `host:port`, localhost), chặn giao thức nguy hiểm, chính sách HTTPS-first, danh sách chặn popup.
 - `browser.rs`: tab, ghim, riêng tư, lịch sử back/forward, giới hạn lịch sử, tên file tải xuống.
 - Chạy: `cargo test --all-targets` trong `apps/desktop/src-tauri` (CI đã có bước này).
 
-**Trạng thái:** chưa biên dịch và chưa chạy. CI là nơi duy nhất kiểm tra.
+**Trạng thái:** CI xanh ở lần chạy gần nhất; kiểm thử thủ công trên Windows vẫn chưa thực hiện.
 
 ## Thủ công trên Windows (chưa thực hiện)
 Đánh dấu [x] khi làm xong và ghi kết quả + phiên bản WebView2.

@@ -26,12 +26,13 @@
 - **Quyết định:** Mỗi webview nội dung đăng ký `on_navigation` trả `false` với mọi URL. Trang web không tự chuyển location, không bấm link ngoài. Mọi điều hướng đi qua toolbar → `Webview::navigate` (bỏ qua on_navigation). Lịch sử back/forward tự quản trong `BrowserState` (giới hạn 50 mục/tab).
 - **Hạn chế đã biết:** Người dùng không click được link trong trang — đây là giới hạn tạm thời của M1, sẽ xử lý ở M4/M5 bằng cơ chế cho phép điều hướng cùng origin có kiểm soát. Ghi rõ trong docs/SECURITY.md khi hoàn thiện.
 
-## ADR-004: Popup chặn hoàn toàn, hàng đợi mở tab nền khi được phép
+## ADR-004: Popup chặn cửa sổ mới, URL hợp lệ mở thành tab nền
 
-- **Trạng thái:** Chấp nhận (M1).
-- **Bối cảnh:** `window.open`/target=_blank phải xử lý an toàn; không tạo của sổ lạ che toolbar.
-- **Quyết định:** `on_new_window` luôn trả `NewWindowResponse::Deny`. Khi toolbar báo người dùng giữ Ctrl (`popup_allow`), URL popup vào `PopupQueue`; toolbar poll `popup_drain` và mở tab nền mới. Hàng đợi chặn 16 mục chống spam.
-- **Ghi chú:** Webview nội dung không có bridge Tauri nên không thể tự xin quyền; permission manager đầy đủ ở M4.
+- **Trạng thái:** Chấp nhận (M1), cập nhật 2026-11-18.
+- **Bối cảnh:** `window.open`/target=_blank phải xử lý an toàn; không tạo cửa sổ lạ che toolbar. Bản đầu dùng cờ `allow_next` do toolbar bật khi người dùng giữ Ctrl, nhưng webview nội dung không có bridge và toolbar không thấy phím Ctrl của trang, nên tính năng chưa bao giờ chạy.
+- **Quyết định:** `on_new_window` luôn trả `NewWindowResponse::Deny`. URL popup đi qua chính sách `page_navigation_allowed` (https, trừ danh sách chặn), rồi vào `PopupQueue` (tối đa 16 mục). Toolbar poll `popup_drain` và mở thành tab **nền** (không cướp focus, không tạo webview cho tới khi kích hoạt).
+- **Lý do:** popup thường do người dùng bấm link nên mở tab nền là hành vi quen thuộc; giới hạn hàng đợi chặn trang spam; vẫn không có cửa sổ WebView2 lạ nào được tạo.
+- **Hệ quả:** bỏ action `popup_allow` và state `AtomicBool`; `popup_drain` không còn tạo webview rỗng.
 
 ## ADR-005: rusqlite + bundled cho SQLite
 
@@ -118,3 +119,15 @@
   - Chưa kiểm chứng: `on_navigation` có áp dụng cho `navigate()` từ Rust không. Nếu có, điều hướng do app khởi tạo vẫn đi qua chính sách này (các URL đó đều https/about:blank nên không bị chặn).
   - Chưa kiểm chứng trên Windows: bấm link, chuyển hướng (redirect) từ https sang http sẽ bị chặn.
 - **Việc tiếp theo:** kiểm thử trên Windows với 20 trang thực tế; cân nhắc cho phép http theo từng trang sau xác nhận của người dùng.
+
+## ADR-012: Phiên làm việc lưu trạng thái tab; chế độ riêng tư tạo lại webview
+
+- **Trạng thái:** Chấp nhận (2026-11-18).
+- **Bối cảnh:**
+  - Phiên chỉ lưu `url` và `title`, nên khôi phục xong mất tab ghim và nhóm tab.
+  - `incognito(true)` của Tauri chỉ có hiệu lực lúc tạo webview; bật chế độ riêng tư khi tab đang mở vẫn tiếp tục dùng cookie của profile thường.
+- **Quyết định:**
+  - Schema v2 thêm cột `pinned` và `group_name` vào `session_tabs`; DB bản cũ tự `ALTER TABLE` khi mở. Hai bảng M3/M10 (`downloads`, `reading_list`) vào cùng hệ thống migration.
+  - `private_set` đóng mọi webview và tạo lại, tab nạp lại URL hiện hành với profile InPrivate (hoặc profile thường khi tắt).
+- **Đánh đổi:** đổi chế độ riêng tư làm mất trạng thái tạm của trang (vị trí cuộn, form đang nhập). Chấp nhận vì đúng ngữ nghĩa riêng tư hơn là giữ trạng thái mà cookie vẫn dùng chung.
+- **Giới hạn còn lại:** WebView2 vẫn dùng chung user data folder trên đĩa; chưa tách profile (xem ROADMAP M2).

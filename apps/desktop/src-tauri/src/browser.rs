@@ -7,7 +7,7 @@ use tauri::{
 
 use crate::db::DbState;
 use crate::navigation;
-use crate::tabs::{HistoryEntry, PersistedTab, StatePayload, TabInfo};
+use crate::tabs::{HistoryEntry, StatePayload, TabInfo};
 
 pub const TOOLBAR_HEIGHT: f64 = 96.0;
 
@@ -128,9 +128,21 @@ impl BrowserState {
         self.insert_tab(url, String::new())
     }
 
-    /// Thêm tab từ session đã lưu (M2): giữ cả tiêu đề để tab bar hiển thị ngay.
-    pub fn add_restored_tab(&self, url: String, title: String) -> u32 {
-        self.insert_tab(url, title)
+    /// Thêm tab từ session đã lưu (M2): giữ tiêu đề, ghim và nhóm để tab bar
+    /// hiển thị đúng ngay khi khôi phục.
+    pub fn add_restored_tab(
+        &self,
+        url: String,
+        title: String,
+        pinned: bool,
+        group: Option<String>,
+    ) -> u32 {
+        let id = self.insert_tab(url, title);
+        if let Some(t) = self.lock().tabs.iter_mut().find(|t| t.id == id) {
+            t.pinned = pinned;
+            t.group = group;
+        }
+        id
     }
 
     fn insert_tab(&self, url: String, title: String) -> u32 {
@@ -148,13 +160,21 @@ impl BrowserState {
             .iter()
             .position(|t| t.id == id)
             .ok_or_else(|| format!("không tìm thấy tab {id}"))?;
+        // Thứ tự hiển thị (tab ghim đầu) khác thứ tự nội bộ: chọn tab kề theo
+        // đúng thứ tự người dùng thấy, nếu không sẽ nhảy tab sau khi ghim.
+        let visual: Vec<u32> = {
+            let mut view: Vec<&Tab> = inner.tabs.iter().collect();
+            view.sort_by_key(|t| !t.pinned);
+            view.iter().map(|t| t.id).collect()
+        };
         inner.tabs.remove(pos);
         if inner.active == Some(id) {
-            let next = inner
-                .tabs
-                .get(pos)
-                .or_else(|| pos.checked_sub(1).and_then(|p| inner.tabs.get(p)))
-                .map(|t| t.id);
+            let vpos = visual.iter().position(|&t| t == id).unwrap_or(0);
+            let next = visual
+                .get(vpos + 1)
+                .or_else(|| vpos.checked_sub(1).and_then(|p| visual.get(p)))
+                .copied()
+                .filter(|n| inner.tabs.iter().any(|t| t.id == *n));
             inner.active = next;
         }
         Ok(())
@@ -253,21 +273,6 @@ impl BrowserState {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn persisted_tabs(&self) -> Vec<PersistedTab> {
-        self.lock()
-            .tabs
-            .iter()
-            .map(|t| PersistedTab {
-                url: t
-                    .current()
-                    .map(|e| e.url.clone())
-                    .unwrap_or_else(|| t.url.clone()),
-                title: t.title.clone(),
-            })
-            .collect()
-    }
-
     /// Tiêu đề hiện hành của tab (để ghi lịch sử toàn cục).
     pub fn title_of(&self, id: u32) -> String {
         self.lock()
@@ -354,7 +359,7 @@ fn content_size(app: &AppHandle) -> LogicalSize<f64> {
             let s = w.inner_size().ok()?.to_logical::<f64>(scale);
             Some(LogicalSize::new(
                 s.width,
-                (s.height - TOOLBAR_HEIGHT).max(0.0),
+                (s.height - toolbar_height_for(s.height)).max(0.0),
             ))
         })
         .unwrap_or(LogicalSize::new(1200.0, 704.0))
@@ -396,8 +401,7 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
                 // clone() để không giữ tham chiếu State qua hết vòng lặp message
                 // loop — manager có thể giải chấp state giữa chừng.
                 let queue = app.state::<navigation::PopupQueue>().inner();
-                let allow = app.state::<std::sync::atomic::AtomicBool>().inner();
-                navigation::handle_new_window(queue, allow, url)
+                navigation::handle_new_window(queue, url)
             }
         });
     let Some(window) = app.get_window("main") else {
@@ -612,6 +616,26 @@ pub fn apply_zoom(app: &AppHandle, state: &BrowserState) {
     }
 }
 
+/// Bật/tắt chế độ riêng tư. `incognito` chỉ áp dụng lúc tạo webview nên phải
+/// đóng và tạo lại các webview đang mở; tab nạp lại URL hiện hành (mất trạng
+/// thái tạm như vị trí cuộn) để không tiếp tục dùng profile cookie cũ.
+pub fn apply_private(app: &AppHandle, state: &BrowserState, on: bool) {
+    if state.is_private() == on {
+        return;
+    }
+    let active = state.active_id();
+    let ids: Vec<u32> = state.snapshot().tabs.iter().map(|t| t.id).collect();
+    state.set_private(on);
+    for id in ids {
+        close_webview(app, id);
+        state.mark_sleeping(id);
+    }
+    if let Some(id) = active {
+        focus_tab(app, state, id);
+    }
+    emit_state(app, state);
+}
+
 /// Thư mục tải xuống: cài đặt `downloadDir` nếu là thư mục có sẵn, không thì Downloads mặc định.
 fn download_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     let custom = app
@@ -665,6 +689,8 @@ pub fn persist_session(app: &AppHandle, state: &BrowserState) {
             .map(|t| crate::db::SessionTab {
                 url: t.url.clone(),
                 title: t.title.clone(),
+                pinned: t.pinned,
+                group: t.group.clone(),
             })
             .collect();
         if let Err(e) = db.save_session(&tabs, active_index) {
@@ -783,6 +809,20 @@ mod tests {
     }
 
     #[test]
+    fn closing_active_tab_follows_visual_order() {
+        let s = BrowserState::new();
+        let a = s.add_tab("https://a.test/".into());
+        let b = s.add_tab("https://b.test/".into());
+        let c = s.add_tab("https://c.test/".into());
+        // ghim b: thứ tự hiển thị là b, a, c
+        s.set_pinned(b, true).unwrap();
+        s.activate(a).unwrap();
+        // Đóng a phải sang c (kề phải trên giao diện), không phải b.
+        s.close_tab(a).unwrap();
+        assert_eq!(s.active_id(), Some(c));
+    }
+
+    #[test]
     fn close_unknown_tab_errors() {
         let s = BrowserState::new();
         assert!(s.close_tab(999).is_err());
@@ -871,7 +911,9 @@ mod tests {
     #[test]
     fn restored_tab_keeps_title() {
         let s = BrowserState::new();
-        let id = s.add_restored_tab("https://x.test/".into(), "Trang X".into());
+        let id = s.add_restored_tab("https://x.test/".into(), "Trang X".into(), true, None);
         assert_eq!(s.title_of(id), "Trang X");
+        let snap = s.snapshot();
+        assert!(snap.tabs[0].pinned);
     }
 }

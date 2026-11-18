@@ -77,7 +77,11 @@ export default function App() {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === "t") {
         e.preventDefault();
-        void cmd("new_tab");
+        void cmd("new_tab").then(() => {
+          setInput("");
+          setEditing(true);
+          (document.getElementById("address") as HTMLInputElement | null)?.focus();
+        });
       } else if (mod && e.key.toLowerCase() === "l") {
         e.preventDefault();
         setEditing(true);
@@ -97,10 +101,8 @@ export default function App() {
       }
     };
     window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keyup", onKey);
     };
   }, [state]);
 

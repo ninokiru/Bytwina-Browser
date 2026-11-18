@@ -63,8 +63,15 @@ export default function Panel({
   const [reading, setReading] = useState<ReadingItem[]>([]);
   const [siteHost, setSiteHost] = useState("");
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [word, setWord] = useState("");
   const [dictLang, setDictLang] = useState<"en" | "vi">("en");
+
+  // Gõ tới đâu tìm tới đó sẽ bắn một truy vấn DB mỗi phím; chờ 250ms.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(id);
+  }, [query]);
 
   // Mở trang Wiktionary của từ trong tab mới rồi kích hoạt tab đó.
   const lookup = () => {
@@ -83,7 +90,7 @@ export default function Panel({
     if (kind === "bookmarks") {
       setBookmarks(((await cmd("bookmark_list")) as Bookmark[]) ?? []);
     } else if (kind === "history") {
-      setHistory(((await cmd("history_search", { query })) as HistoryItem[]) ?? []);
+      setHistory(((await cmd("history_search", { query: debouncedQuery })) as HistoryItem[]) ?? []);
     } else if (kind === "tabs") {
       const s = (await cmd("state")) as { tabs: TabInfo[] } | null;
       setTabList(s?.tabs ?? []);
@@ -97,7 +104,7 @@ export default function Panel({
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, query]);
+  }, [kind, debouncedQuery]);
 
   return (
     <div style={panel}>

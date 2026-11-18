@@ -45,15 +45,51 @@ pub fn to_url_with(input: &str, engine: &str) -> String {
         }
         return search(input);
     }
-    let looks_like_domain =
-        !input.contains(char::is_whitespace) && input.contains('.') && !input.starts_with('.');
+    let looks_like_domain = !input.contains(char::is_whitespace)
+        && !input.starts_with('.')
+        && (input.contains('.') || looks_like_host_port(input));
     if looks_like_domain {
-        Url::parse(&format!("https://{input}"))
+        // localhost và 127.0.0.1 thường chỉ chạy http khi phát triển.
+        let scheme = if input_is_local(input) {
+            "http"
+        } else {
+            "https"
+        };
+        Url::parse(&format!("{scheme}://{input}"))
             .map(|u| u.to_string())
             .unwrap_or_else(|_| search(input))
     } else {
         search(input)
     }
+}
+
+/// `host:port` không có scheme, ví dụ `localhost:3000` hoặc `127.0.0.1:8000`.
+fn looks_like_host_port(input: &str) -> bool {
+    match input.rsplit_once(':') {
+        Some((host, port)) => {
+            !host.is_empty()
+                && !host.contains(':')
+                && !port.is_empty()
+                && port.chars().all(|c| c.is_ascii_digit())
+        }
+        None => false,
+    }
+}
+
+/// Phần host (bỏ cổng và đường dẫn) của chuỗi nhập chưa có scheme.
+fn host_of_input(input: &str) -> &str {
+    let after_scheme = input
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(input);
+    let end = after_scheme
+        .find(|c| c == '/' || c == '?' || c == '#')
+        .unwrap_or(after_scheme.len());
+    after_scheme[..end].split(':').next().unwrap_or("")
+}
+
+fn input_is_local(input: &str) -> bool {
+    host_of_input(input).eq_ignore_ascii_case("localhost") || host_of_input(input) == "127.0.0.1"
 }
 
 /// Tiền tố URL của công cụ tìm kiếm theo khóa cài đặt `searchEngine`; khóa lạ → DuckDuckGo.
@@ -111,6 +147,14 @@ mod tests {
     fn plain_text_becomes_search() {
         assert!(to_url("qoder ai").starts_with(SEARCH_ENGINE));
         assert!(to_url("ghe").starts_with(SEARCH_ENGINE));
+        assert!(to_url("note:abc").starts_with(SEARCH_ENGINE));
+    }
+
+    #[test]
+    fn host_with_port_becomes_url() {
+        assert_eq!(to_url("localhost:3000"), "http://localhost:3000/");
+        assert_eq!(to_url("127.0.0.1:8000/a"), "http://127.0.0.1:8000/a");
+        assert_eq!(to_url("example.com:8080"), "https://example.com:8080/");
     }
 
     #[test]
@@ -224,15 +268,12 @@ impl PopupQueue {
     }
 }
 
-/// Handler on_new_window: từ chối mọi cửa sổ mới. URL popup chỉ được ghi vào hàng
-/// đợi khi người dùng giữ Ctrl trong lúc click (toolbar bật `allow_next` một lần
-/// qua IPC); toolbar đọc hàng đợi và mở thành tab nền. Chặn trang độc hại spam tab.
-pub fn handle_new_window<R: tauri::Runtime>(
-    queue: &PopupQueue,
-    allow_next: &std::sync::atomic::AtomicBool,
-    url: Url,
-) -> NewWindowResponse<R> {
-    if allow_next.swap(false, std::sync::atomic::Ordering::SeqCst) && !is_blocked_host(&url) {
+/// Handler on_new_window: từ chối mọi cửa sổ mới của WebView2 (`Deny`), nhưng
+/// URL hợp lệ được đưa vào hàng đợi để toolbar mở thành **tab nền**. Hàng đợi
+/// giới hạn 16 mục nên trang spam `window.open` không tạo được vô số tab.
+/// Mở nền nghĩa là không che toolbar và không cướp focus khỏi trang hiện tại.
+pub fn handle_new_window<R: tauri::Runtime>(queue: &PopupQueue, url: Url) -> NewWindowResponse<R> {
+    if page_navigation_allowed(&url) {
         queue.push(url);
     }
     NewWindowResponse::Deny

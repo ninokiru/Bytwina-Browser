@@ -8,8 +8,9 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
 - [~] M10 — Trải nghiệm nâng cao (đã làm: tìm tab, danh sách đọc; chưa làm: split view, workspace, quick actions, per-site, theme, tab sleep, PiP, cử chỉ)
 - [~] M1 — Nền tảng trình duyệt: thanh địa chỉ, điều hướng, tab, trang tab mới (`about:blank`)
   - [ ] Phím tắt toàn cục (Ctrl+T/W/L/R hiện chỉ hoạt động khi focus vào toolbar)
-  - [~] Popup: chặn mặc định, mở tab nền khi giữ Ctrl (đã có hàng đợi)
-- [~] M2 — Dữ liệu: SQLite (bookmark, lịch sử, cài đặt, phiên). Mã M2 có sẵn trên `main`, còn lỗi biên dịch.
+  - [x] Popup: chặn cửa sổ mới, URL hợp lệ mở thành tab nền (hàng đợi 16 mục)
+- [~] M2 — Dữ liệu: SQLite (bookmark, lịch sử, cài đặt, phiên). Schema v2.
+  - [x] Phiên lưu cả tab ghim và nhóm tab
   - [ ] Sao lưu/khôi phục DB, WAL checkpoint khi thoát
   - [ ] Tách profile (cần nghiên cứu WebView2 user data folder)
 - [~] M3 — Tải xuống

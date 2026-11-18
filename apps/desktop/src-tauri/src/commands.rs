@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
@@ -14,7 +12,6 @@ pub async fn browser_command(
     app: AppHandle,
     state: State<'_, BrowserState>,
     queue: State<'_, PopupQueue>,
-    allow_next: State<'_, std::sync::atomic::AtomicBool>,
     action: String,
     args: Option<Value>,
 ) -> Result<Value, String> {
@@ -38,6 +35,10 @@ pub async fn browser_command(
                 .map(str::to_string)
                 .unwrap_or_else(|| NEW_TAB_URL.to_string());
             let id = state.add_tab(url);
+            // Tab mới phải được kích hoạt ngay — trước đây tạo xong nhưng vẫn
+            // đứng ở tab cũ nên bấm ＋/Ctrl+T không thấy gì xảy ra.
+            state.activate(id)?;
+            browser::focus_tab(&app, &state, id);
             browser::emit_state(&app, &state);
             Ok(serde_json::json!({ "tabId": id }))
         }
@@ -46,8 +47,14 @@ pub async fn browser_command(
             // Đóng webview từ luồng async (không phải main thread) để tránh deadlock.
             browser::close_webview(&app, id);
             state.close_tab(id)?;
-            if let Some(active) = state.active_id() {
-                browser::focus_tab(&app, &state, active);
+            match state.active_id() {
+                Some(active) => browser::focus_tab(&app, &state, active),
+                // Đóng tab cuối cùng: mở tab trống để trình duyệt luôn dùng được.
+                None => {
+                    let new_id = state.add_tab(NEW_TAB_URL.to_string());
+                    state.activate(new_id)?;
+                    browser::focus_tab(&app, &state, new_id);
+                }
             }
             browser::emit_state(&app, &state);
             Ok(Value::Null)
@@ -93,18 +100,17 @@ pub async fn browser_command(
             browser::stop_active(&app, &state);
             Ok(Value::Null)
         }
-        "popup_allow" => {
-            allow_next.store(true, Ordering::SeqCst);
-            Ok(Value::Null)
-        }
+        "popup_allow" => Err("popup_allow đã bỏ: popup luôn mở thành tab nền".into()),
         "popup_drain" => {
             let urls = queue.drain();
+            // Tab nền tạo lười: chưa nạp webview cho tới khi người dùng kích hoạt,
+            // tránh tạo hàng loạt webview rỗng khi trang mở nhiều popup.
             for u in urls.iter() {
-                let id = state.add_tab(u.clone());
-                browser::ensure_webview(&app, &state, id);
-                browser::hide_others(&app, &state, state.active_id().unwrap_or(0));
+                state.add_tab(u.clone());
             }
-            browser::emit_state(&app, &state);
+            if !urls.is_empty() {
+                browser::emit_state(&app, &state);
+            }
             Ok(serde_json::json!({ "urls": urls }))
         }
         // ===== M2: bookmarks / history / settings / session =====
@@ -150,6 +156,8 @@ pub async fn browser_command(
                 .map(|t| crate::db::SessionTab {
                     url: t.url.clone(),
                     title: t.title.clone(),
+                    pinned: t.pinned,
+                    group: t.group.clone(),
                 })
                 .collect::<Vec<_>>();
             db.save_session(&tabs, active_index)?;
@@ -168,7 +176,7 @@ pub async fn browser_command(
         }),
         // ===== M4: riêng tư và xóa dữ liệu =====
         "private_set" => {
-            state.set_private(arg("on")? == "1");
+            browser::apply_private(&app, &state, arg("on")? == "1");
             browser::emit_state(&app, &state);
             Ok(Value::Null)
         }
