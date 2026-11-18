@@ -83,7 +83,7 @@ fn host_of_input(input: &str) -> &str {
         .map(|(_, rest)| rest)
         .unwrap_or(input);
     let end = after_scheme
-        .find(|c| c == '/' || c == '?' || c == '#')
+        .find(['/', '?', '#'])
         .unwrap_or(after_scheme.len());
     after_scheme[..end].split(':').next().unwrap_or("")
 }
