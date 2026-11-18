@@ -6,7 +6,7 @@ import Panel, { type PanelKind } from "./Panel";
 
 // Toolbar là webview tin cậy duy nhất được phép gọi IPC (capabilities/default.json).
 export default function App() {
-  const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null });
+  const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null, private: false });
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<PanelKind | null>(null);
