@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { cmd, type TabInfo } from "./tabs";
+import { t, useLang, type Key } from "./i18n";
+import Settings from "./Settings";
 
 interface Bookmark {
   id: number;
@@ -36,29 +38,30 @@ export default function Panel({
   kind,
   onClose,
   onNavigate,
+  privateMode,
+  onHomeChange,
 }: {
   kind: PanelKind;
   onClose: () => void;
   onNavigate: (url: string) => void;
+  privateMode: boolean;
+  onHomeChange: (url: string) => void;
 }) {
+  useLang();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
-  const [diag, setDiag] = useState<string>("");
   const [tabList, setTabList] = useState<TabInfo[]>([]);
   const [tabQuery, setTabQuery] = useState("");
   const [reading, setReading] = useState<ReadingItem[]>([]);
   const [siteHost, setSiteHost] = useState("");
   const [query, setQuery] = useState("");
-  const [home, setHome] = useState("https://example.com/");
 
   const reload = async () => {
     if (kind === "bookmarks") {
       setBookmarks(((await cmd("bookmark_list")) as Bookmark[]) ?? []);
     } else if (kind === "history") {
-      setHistory(
-        ((await cmd("history_search", { query })) as HistoryItem[]) ?? [],
-      );
+      setHistory(((await cmd("history_search", { query })) as HistoryItem[]) ?? []);
     } else if (kind === "tabs") {
       const s = (await cmd("state")) as { tabs: TabInfo[] } | null;
       setTabList(s?.tabs ?? []);
@@ -66,9 +69,6 @@ export default function Panel({
       setReading(((await cmd("reading_list")) as ReadingItem[]) ?? []);
     } else if (kind === "downloads") {
       setDownloads(((await cmd("downloads_list")) as DownloadItem[]) ?? []);
-    } else {
-      const v = (await cmd("settings_get", { key: "homeUrl" })) as string | null;
-      if (v) setHome(v);
     }
   };
 
@@ -80,8 +80,8 @@ export default function Panel({
   return (
     <div style={panel}>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <strong>{title(kind)}</strong>
-        <button onClick={onClose}>×</button>
+        <strong>{t(titleKey(kind))}</strong>
+        <button onClick={onClose} title={t("panel.close")}>×</button>
       </div>
 
       {kind === "bookmarks" && (
@@ -91,10 +91,8 @@ export default function Panel({
               <a href="#" onClick={(e) => { e.preventDefault(); onNavigate(b.url); }}>
                 {b.title || b.url}
               </a>{" "}
-              <button
-                onClick={() => void cmd("bookmark_remove", { id: String(b.id) }).then(reload)}
-              >
-                xóa
+              <button onClick={() => void cmd("bookmark_remove", { id: String(b.id) }).then(reload)}>
+                {t("panel.remove")}
               </button>
             </li>
           ))}
@@ -104,7 +102,7 @@ export default function Panel({
       {kind === "history" && (
         <>
           <input
-            placeholder="Tìm trong lịch sử"
+            placeholder={t("panel.searchHistory")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{ width: "100%", boxSizing: "border-box" }}
@@ -120,44 +118,46 @@ export default function Panel({
           </ul>
           <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
             <input
-              placeholder="Tên miền, ví dụ example.com"
+              placeholder={t("panel.siteHost")}
               value={siteHost}
               onChange={(e) => setSiteHost(e.target.value)}
               style={{ flex: 1 }}
             />
             <button onClick={() => void cmd("site_clear_data", { host: siteHost }).then(reload)}>
-              Xóa theo trang
+              {t("panel.clearSite")}
             </button>
           </div>
-          <button onClick={() => void cmd("history_clear").then(reload)}>Xóa toàn bộ lịch sử</button>
+          <button onClick={() => void cmd("history_clear").then(reload)}>
+            {t("panel.clearHistory")}
+          </button>
         </>
       )}
 
       {kind === "tabs" && (
         <>
           <input
-            placeholder="Tìm tab theo tên hoặc địa chỉ"
+            placeholder={t("panel.searchTabs")}
             value={tabQuery}
             onChange={(e) => setTabQuery(e.target.value)}
             style={{ width: "100%", boxSizing: "border-box" }}
           />
           <ul style={list}>
             {tabList
-              .filter((t) => {
+              .filter((tb) => {
                 const q = tabQuery.trim().toLowerCase();
-                return !q || t.title.toLowerCase().includes(q) || t.url.toLowerCase().includes(q);
+                return !q || tb.title.toLowerCase().includes(q) || tb.url.toLowerCase().includes(q);
               })
-              .map((t) => (
-                <li key={t.id}>
+              .map((tb) => (
+                <li key={tb.id}>
                   <a
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
-                      void cmd("activate_tab", { id: String(t.id) });
+                      void cmd("activate_tab", { id: String(tb.id) });
                       onClose();
                     }}
                   >
-                    {t.title || t.url}
+                    {tb.title || tb.url}
                   </a>
                 </li>
               ))}
@@ -173,7 +173,7 @@ export default function Panel({
                 {r.title || r.url}
               </a>{" "}
               <button onClick={() => void cmd("reading_remove", { id: String(r.id) }).then(reload)}>
-                xóa
+                {t("panel.remove")}
               </button>
             </li>
           ))}
@@ -190,54 +190,36 @@ export default function Panel({
               </li>
             ))}
           </ul>
-          <button onClick={() => void cmd("downloads_clear").then(reload)}>Xóa danh sách</button>
-        </>
-      )}
-
-      {kind === "settings" && (
-        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          Trang chủ
-          <input
-            value={home}
-            onChange={(e) => setHome(e.target.value)}
-            onBlur={() => void cmd("settings_set", { key: "homeUrl", value: home })}
-          />
-        </label>
-      )}
-
-      {kind === "settings" && (
-        <button
-          style={{ marginTop: 8 }}
-          onClick={() => void cmd("clear_data")}
-        >
-          Xóa dữ liệu duyệt web (lịch sử, tải xuống, phiên)
-        </button>
-      )}
-
-      {kind === "settings" && (
-        <>
-          <button
-            style={{ marginTop: 8 }}
-            onClick={() =>
-              void cmd("diagnostics").then((d) => setDiag(JSON.stringify(d, null, 2)))
-            }
-          >
-            Chẩn đoán
+          <button onClick={() => void cmd("downloads_clear").then(reload)}>
+            {t("panel.clearList")}
           </button>
-          {diag && <pre style={{ whiteSpace: "pre-wrap", fontSize: 11 }}>{diag}</pre>}
         </>
+      )}
+
+      {kind === "settings" && (
+        <div style={{ marginTop: 8 }}>
+          <Settings privateMode={privateMode} onHomeChange={onHomeChange} />
+        </div>
       )}
     </div>
   );
 }
 
-function title(kind: PanelKind): string {
-  if (kind === "bookmarks") return "Đã lưu";
-  if (kind === "history") return "Lịch sử";
-  if (kind === "downloads") return "Tải xuống";
-  if (kind === "tabs") return "Tìm tab";
-  if (kind === "reading") return "Danh sách đọc";
-  return "Cài đặt";
+function titleKey(kind: PanelKind): Key {
+  switch (kind) {
+    case "bookmarks":
+      return "title.bookmarks";
+    case "history":
+      return "title.history";
+    case "downloads":
+      return "title.downloads";
+    case "tabs":
+      return "title.tabs";
+    case "reading":
+      return "title.reading";
+    default:
+      return "title.settings";
+  }
 }
 
 const panel: CSSProperties = {

@@ -4,23 +4,38 @@ import { listen } from "@tauri-apps/api/event";
 import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
 import { TERMS_SECTIONS } from "./terms";
+import { setLang, t, useLang, type Lang } from "./i18n";
+
+const DEFAULT_HOME = "https://example.com/";
 
 // Toolbar là webview tin cậy duy nhất được phép gọi IPC (capabilities/default.json).
 export default function App() {
+  useLang();
   const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null, private: false });
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<PanelKind | null>(null);
   // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
   const [termsOk, setTermsOk] = useState<boolean | null>(null);
+  const [home, setHome] = useState(DEFAULT_HOME);
 
   useEffect(() => {
     void cmd("terms_status")
       .then((s) => setTermsOk((s as { accepted: boolean }).accepted))
       .catch(() => setTermsOk(false));
+    void cmd("settings_get", { key: "language" })
+      .then((v) => {
+        if (v === "vi" || v === "en") setLang(v as Lang);
+      })
+      .catch(() => undefined);
+    void cmd("settings_get", { key: "homeUrl" })
+      .then((v) => {
+        if (typeof v === "string" && v) setHome(v);
+      })
+      .catch(() => undefined);
   }, []);
 
-  const active: TabInfo | undefined = state.tabs.find((t) => t.id === state.activeTab);
+  const active: TabInfo | undefined = state.tabs.find((tb) => tb.id === state.activeTab);
 
   // Đồng bộ ô địa chỉ khi tab chuyển trang, trừ khi người dùng đang gõ.
   useEffect(() => {
@@ -98,7 +113,7 @@ export default function App() {
   if (termsOk === false) {
     return (
       <div style={termsBox}>
-        <h2 style={{ margin: "0 0 8px" }}>Điều khoản sử dụng và chính sách quyền riêng tư</h2>
+        <h2 style={{ margin: "0 0 8px" }}>{t("terms.title")}</h2>
         <div style={{ flex: 1, overflowY: "auto", paddingRight: 8 }}>
           {TERMS_SECTIONS.map((sec) => (
             <section key={sec.title} style={{ marginBottom: 12 }}>
@@ -108,7 +123,7 @@ export default function App() {
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", paddingTop: 8 }}>
-          <button onClick={() => void cmd("terms_decline")}>Từ chối và thoát</button>
+          <button onClick={() => void cmd("terms_decline")}>{t("terms.decline")}</button>
           <button
             style={{ fontWeight: 700 }}
             onClick={() =>
@@ -118,7 +133,7 @@ export default function App() {
               })
             }
           >
-            Tôi đồng ý
+            {t("terms.accept")}
           </button>
         </div>
       </div>
@@ -128,27 +143,27 @@ export default function App() {
   return (
     <div style={bar}>
       <div style={row}>
-        <strong style={{ padding: "0 8px" }}>Bytwina{state.private ? " · Riêng tư" : ""}</strong>
+        <strong style={{ padding: "0 8px" }}>
+          Bytwina{state.private ? ` · ${t("app.private")}` : ""}
+        </strong>
         <div style={tabList}>
-          {state.tabs.map((t) => (
+          {state.tabs.map((tb) => (
             <button
-              key={t.id}
-              onClick={() => void cmd("activate_tab", { id: String(t.id) })}
-              style={t.id === state.activeTab ? tabActive : tab}
-              title={t.url}
+              key={tb.id}
+              onClick={() => void cmd("activate_tab", { id: String(tb.id) })}
+              style={tb.id === state.activeTab ? tabActive : tab}
+              title={tb.url}
             >
-              <span
-                style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-              >
-                {t.group ? `[${t.group}] ` : ""}
-                {t.title || t.url}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {tb.group ? `[${tb.group}] ` : ""}
+                {tb.title || tb.url}
               </span>
               <span
-                style={{ marginLeft: 6, opacity: t.pinned ? 1 : 0.4 }}
-                title={t.pinned ? "Bỏ ghim" : "Ghim tab"}
+                style={{ marginLeft: 6, opacity: tb.pinned ? 1 : 0.4 }}
+                title={tb.pinned ? t("bar.unpin") : t("bar.pin")}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void cmd("pin_tab", { id: String(t.id), on: t.pinned ? "0" : "1" });
+                  void cmd("pin_tab", { id: String(tb.id), on: tb.pinned ? "0" : "1" });
                 }}
               >
                 📌
@@ -157,30 +172,50 @@ export default function App() {
                 style={{ marginLeft: 6, opacity: 0.6 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void cmd("close_tab", { id: String(t.id) });
+                  void cmd("close_tab", { id: String(tb.id) });
                 }}
               >
                 ×
               </span>
             </button>
           ))}
-          <button onClick={() => void cmd("new_tab")} title="Ctrl+T" style={tab}>
+          <button onClick={() => void cmd("new_tab")} title={`${t("bar.newTab")} (Ctrl+T)`} style={tab}>
             ＋
           </button>
         </div>
         <button onClick={() => setPanel(panel === "bookmarks" ? null : "bookmarks")}>★</button>
         <button onClick={() => setPanel(panel === "history" ? null : "history")}>🕘</button>
-        <button onClick={() => setPanel(panel === "tabs" ? null : "tabs")} title="Tìm tab">⊞</button>
-        <button onClick={() => setPanel(panel === "reading" ? null : "reading")} title="Danh sách đọc">📖</button>
-        <button onClick={() => setPanel(panel === "downloads" ? null : "downloads")} title="Tải xuống">⤓</button>
+        <button
+          onClick={() => setPanel(panel === "tabs" ? null : "tabs")}
+          title={t("bar.findTabs")}
+        >
+          ⊞
+        </button>
+        <button
+          onClick={() => setPanel(panel === "reading" ? null : "reading")}
+          title={t("bar.reading")}
+        >
+          📖
+        </button>
+        <button
+          onClick={() => setPanel(panel === "downloads" ? null : "downloads")}
+          title={t("bar.downloads")}
+        >
+          ⤓
+        </button>
         <button
           onClick={() => void cmd("private_set", { on: state.private ? "0" : "1" })}
-          title="Chế độ riêng tư (không ghi lịch sử)"
+          title={t("bar.privateToggle")}
           style={{ fontWeight: state.private ? 700 : 400 }}
         >
           🕶
         </button>
-        <button onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙</button>
+        <button
+          onClick={() => setPanel(panel === "settings" ? null : "settings")}
+          title={t("bar.settings")}
+        >
+          ⚙
+        </button>
       </div>
       <div style={row}>
         <button disabled={!active?.canGoBack} onClick={() => void cmd("back")}>
@@ -192,11 +227,19 @@ export default function App() {
         <button onClick={() => void cmd(active?.loading ? "stop" : "reload")} title="Ctrl+R / Esc">
           {active?.loading ? "■" : "⟳"}
         </button>
+        <button
+          title={t("bar.home")}
+          onClick={() => {
+            if (active) void cmd("navigate", { id: String(active.id), input: home });
+          }}
+        >
+          🏠
+        </button>
         <input
           id="address"
           style={address}
           value={input}
-          placeholder="Nhập địa chỉ hoặc tìm kiếm"
+          placeholder={t("bar.address")}
           onChange={(e) => {
             setInput(e.target.value);
             setEditing(true);
@@ -210,8 +253,8 @@ export default function App() {
         />
         <input
           style={{ width: 110 }}
-          placeholder="Nhóm tab"
-          aria-label="Nhóm tab"
+          placeholder={t("bar.group")}
+          aria-label={t("bar.group")}
           key={active?.id}
           defaultValue={active?.group ?? ""}
           onKeyDown={(e) => {
@@ -223,7 +266,7 @@ export default function App() {
           }}
         />
         <button
-          title="Thêm vào danh sách đọc"
+          title={t("bar.addReading")}
           onClick={() => {
             if (active) void cmd("reading_add", { title: active.title, url: active.url });
           }}
@@ -231,7 +274,7 @@ export default function App() {
           🔖
         </button>
         <button
-          title="Lưu trang này"
+          title={t("bar.bookmark")}
           onClick={() => {
             if (active)
               void cmd("bookmark_add", { title: active.title, url: active.url, folder: "" });
@@ -248,6 +291,8 @@ export default function App() {
             setPanel(null);
             if (active) void cmd("navigate", { id: String(active.id), input: url });
           }}
+          privateMode={state.private}
+          onHomeChange={setHome}
         />
       )}
     </div>
@@ -256,7 +301,7 @@ export default function App() {
 
 async function cycle(state: BrowserStatePayload, dir: number) {
   if (state.tabs.length === 0 || state.activeTab == null) return;
-  const idx = state.tabs.findIndex((t) => t.id === state.activeTab);
+  const idx = state.tabs.findIndex((tb) => tb.id === state.activeTab);
   const next = state.tabs[(idx + dir + state.tabs.length) % state.tabs.length];
   await cmd("activate_tab", { id: String(next.id) });
 }
