@@ -42,11 +42,7 @@ fn main() {
                 Ok(v) => diagnostics::log("info", &format!("WebView2 {v}")),
                 Err(e) => diagnostics::log("error", &format!("không đọc được WebView2: {e}")),
             }
-            let storage = app
-                .path()
-                .app_data_dir()
-                .ok()
-                .and_then(db::open);
+            let storage = app.path().app_data_dir().ok().and_then(db::open);
             if storage.is_none() {
                 diagnostics::log(
                     "error",
