@@ -61,9 +61,37 @@ pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     conn.pragma_update(None, "journal_mode", "WAL").ok()?;
     conn.pragma_update(None, "synchronous", "NORMAL").ok()?;
     migrate(&conn).ok()?;
+    migrate_downloads(&conn).ok()?;
+    migrate_reading(&conn).ok()?;
     Some(Db {
         conn: std::sync::Arc::new(Mutex::new(conn)),
     })
+}
+
+/// M3: bảng tải xuống. Dùng CREATE IF NOT EXISTS nên chạy lại an toàn.
+/// TODO: gộp vào hệ thống schema_version khi có migration thứ hai.
+fn migrate_downloads(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS downloads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            path TEXT NOT NULL DEFAULT '',
+            success INTEGER NOT NULL,
+            finished_at INTEGER NOT NULL
+        );",
+    )
+}
+
+/// M10: bảng danh sách đọc. Cũng dùng CREATE IF NOT EXISTS.
+fn migrate_reading(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS reading_list (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL DEFAULT '',
+            url TEXT NOT NULL UNIQUE,
+            added_at INTEGER NOT NULL
+        );",
+    )
 }
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -109,10 +137,6 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 impl Db {
-    fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
-        self.conn.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
     pub fn add_bookmark(&self, title: &str, url: &str, folder: &str) -> Result<i64, String> {
         let c = self.conn();
         c.execute(
@@ -134,7 +158,9 @@ impl Db {
     pub fn list_bookmarks(&self) -> Result<Vec<Bookmark>, String> {
         let c = self.conn();
         let mut stmt = c
-            .prepare("SELECT id, title, url, folder, created_at FROM bookmarks ORDER BY created_at ASC")
+            .prepare(
+                "SELECT id, title, url, folder, created_at FROM bookmarks ORDER BY created_at ASC",
+            )
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |r| {
@@ -221,7 +247,8 @@ impl Db {
     pub fn save_session(&self, tabs: &[SessionTab], active_index: i64) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_tabs", []).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_tabs", [])
+            .map_err(|e| e.to_string())?;
         for (i, t) in tabs.iter().enumerate() {
             tx.execute(
                 "INSERT INTO session_tabs (ord, url, title) VALUES (?1, ?2, ?3)",
@@ -268,8 +295,10 @@ impl Db {
     pub fn clear_session(&self) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_tabs", []).map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM session_meta", []).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_tabs", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM session_meta", [])
+            .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())
     }
 }
@@ -302,7 +331,8 @@ mod tests {
         let db = temp_db("bm");
         db.add_bookmark("Một", "https://a.test/", "").unwrap();
         // URL trùng → cập nhật tiêu đề, không tạo bản ghi mới.
-        db.add_bookmark("Một mới", "https://a.test/", "ĐỌC").unwrap();
+        db.add_bookmark("Một mới", "https://a.test/", "ĐỌC")
+            .unwrap();
         db.add_bookmark("Hai", "https://b.test/", "").unwrap();
         let all = db.list_bookmarks().unwrap();
         assert_eq!(all.len(), 2);
@@ -341,8 +371,14 @@ mod tests {
     fn session_save_load_clear() {
         let db = temp_db("sess");
         let tabs = vec![
-            SessionTab { url: "https://a.test/".into(), title: "A".into() },
-            SessionTab { url: "https://b.test/".into(), title: "B".into() },
+            SessionTab {
+                url: "https://a.test/".into(),
+                title: "A".into(),
+            },
+            SessionTab {
+                url: "https://b.test/".into(),
+                title: "B".into(),
+            },
         ];
         db.save_session(&tabs, 1).unwrap();
         let (loaded, active) = db.load_session().unwrap();
@@ -356,5 +392,250 @@ mod tests {
         let (loaded, active) = db.load_session().unwrap();
         assert!(loaded.is_empty());
         assert_eq!(active, -1);
+    }
+}
+
+/// Một lần tải xuống đã hoàn tất (M3).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadItem {
+    pub id: i64,
+    pub url: String,
+    pub path: String,
+    pub success: bool,
+    pub finished_at: i64,
+}
+
+impl Db {
+    pub fn record_download(&self, url: &str, path: &str, success: bool) -> Result<(), String> {
+        self.conn()
+            .execute(
+                "INSERT INTO downloads (url, path, success, finished_at) VALUES (?1, ?2, ?3, ?4)",
+                params![url, path, success, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_downloads(&self) -> Result<Vec<DownloadItem>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT id, url, path, success, finished_at FROM downloads ORDER BY id DESC LIMIT 200")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(DownloadItem {
+                    id: r.get(0)?,
+                    url: r.get(1)?,
+                    path: r.get(2)?,
+                    success: r.get::<_, i64>(3)? != 0,
+                    finished_at: r.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        let out = rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string());
+        out
+    }
+
+    pub fn clear_downloads(&self) -> Result<(), String> {
+        self.conn()
+            .execute("DELETE FROM downloads", [])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
+
+/// Danh sách đọc (M10): trang muốn đọc sau.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingItem {
+    pub id: i64,
+    pub title: String,
+    pub url: String,
+    pub added_at: i64,
+}
+
+impl Db {
+    pub fn add_reading(&self, title: &str, url: &str) -> Result<(), String> {
+        self.conn()
+            .execute(
+                "INSERT INTO reading_list (title, url, added_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(url) DO UPDATE SET title = excluded.title",
+                params![title, url, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_reading(&self) -> Result<Vec<ReadingItem>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT id, title, url, added_at FROM reading_list ORDER BY added_at DESC")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(ReadingItem {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    url: r.get(2)?,
+                    added_at: r.get(3)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        let out = rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string());
+        out
+    }
+
+    pub fn remove_reading(&self, id: i64) -> Result<(), String> {
+        self.conn()
+            .execute("DELETE FROM reading_list WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// CSDL tạm trong thư mục hệ thống, mỗi test một thư mục riêng.
+    fn temp_db(name: &str) -> (Db, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("nova-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db = open(dir.clone()).expect("mở CSDL test");
+        (db, dir)
+    }
+
+    #[test]
+    fn bookmarks_round_trip() {
+        let (db, dir) = temp_db("bookmarks");
+        db.add_bookmark("Trang A", "https://a.test/", "").unwrap();
+        let list = db.list_bookmarks().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].url, "https://a.test/");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn history_is_searchable() {
+        let (db, dir) = temp_db("history");
+        db.record_history("Xin chào", "https://x.test/hello")
+            .unwrap();
+        db.record_history("Khác", "https://y.test/").unwrap();
+        let found = db.search_history("x.test", 10).unwrap();
+        assert_eq!(found.len(), 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn settings_round_trip() {
+        let (db, dir) = temp_db("settings");
+        db.set_setting("homeUrl", "https://home.test/").unwrap();
+        assert_eq!(
+            db.get_setting("homeUrl").unwrap().as_deref(),
+            Some("https://home.test/")
+        );
+        assert_eq!(db.get_setting("khongco").unwrap(), None);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn session_round_trip() {
+        let (db, dir) = temp_db("session");
+        let tabs = vec![
+            SessionTab {
+                url: "https://one.test/".into(),
+                title: "Một".into(),
+            },
+            SessionTab {
+                url: "https://two.test/".into(),
+                title: "Hai".into(),
+            },
+        ];
+        db.save_session(&tabs, 1).unwrap();
+        let (loaded, active) = db.load_session().unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[1].url, "https://two.test/");
+        assert_eq!(active, 1);
+        db.clear_session().unwrap();
+        assert!(db.load_session().unwrap().0.is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn downloads_round_trip() {
+        let (db, dir) = temp_db("downloads");
+        db.record_download("https://f.test/a.zip", "C:\\Users\\x\\a.zip", true)
+            .unwrap();
+        let list = db.list_downloads().unwrap();
+        assert_eq!(list.len(), 1);
+        assert!(list[0].success);
+        db.clear_downloads().unwrap();
+        assert!(db.list_downloads().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reading_list_dedupes_by_url() {
+        let (db, dir) = temp_db("reading");
+        db.add_reading("Bài 1", "https://r.test/1").unwrap();
+        db.add_reading("Bài 1 (sửa)", "https://r.test/1").unwrap();
+        let list = db.list_reading().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].title, "Bài 1 (sửa)");
+        db.remove_reading(list[0].id).unwrap();
+        assert!(db.list_reading().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+impl Db {
+    /// M15: xóa lịch sử của đúng một tên miền (không xóa tên miền con hay tên miền có chứa chuỗi này).
+    /// Chỉ nhận ký tự an toàn, nên không có ký tự đặc biệt của LIKE.
+    pub fn clear_history_for_host(&self, host: &str) -> Result<usize, String> {
+        let host = host.trim().to_ascii_lowercase();
+        let valid = !host.is_empty()
+            && host.len() <= 253
+            && host
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+        if !valid {
+            return Err("tên miền không hợp lệ".into());
+        }
+        self.conn()
+            .execute(
+                "DELETE FROM history WHERE url IN (?1, ?2) OR url LIKE ?3 OR url LIKE ?4",
+                params![
+                    format!("https://{host}"),
+                    format!("http://{host}"),
+                    format!("https://{host}/%"),
+                    format!("http://{host}/%"),
+                ],
+            )
+            .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn site_history_clear_matches_exact_host_only() {
+        let dir = std::env::temp_dir().join(format!("nova-test-site-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db = open(dir.clone()).expect("mở CSDL test");
+        db.record_history("a", "https://example.com/x").unwrap();
+        db.record_history("b", "https://example.com.evil.net/")
+            .unwrap();
+        db.record_history("c", "https://other.test/").unwrap();
+        assert_eq!(db.clear_history_for_host("example.com").unwrap(), 1);
+        assert!(db.clear_history_for_host("exa mple.com").is_err());
+        assert!(db.clear_history_for_host("").is_err());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

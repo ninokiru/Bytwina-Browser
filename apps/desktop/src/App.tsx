@@ -3,13 +3,22 @@ import type { CSSProperties } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
+import { TERMS_SECTIONS } from "./terms";
 
 // Toolbar là webview tin cậy duy nhất được phép gọi IPC (capabilities/default.json).
 export default function App() {
-  const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null });
+  const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null, private: false });
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<PanelKind | null>(null);
+  // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
+  const [termsOk, setTermsOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void cmd("terms_status")
+      .then((s) => setTermsOk((s as { accepted: boolean }).accepted))
+      .catch(() => setTermsOk(false));
+  }, []);
 
   const active: TabInfo | undefined = state.tabs.find((t) => t.id === state.activeTab);
 
@@ -85,10 +94,41 @@ export default function App() {
   // Trang web không có bridge Tauri nên không thể tự xin popup;
   // permission manager hoàn thiện ở M4.
 
+  if (termsOk === null) return null;
+  if (termsOk === false) {
+    return (
+      <div style={termsBox}>
+        <h2 style={{ margin: "0 0 8px" }}>Điều khoản sử dụng và chính sách quyền riêng tư</h2>
+        <div style={{ flex: 1, overflowY: "auto", paddingRight: 8 }}>
+          {TERMS_SECTIONS.map((sec) => (
+            <section key={sec.title} style={{ marginBottom: 12 }}>
+              <strong>{sec.title}</strong>
+              <p style={{ margin: "4px 0" }}>{sec.body}</p>
+            </section>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", paddingTop: 8 }}>
+          <button onClick={() => void cmd("terms_decline")}>Từ chối và thoát</button>
+          <button
+            style={{ fontWeight: 700 }}
+            onClick={() =>
+              void cmd("terms_accept").then(() => {
+                setTermsOk(true);
+                return cmd("state").then((s) => setState(s as BrowserStatePayload));
+              })
+            }
+          >
+            Tôi đồng ý
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={bar}>
       <div style={row}>
-        <strong style={{ padding: "0 8px" }}>Nova</strong>
+        <strong style={{ padding: "0 8px" }}>Nova{state.private ? " · Riêng tư" : ""}</strong>
         <div style={tabList}>
           {state.tabs.map((t) => (
             <button
@@ -100,7 +140,18 @@ export default function App() {
               <span
                 style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
               >
+                {t.group ? `[${t.group}] ` : ""}
                 {t.title || t.url}
+              </span>
+              <span
+                style={{ marginLeft: 6, opacity: t.pinned ? 1 : 0.4 }}
+                title={t.pinned ? "Bỏ ghim" : "Ghim tab"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void cmd("pin_tab", { id: String(t.id), on: t.pinned ? "0" : "1" });
+                }}
+              >
+                📌
               </span>
               <span
                 style={{ marginLeft: 6, opacity: 0.6 }}
@@ -119,6 +170,16 @@ export default function App() {
         </div>
         <button onClick={() => setPanel(panel === "bookmarks" ? null : "bookmarks")}>★</button>
         <button onClick={() => setPanel(panel === "history" ? null : "history")}>🕘</button>
+        <button onClick={() => setPanel(panel === "tabs" ? null : "tabs")} title="Tìm tab">⊞</button>
+        <button onClick={() => setPanel(panel === "reading" ? null : "reading")} title="Danh sách đọc">📖</button>
+        <button onClick={() => setPanel(panel === "downloads" ? null : "downloads")} title="Tải xuống">⤓</button>
+        <button
+          onClick={() => void cmd("private_set", { on: state.private ? "0" : "1" })}
+          title="Chế độ riêng tư (không ghi lịch sử)"
+          style={{ fontWeight: state.private ? 700 : 400 }}
+        >
+          🕶
+        </button>
         <button onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙</button>
       </div>
       <div style={row}>
@@ -147,6 +208,28 @@ export default function App() {
             if (e.key === "Escape") setEditing(false);
           }}
         />
+        <input
+          style={{ width: 110 }}
+          placeholder="Nhóm tab"
+          aria-label="Nhóm tab"
+          key={active?.id}
+          defaultValue={active?.group ?? ""}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && active)
+              void cmd("set_group", {
+                id: String(active.id),
+                group: (e.target as HTMLInputElement).value,
+              });
+          }}
+        />
+        <button
+          title="Thêm vào danh sách đọc"
+          onClick={() => {
+            if (active) void cmd("reading_add", { title: active.title, url: active.url });
+          }}
+        >
+          🔖
+        </button>
         <button
           title="Lưu trang này"
           onClick={() => {
@@ -177,6 +260,17 @@ async function cycle(state: BrowserStatePayload, dir: number) {
   const next = state.tabs[(idx + dir + state.tabs.length) % state.tabs.length];
   await cmd("activate_tab", { id: String(next.id) });
 }
+
+const termsBox: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  height: "100vh",
+  boxSizing: "border-box",
+  padding: 24,
+  fontFamily: "system-ui",
+  fontSize: 14,
+  background: "#fff",
+};
 
 const bar: CSSProperties = {
   position: "relative",

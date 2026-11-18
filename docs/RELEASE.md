@@ -1,0 +1,12 @@
+# Phát hành
+
+1. Cập nhật `version` trong `apps/desktop/src-tauri/Cargo.toml` và `tauri.conf.json`.
+2. Đẩy tag: `git tag v0.1.0 && git push origin v0.1.0`.
+3. Workflow `release.yml` tạo bản **draft** kèm bộ cài NSIS và `SHA256SUMS.txt`.
+4. Tải về, kiểm tra SHA256 (`Get-FileHash`), cài thử trên Windows, rồi bấm Publish.
+
+## Giới hạn đã biết
+- Bộ cài **chưa được ký số**: Windows SmartScreen sẽ cảnh báo. Cần chứng chỉ code signing (quyết định của chủ dự án).
+- **Chưa có cập nhật tự động.** Cần quyết định hạ tầng cập nhật và khóa ký trước khi làm.
+- Bộ cài **không đóng gói WebView2 Runtime**. Ứng dụng kiểm tra runtime khi khởi động và ghi nhật ký nếu thiếu (xem `nova.log` trong thư mục dữ liệu ứng dụng).
+- Nhật ký `nova.log` không ghi URL; xoay vòng ở 512 KB.

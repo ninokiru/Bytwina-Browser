@@ -24,8 +24,14 @@ pub fn to_url(input: &str) -> String {
         let scheme = input[..pos].to_ascii_lowercase();
         // url::Url chỉ cho phép http/https vào webview nội dung.
         if scheme == "http" || scheme == "https" {
+            // HTTPS-first (ADR-003): nâng cấp http lên https, trừ localhost để phát triển.
             return Url::parse(input)
-                .map(|u| u.to_string())
+                .map(|mut u| {
+                    if u.scheme() == "http" && !is_local(&u) {
+                        let _ = u.set_scheme("https");
+                    }
+                    u.to_string()
+                })
                 .unwrap_or_else(|_| search(input));
         }
         return search(input);
@@ -69,10 +75,14 @@ mod tests {
     }
 
     #[test]
-    fn explicit_http_kept() {
-        assert_eq!(to_url("http://example.com"), "http://example.com");
+    fn explicit_http_upgraded_except_localhost() {
+        assert_eq!(to_url("http://example.com"), "https://example.com/");
+        assert_eq!(to_url("http://localhost:8000/a"), "http://localhost:8000/a");
         // url::Url chuẩn hóa scheme + host sang chữ thường, giữ nguyên đường dẫn.
-        assert_eq!(to_url("HTTPS://Example.com/Path"), "https://example.com/Path");
+        assert_eq!(
+            to_url("HTTPS://Example.com/Path"),
+            "https://example.com/Path"
+        );
     }
 
     #[test]
@@ -94,16 +104,85 @@ mod tests {
     }
 
     #[test]
+    fn page_policy_is_https_first() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        assert!(page_navigation_allowed(&u("https://example.com/")));
+        assert!(!page_navigation_allowed(&u("http://example.com/")));
+        assert!(page_navigation_allowed(&u("http://localhost:8000/")));
+        assert!(!page_navigation_allowed(&u("file:///C:/x")));
+        assert!(!page_navigation_allowed(&u("javascript:alert(1)")));
+        assert!(!page_navigation_allowed(&u("https://ad.doubleclick.net/")));
+        assert!(page_navigation_allowed(&u("about:blank")));
+    }
+
+    #[test]
+    fn blocklist_matches_subdomains_only() {
+        assert!(is_blocked_host(
+            &Url::parse("https://ad.doubleclick.net/x").unwrap()
+        ));
+        assert!(is_blocked_host(
+            &Url::parse("https://doubleclick.net/").unwrap()
+        ));
+        assert!(!is_blocked_host(
+            &Url::parse("https://notdoubleclick.net/").unwrap()
+        ));
+        assert!(!is_blocked_host(
+            &Url::parse("https://example.com/").unwrap()
+        ));
+    }
+
+    #[test]
     fn urlencoding_spaces_and_utf8() {
         assert_eq!(urlencode("a b"), "a%20b");
         assert_eq!(urlencode("dà"), "d%C3%A0");
     }
 }
 
-/// Chặn mọi điều hướng phía trang: webview nội dung không tự đổi location,
-/// không bấm link, không mở popup. Mọi thay đổi URL phải đi qua toolbar (IPC).
-pub fn deny_all(_url: &Url) -> bool {
-    false
+/// M4: danh sách chặn quảng cáo/theo dõi tối thiểu, khớp theo hậu tố tên miền.
+/// Đây KHÔNG phải filter list được bảo trì. Hiện chỉ áp dụng cho popup;
+/// chặn tài nguyên trong trang cần WebResourceRequested (chưa có trong Tauri stable).
+const BLOCKED_HOST_SUFFIXES: &[&str] = &[
+    "doubleclick.net",
+    "googlesyndication.com",
+    "googleadservices.com",
+    "adservice.google.com",
+    "taboola.com",
+    "outbrain.com",
+    "scorecardresearch.com",
+    "criteo.com",
+    "adnxs.com",
+];
+
+pub fn is_blocked_host(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    BLOCKED_HOST_SUFFIXES
+        .iter()
+        .any(|s| host == *s || host.ends_with(&format!(".{s}")))
+}
+
+fn is_local(url: &Url) -> bool {
+    matches!(url.host_str(), Some("localhost") | Some("127.0.0.1"))
+}
+
+/// Chính sách điều hướng trong trang (ADR-003, HTTPS-first):
+/// - https: cho phép, trừ tên miền trong danh sách chặn;
+/// - http: chỉ cho localhost (trang http khác bị chặn);
+/// - about:blank: cho phép (trang trống của tab mới);
+/// - mọi giao thức khác (file, javascript, data...): không cho.
+/// Không ghi URL vào nhật ký khi chặn.
+pub fn page_navigation_allowed(url: &Url) -> bool {
+    let allowed = match url.scheme() {
+        "https" => !is_blocked_host(url),
+        "http" => is_local(url) && !is_blocked_host(url),
+        "about" => url.as_str() == "about:blank",
+        _ => false,
+    };
+    if !allowed {
+        crate::diagnostics::log("info", "điều hướng trong trang bị chặn theo chính sách");
+    }
+    allowed
 }
 
 /// window.open / target=_blank: không tạo cửa sổ riêng, không âm thầm nạp trang
@@ -136,8 +215,8 @@ pub fn handle_new_window<R: tauri::Runtime>(
     queue: &PopupQueue,
     allow_next: &std::sync::atomic::AtomicBool,
     url: Url,
-) -> NewWindowResponse<'static, R> {
-    if allow_next.swap(false, std::sync::atomic::Ordering::SeqCst) {
+) -> NewWindowResponse<R> {
+    if allow_next.swap(false, std::sync::atomic::Ordering::SeqCst) && !is_blocked_host(&url) {
         queue.push(url);
     }
     NewWindowResponse::Deny

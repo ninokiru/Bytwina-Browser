@@ -15,15 +15,14 @@ jobs:
         working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v4
-      # windows-2025 runner không sẵn Node trong PATH (báo cáo CI M0) → cài tường minh.
-      - name: Install Node.js 22
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
         shell: pwsh
         run: |
-          choco install nodejs --version=22.12.0 -y
-          echo "C:\Program Files\nodejs" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          node --version
-          npm --version
-      - run: npm ci
+          # Dùng npm ci khi đã có lockfile; chưa có thì npm install (xem docs/ROADMAP.md).
+          if (Test-Path package-lock.json) { npm ci } else { npm install }
       - name: Type check
         run: npm run typecheck
       - name: Build

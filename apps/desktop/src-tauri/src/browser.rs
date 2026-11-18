@@ -1,12 +1,31 @@
 use std::sync::{Arc, Mutex};
 
-use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl};
+use tauri::webview::{DownloadEvent, PageLoadEvent};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl,
+};
 
+use crate::db::DbState;
 use crate::navigation;
 use crate::tabs::{HistoryEntry, PersistedTab, StatePayload, TabInfo};
 
 pub const TOOLBAR_HEIGHT: f64 = 96.0;
+
+/// Khi true, thanh công cụ phủ toàn cửa sổ (màn hình điều khoản khi chưa chấp nhận).
+static TOOLBAR_FULL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_toolbar_full(on: bool) {
+    TOOLBAR_FULL.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Chiều cao thanh công cụ theo chiều cao cửa sổ hiện hành.
+pub fn toolbar_height_for(window_height: f64) -> f64 {
+    if TOOLBAR_FULL.load(std::sync::atomic::Ordering::SeqCst) {
+        window_height
+    } else {
+        TOOLBAR_HEIGHT
+    }
+}
 const MAX_HISTORY: usize = 50;
 
 /// URL trung gian khi lazy-create tab; webview thật chỉ nạp trang khi tab được kích hoạt.
@@ -16,6 +35,7 @@ struct Inner {
     tabs: Vec<Tab>,
     active: Option<u32>,
     next_id: u32,
+    private: bool,
 }
 
 struct Tab {
@@ -26,6 +46,8 @@ struct Tab {
     created: bool,
     history: Vec<HistoryEntry>,
     hist_idx: usize,
+    pinned: bool,
+    group: Option<String>,
 }
 
 impl Tab {
@@ -38,6 +60,8 @@ impl Tab {
             created: false,
             history: Vec::new(),
             hist_idx: 0,
+            pinned: false,
+            group: None,
         }
     }
 
@@ -88,6 +112,7 @@ impl BrowserState {
                 tabs: Vec::new(),
                 active: None,
                 next_id: 1,
+                private: false,
             })),
         }
     }
@@ -204,7 +229,10 @@ impl BrowserState {
             .tabs
             .iter()
             .map(|t| PersistedTab {
-                url: t.current().map(|e| e.url.clone()).unwrap_or_else(|| t.url.clone()),
+                url: t
+                    .current()
+                    .map(|e| e.url.clone())
+                    .unwrap_or_else(|| t.url.clone()),
                 title: t.title.clone(),
             })
             .collect()
@@ -220,30 +248,72 @@ impl BrowserState {
             .unwrap_or_default()
     }
 
+    /// M5: ghim hoặc bỏ ghim tab.
+    pub fn set_pinned(&self, id: u32, pinned: bool) -> Result<(), String> {
+        let mut inner = self.lock();
+        let t = inner
+            .tabs
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| format!("không tìm thấy tab {id}"))?;
+        t.pinned = pinned;
+        Ok(())
+    }
+
+    /// M5: gán tab vào nhóm (None để bỏ nhóm).
+    pub fn set_group(&self, id: u32, group: Option<String>) -> Result<(), String> {
+        let mut inner = self.lock();
+        let t = inner
+            .tabs
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| format!("không tìm thấy tab {id}"))?;
+        t.group = group;
+        Ok(())
+    }
+
+    /// M4: bật/tắt chế độ riêng tư. Chỉ tắt việc ghi lịch sử; chưa cô lập cookie (xem docs/SECURITY.md).
+    pub fn set_private(&self, on: bool) {
+        self.lock().private = on;
+    }
+
+    pub fn is_private(&self) -> bool {
+        self.lock().private
+    }
+
     pub fn snapshot(&self) -> StatePayload {
         let inner = self.lock();
+        let mut tabs: Vec<TabInfo> = inner
+            .tabs
+            .iter()
+            .map(|t| TabInfo {
+                id: t.id,
+                label: t.label(),
+                url: t
+                    .current()
+                    .map(|e| e.url.clone())
+                    .unwrap_or_else(|| t.url.clone()),
+                title: t.title.clone(),
+                loading: t.loading,
+                created: t.created,
+                can_go_back: t.can_go_back(),
+                can_go_forward: t.can_go_forward(),
+                pinned: t.pinned,
+                group: t.group.clone(),
+            })
+            .collect();
+        // M5: tab ghim luôn nằm đầu; sort ổn định giữ nguyên thứ tự còn lại.
+        tabs.sort_by_key(|t| !t.pinned);
         StatePayload {
-            tabs: inner
-                .tabs
-                .iter()
-                .map(|t| TabInfo {
-                    id: t.id,
-                    label: t.label(),
-                    url: t.current().map(|e| e.url.clone()).unwrap_or_else(|| t.url.clone()),
-                    title: t.title.clone(),
-                    loading: t.loading,
-                    created: t.created,
-                    can_go_back: t.can_go_back(),
-                    can_go_forward: t.can_go_forward(),
-                })
-                .collect(),
+            tabs,
             active_tab: inner.active,
+            private: inner.private,
         }
     }
 }
 
 /// Gửi toàn bộ trạng thái trình duyệt cho toolbar (webview tin cậy duy nhất).
-pub fn emit_state(app: &AppHandle, state: &BrowserState) {
+pub fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, state: &BrowserState) {
     let _ = app.emit_to("toolbar", "browser://state", state.snapshot());
 }
 
@@ -270,7 +340,7 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
         return;
     }
     let builder = WebviewBuilder::new(&label, WebviewUrl::External(BLANK_URL.parse().unwrap()))
-        .on_navigation(navigation::deny_all)
+        .on_navigation(navigation::page_navigation_allowed)
         .on_document_title_changed({
             let app = app.clone();
             move |webview, title| {
@@ -283,23 +353,29 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
                 }
             }
         })
+        // M3: chọn nơi lưu file và ghi nhận kết quả tải xuống.
+        .on_download({
+            let app = app.clone();
+            move |_webview, event| on_download(&app, event)
+        })
         .on_new_window({
             let app = app.clone();
             move |url, _features| {
                 // clone() để không giữ tham chiếu State qua hết vòng lặp message
                 // loop — manager có thể giải chấp state giữa chừng.
                 let queue = app.state::<navigation::PopupQueue>().inner().clone();
-                let allow = app
-                    .state::<std::sync::atomic::AtomicBool>()
-                    .inner()
-                    .clone();
+                let allow = app.state::<std::sync::atomic::AtomicBool>().inner().clone();
                 navigation::handle_new_window(&queue, &allow, url)
             }
         });
     let Some(window) = app.get_window("main") else {
         return;
     };
-    match window.add_child(builder, LogicalPosition::new(0.0, TOOLBAR_HEIGHT), content_size(app)) {
+    match window.add_child(
+        builder,
+        LogicalPosition::new(0.0, TOOLBAR_HEIGHT),
+        content_size(app),
+    ) {
         Ok(_) => state.mark_created(id),
         Err(e) => log::error!("không tạo được webview {label}: {e}"),
     }
@@ -405,7 +481,10 @@ pub fn layout(app: &AppHandle, state: &BrowserState) {
     };
     let size = size.to_logical::<f64>(scale);
     if let Some(toolbar) = app.get_webview("toolbar") {
-        let _ = toolbar.set_size(LogicalSize::new(size.width, TOOLBAR_HEIGHT));
+        let _ = toolbar.set_size(LogicalSize::new(
+            size.width,
+            toolbar_height_for(size.height),
+        ));
     }
     for tab in state.snapshot().tabs {
         if !tab.created {
@@ -441,13 +520,125 @@ pub fn on_page_load<R: tauri::Runtime>(
             }
             state.set_loading(id, false);
             // M2: ghi lịch sử toàn cục khi DB khả dụng.
-            if let Some(db) = app.try_state::<crate::db::DbState>().and_then(|d| d.0.as_ref()) {
+            // M4: chế độ riêng tư không ghi lịch sử.
+            if let Some(db) = app
+                .try_state::<crate::db::DbState>()
+                .and_then(|d| d.0.as_ref())
+                .filter(|_| !state.is_private())
+            {
                 let title = state.title_of(id);
                 let _ = db.record_history(&title, url.as_str());
             }
         }
     }
     emit_state(app, &state);
+}
+
+/// M2/M6: lưu danh sách tab hiện tại vào DB (phiên). Gọi khi đóng cửa sổ và định kỳ.
+pub fn persist_session(app: &AppHandle, state: &BrowserState) {
+    if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.as_ref()) {
+        let snap = state.snapshot();
+        let active_index = snap
+            .active_tab
+            .and_then(|a| snap.tabs.iter().position(|t| t.id == a))
+            .map(|p| p as i64)
+            .unwrap_or(-1);
+        let tabs: Vec<crate::db::SessionTab> = snap
+            .tabs
+            .iter()
+            .map(|t| crate::db::SessionTab {
+                url: t.url.clone(),
+                title: t.title.clone(),
+            })
+            .collect();
+        if let Err(e) = db.save_session(&tabs, active_index) {
+            crate::diagnostics::log("error", &format!("lưu phiên thất bại: {e}"));
+        }
+    }
+}
+
+/// M15: đuôi file có thể thực thi hoặc chạy script trên Windows.
+const RISKY_EXTENSIONS: &[&str] = &[
+    "exe", "bat", "cmd", "com", "scr", "ps1", "msi", "vbs", "js", "jse", "wsf", "lnk", "reg",
+    "dll", "hta", "jar",
+];
+
+/// Với file rủi ro, tải về sẽ có thêm đuôi .download để không chạy trực tiếp.
+pub fn is_risky_file(name: &str) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| RISKY_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// M3: xử lý sự kiện tải xuống. Lưu vào thư mục Downloads của người dùng,
+/// không ghi đè file cũ, và ghi lịch sử tải vào DB khi hoàn tất.
+fn on_download(app: &AppHandle, event: DownloadEvent<'_>) -> bool {
+    match event {
+        DownloadEvent::Requested { url, destination } => {
+            if let Ok(dir) = app.path().download_dir() {
+                let name = url
+                    .path_segments()
+                    .and_then(|segs| segs.filter(|p| !p.is_empty()).last())
+                    .map(sanitize_file_name)
+                    .unwrap_or_else(|| "download".to_string());
+                let name = if is_risky_file(&name) {
+                    format!("{name}.download")
+                } else {
+                    name
+                };
+                *destination = unique_path(&dir, &name);
+            }
+            true
+        }
+        DownloadEvent::Finished { url, path, success } => {
+            if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.as_ref()) {
+                let path_str = path.as_deref().and_then(|p| p.to_str()).unwrap_or("");
+                let _ = db.record_download(url.as_str(), path_str, success);
+            }
+            true
+        }
+        _ => true,
+    }
+}
+
+/// Bỏ ký tự không hợp lệ trên Windows và giới hạn độ dài tên file.
+fn sanitize_file_name(raw: &str) -> String {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| {
+            if c.is_control() || "<>:\"/\\|?*".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        "download".to_string()
+    } else {
+        trimmed.chars().take(120).collect()
+    }
+}
+
+/// Tạo đường dẫn chưa tồn tại: "file.zip" → "file (1).zip" nếu đã có.
+fn unique_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let mut candidate = dir.join(name);
+    let p = std::path::Path::new(name);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("download");
+    let ext = p.extension().and_then(|s| s.to_str());
+    let mut n = 1;
+    while candidate.exists() && n < 1000 {
+        let file = match ext {
+            Some(e) => format!("{stem} ({n}).{e}"),
+            None => format!("{stem} ({n})"),
+        };
+        candidate = dir.join(file);
+        n += 1;
+    }
+    candidate
 }
 
 /// Tên webview do ta đặt theo quy ước `tab-<id>`; webview khác trả None.
@@ -523,6 +714,42 @@ mod tests {
             assert!(steps <= MAX_HISTORY as u32, "lịch sử không bị chặn");
         }
         assert_eq!(steps, MAX_HISTORY as u32 - 1);
+    }
+
+    #[test]
+    fn pin_moves_tab_to_front() {
+        let s = BrowserState::new();
+        let a = s.add_tab("https://a.test/".into());
+        let b = s.add_tab("https://b.test/".into());
+        s.set_pinned(b, true).unwrap();
+        let snap = s.snapshot();
+        assert_eq!(snap.tabs[0].id, b);
+        assert!(snap.tabs[0].pinned);
+        assert_eq!(snap.tabs[1].id, a);
+    }
+
+    #[test]
+    fn private_flag_round_trips() {
+        let s = BrowserState::new();
+        assert!(!s.is_private());
+        s.set_private(true);
+        assert!(s.is_private());
+        assert!(s.snapshot().private);
+    }
+
+    #[test]
+    fn risky_files_are_detected() {
+        assert!(is_risky_file("setup.EXE"));
+        assert!(is_risky_file("script.ps1"));
+        assert!(!is_risky_file("report.pdf"));
+        assert!(!is_risky_file("archive"));
+    }
+
+    #[test]
+    fn file_names_are_sanitized() {
+        assert_eq!(sanitize_file_name("a:b*c?.zip"), "a_b_c_.zip");
+        assert_eq!(sanitize_file_name("..."), "download");
+        assert_eq!(sanitize_file_name(""), "download");
     }
 
     #[test]

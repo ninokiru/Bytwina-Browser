@@ -1,15 +1,16 @@
 use std::sync::atomic::Ordering;
 
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::browser::{self, BrowserState};
 use crate::navigation::{self, PopupQueue, NEW_TAB_URL};
+use crate::terms;
 
 /// Lệnh IPC duy nhất toolbar được gọi. Tham số đầu luôn là action string;
 /// mọi lệnh async để tránh deadlock WebView2 trên Windows (ADR-001).
 #[tauri::command]
-async fn browser_command(
+pub async fn browser_command(
     app: AppHandle,
     state: State<'_, BrowserState>,
     queue: State<'_, PopupQueue>,
@@ -27,6 +28,9 @@ async fn browser_command(
     match action.as_str() {
         "state" => Ok(serde_json::to_value(state.snapshot()).unwrap()),
         "new_tab" => {
+            if !terms::is_accepted(&app) {
+                return Err("cần chấp nhận điều khoản trước".into());
+            }
             let url = args
                 .as_ref()
                 .and_then(|a| a.get("url"))
@@ -56,6 +60,9 @@ async fn browser_command(
             Ok(Value::Null)
         }
         "navigate" => {
+            if !terms::is_accepted(&app) {
+                return Err("cần chấp nhận điều khoản trước".into());
+            }
             let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
             let target = navigation::to_url(&arg("input")?);
             browser::navigate_to(&app, &state, id, &target).await;
@@ -102,13 +109,17 @@ async fn browser_command(
         }
         // ===== M2: bookmarks / history / settings / session =====
         "bookmark_add" => with_db(&app, |db| {
-            db.add_bookmark(&arg("title")?, &arg("url")?, &arg("folder").unwrap_or_default())?;
+            db.add_bookmark(
+                &arg("title")?,
+                &arg("url")?,
+                &arg("folder").unwrap_or_default(),
+            )?;
             Ok(())
-        })?,
+        }),
         "bookmark_remove" => with_db(&app, |db| {
             db.remove_bookmark(arg("id")?.parse().map_err(|_| "id không hợp lệ")?)
-        })?,
-        "bookmark_list" => with_db(&app, |db| to_json(db.list_bookmarks()?))?,
+        }),
+        "bookmark_list" => with_db(&app, |db| to_json(db.list_bookmarks()?)),
         "history_search" => with_db(&app, |db| {
             let q = args
                 .as_ref()
@@ -116,15 +127,15 @@ async fn browser_command(
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             to_json(db.search_history(q, 200)?)
-        })?,
+        }),
         "history_clear" => with_db(&app, |db| {
             db.clear_history()?;
             Ok(())
-        })?,
+        }),
         "settings_set" => with_db(&app, |db| {
             db.set_setting(&arg("key")?, &arg("value")?)?;
             Ok(Value::Null)
-        })?,
+        }),
         "settings_get" => with_db(&app, |db| db.get_setting(&arg("key")?)),
         "session_save" => with_db(&app, |db| {
             let snap = state.snapshot();
@@ -143,12 +154,93 @@ async fn browser_command(
                 .collect::<Vec<_>>();
             db.save_session(&tabs, active_index)?;
             Ok(())
-        })?,
-        "session_load" => with_db(&app, |db| db.load_session())?,
+        }),
+        "session_load" => with_db(&app, |db| db.load_session()),
         "session_clear" => with_db(&app, |db| {
             db.clear_session()?;
             Ok(())
-        })?,
+        }),
+        // ===== M3: tải xuống =====
+        "downloads_list" => with_db(&app, |db| db.list_downloads()),
+        "downloads_clear" => with_db(&app, |db| {
+            db.clear_downloads()?;
+            Ok(())
+        }),
+        // ===== M4: riêng tư và xóa dữ liệu =====
+        "private_set" => {
+            state.set_private(arg("on")? == "1");
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "clear_data" => with_db(&app, |db| {
+            db.clear_history()?;
+            db.clear_downloads()?;
+            db.clear_session()?;
+            Ok(())
+        }),
+        // ===== M5: ghim tab và nhóm tab =====
+        "pin_tab" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            state.set_pinned(id, arg("on")? == "1")?;
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "set_group" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            let group = arg("group").unwrap_or_default();
+            let group = group.trim();
+            let value = if group.is_empty() {
+                None
+            } else {
+                Some(group.chars().take(24).collect::<String>())
+            };
+            state.set_group(id, value)?;
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        // ===== Điều khoản =====
+        "terms_status" => Ok(serde_json::json!({
+            "accepted": terms::is_accepted(&app),
+            "version": terms::TERMS_VERSION,
+        })),
+        "terms_accept" => {
+            terms::accept(&app)?;
+            browser::set_toolbar_full(false);
+            browser::layout(&app, &state);
+            if state.snapshot().tabs.is_empty() {
+                let id = state.add_tab(navigation::HOME_URL.to_string());
+                state.activate(id)?;
+                browser::navigate_to(&app, &state, id, navigation::HOME_URL).await;
+            }
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "terms_decline" => {
+            app.exit(0);
+            Ok(Value::Null)
+        }
+        // ===== M15: xóa dữ liệu theo tên miền =====
+        "site_clear_data" => with_db(&app, |db| db.clear_history_for_host(&arg("host")?)),
+        // ===== M10: danh sách đọc =====
+        "reading_add" => with_db(&app, |db| {
+            db.add_reading(&arg("title").unwrap_or_default(), &arg("url")?)?;
+            Ok(())
+        }),
+        "reading_list" => with_db(&app, |db| db.list_reading()),
+        "reading_remove" => with_db(&app, |db| {
+            db.remove_reading(arg("id")?.parse().map_err(|_| "id không hợp lệ")?)
+        }),
+        // ===== M7: chẩn đoán =====
+        "diagnostics" => {
+            let db_available = app
+                .try_state::<crate::db::DbState>()
+                .map(|s| s.0.is_some())
+                .unwrap_or(false);
+            Ok(
+                serde_json::to_value(crate::diagnostics::collect(db_available))
+                    .unwrap_or(Value::Null),
+            )
+        }
         other => Err(format!("lệnh không biết: {other}")),
     }
 }
