@@ -59,11 +59,18 @@ jobs:
           set +e
           cargo clippy --all-targets --message-format=short -- -D warnings 2>&1 | tee clippy.txt
           status=${PIPESTATUS[0]}
-          # Ghi tối đa 9 lỗi đầu tiên thành annotation để đọc được từ API/Giao diện.
-          # message-format=short in tiền tố đường dẫn nên không neo đầu dòng.
-          grep -E '(: error|: warning)' clippy.txt | head -n 9 | while IFS= read -r line; do
+          # Ghi lỗi đầu tiên thành annotation để đọc được từ API/Giao diện.
+          hits=$(grep -Ei 'error|warning' clippy.txt | head -n 9)
+          if [ -z "$hits" ]; then hits=$(tail -n 9 clippy.txt); fi
+          printf '%s\n' "$hits" | while IFS= read -r line; do
             echo "::error::$line"
           done
+          {
+            echo '### Clippy'
+            echo '```'
+            tail -c 40000 clippy.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
       - name: Check
         run: cargo check --all-targets
