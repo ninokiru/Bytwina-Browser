@@ -64,7 +64,7 @@ pub async fn browser_command(
                 return Err("cần chấp nhận điều khoản trước".into());
             }
             let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
-            let target = navigation::to_url(&arg("input")?);
+            let target = navigation::to_url_with(&arg("input")?, search_prefix(&app));
             browser::navigate_to(&app, &state, id, &target).await;
             browser::emit_state(&app, &state);
             Ok(Value::Null)
@@ -230,6 +230,19 @@ pub async fn browser_command(
         "reading_remove" => with_db(&app, |db| {
             db.remove_reading(arg("id")?.parse().map_err(|_| "id không hợp lệ")?)
         }),
+        // ===== Cài đặt: phóng to =====
+        "zoom_set" => {
+            let percent: f64 = arg("percent")?.parse().map_err(|_| "tỷ lệ không hợp lệ")?;
+            if !(25.0..=500.0).contains(&percent) {
+                return Err("tỷ lệ phải từ 25 đến 500".into());
+            }
+            with_db(&app, |db| {
+                db.set_setting("zoom", &percent.to_string())?;
+                Ok(Value::Null)
+            })?;
+            browser::apply_zoom(&app, &state);
+            Ok(Value::Null)
+        }
         // ===== M7: chẩn đoán =====
         "diagnostics" => {
             let db_available = app
@@ -243,6 +256,16 @@ pub async fn browser_command(
         }
         other => Err(format!("lệnh không biết: {other}")),
     }
+}
+
+/// Tiền tố tìm kiếm theo cài đặt `searchEngine` (mặc định DuckDuckGo).
+fn search_prefix(app: &AppHandle) -> &'static str {
+    let key = app
+        .try_state::<crate::db::DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("searchEngine").ok().flatten())
+        .unwrap_or_default();
+    navigation::engine_prefix(&key)
 }
 
 fn with_db<R: serde::Serialize>(

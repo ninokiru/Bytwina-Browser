@@ -433,10 +433,8 @@ impl Db {
                 })
             })
             .map_err(|e| e.to_string())?;
-        let out = rows
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|e| e.to_string());
-        out
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
     }
 
     pub fn clear_downloads(&self) -> Result<(), String> {
@@ -484,10 +482,8 @@ impl Db {
                 })
             })
             .map_err(|e| e.to_string())?;
-        let out = rows
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|e| e.to_string());
-        out
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
     }
 
     pub fn remove_reading(&self, id: i64) -> Result<(), String> {

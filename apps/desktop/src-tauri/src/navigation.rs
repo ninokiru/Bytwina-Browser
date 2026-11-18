@@ -15,7 +15,15 @@ const SEARCH_ENGINE: &str = "https://duckduckgo.com/?q=";
 /// - scheme khác (file, javascript, data…) → từ chối, coi như tìm kiếm;
 /// - trông như tên miền (không khoảng trắng, có dấu chấm) → https;
 /// - còn lại → tìm kiếm DuckDuckGo.
+/// Như `to_url_with`, dùng công cụ tìm kiếm mặc định (DuckDuckGo).
+#[allow(dead_code)]
 pub fn to_url(input: &str) -> String {
+    to_url_with(input, SEARCH_ENGINE)
+}
+
+/// Chuyển ô nhập thành URL; `engine` là tiền tố tìm kiếm (xem `engine_prefix`).
+pub fn to_url_with(input: &str, engine: &str) -> String {
+    let search = |s: &str| format!("{engine}{}", urlencode(s));
     let input = input.trim();
     if input.is_empty() {
         return NEW_TAB_URL.to_string();
@@ -47,8 +55,14 @@ pub fn to_url(input: &str) -> String {
     }
 }
 
-fn search(input: &str) -> String {
-    format!("{SEARCH_ENGINE}{}", urlencode(input))
+/// Tiền tố URL của công cụ tìm kiếm theo khóa cài đặt `searchEngine`; khóa lạ → DuckDuckGo.
+pub fn engine_prefix(key: &str) -> &'static str {
+    match key {
+        "google" => "https://www.google.com/search?q=",
+        "bing" => "https://www.bing.com/search?q=",
+        "brave" => "https://search.brave.com/search?q=",
+        _ => SEARCH_ENGINE,
+    }
 }
 
 fn urlencode(s: &str) -> String {
@@ -171,6 +185,7 @@ fn is_local(url: &Url) -> bool {
 /// - http: chỉ cho localhost (trang http khác bị chặn);
 /// - about:blank: cho phép (trang trống của tab mới);
 /// - mọi giao thức khác (file, javascript, data...): không cho.
+///
 /// Không ghi URL vào nhật ký khi chặn.
 pub fn page_navigation_allowed(url: &Url) -> bool {
     let allowed = match url.scheme() {

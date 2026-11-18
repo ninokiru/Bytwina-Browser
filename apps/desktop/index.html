@@ -1,8 +1,36 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <title>Bytwina Browser</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f2f2f4;
+        --surface: #ffffff;
+        --border: #d0d0d6;
+        --text: #111111;
+        --muted: #666666;
+        --accent-bg: #e0ecff;
+        --accent-border: #7aa7ff;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #1e1e22;
+        --surface: #2a2a30;
+        --border: #44444c;
+        --text: #eeeeee;
+        --muted: #aaaaaa;
+        --accent-bg: #2c3f5e;
+        --accent-border: #4f7cc4;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

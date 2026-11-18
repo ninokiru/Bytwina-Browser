@@ -170,6 +170,7 @@ impl BrowserState {
         self.lock().active
     }
 
+    #[allow(dead_code)]
     pub fn is_active(&self, id: u32) -> bool {
         self.lock().active == Some(id)
     }
@@ -224,6 +225,7 @@ impl BrowserState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn persisted_tabs(&self) -> Vec<PersistedTab> {
         self.lock()
             .tabs
@@ -341,6 +343,8 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
     }
     let builder = WebviewBuilder::new(&label, WebviewUrl::External(BLANK_URL.parse().unwrap()))
         .on_navigation(navigation::page_navigation_allowed)
+        // Chế độ riêng tư: tab mới không giữ cookie trong profile (cần WebView2 ≥ 101.0.1210.39).
+        .incognito(state.is_private())
         .on_document_title_changed({
             let app = app.clone();
             move |webview, title| {
@@ -363,9 +367,9 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
             move |url, _features| {
                 // clone() để không giữ tham chiếu State qua hết vòng lặp message
                 // loop — manager có thể giải chấp state giữa chừng.
-                let queue = app.state::<navigation::PopupQueue>().inner().clone();
-                let allow = app.state::<std::sync::atomic::AtomicBool>().inner().clone();
-                navigation::handle_new_window(&queue, &allow, url)
+                let queue = app.state::<navigation::PopupQueue>().inner();
+                let allow = app.state::<std::sync::atomic::AtomicBool>().inner();
+                navigation::handle_new_window(queue, allow, url)
             }
         });
     let Some(window) = app.get_window("main") else {
@@ -376,7 +380,11 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
         LogicalPosition::new(0.0, TOOLBAR_HEIGHT),
         content_size(app),
     ) {
-        Ok(_) => state.mark_created(id),
+        Ok(wv) => {
+            state.mark_created(id);
+            // Phóng to theo cài đặt đã lưu (áp dụng cho webview mới tạo).
+            let _ = wv.set_zoom(zoom_factor(app));
+        }
         Err(e) => log::error!("không tạo được webview {label}: {e}"),
     }
 }
@@ -534,6 +542,65 @@ pub fn on_page_load<R: tauri::Runtime>(
     emit_state(app, &state);
 }
 
+/// Hệ số phóng to đang lưu (cài đặt `zoom`, phần trăm). Mặc định 100%.
+pub fn zoom_factor(app: &AppHandle) -> f64 {
+    app.try_state::<DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("zoom").ok().flatten())
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|p| (25.0..=500.0).contains(p))
+        .map(|p| p / 100.0)
+        .unwrap_or(1.0)
+}
+
+/// Áp dụng phóng to hiện hành cho mọi webview nội dung đang có.
+pub fn apply_zoom(app: &AppHandle, state: &BrowserState) {
+    let factor = zoom_factor(app);
+    for tab in state.snapshot().tabs {
+        if let Some(wv) = app.get_webview(&tab.label) {
+            let _ = wv.set_zoom(factor);
+        }
+    }
+}
+
+/// Thư mục tải xuống: cài đặt `downloadDir` nếu là thư mục có sẵn, không thì Downloads mặc định.
+fn download_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let custom = app
+        .try_state::<DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("downloadDir").ok().flatten())
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_dir());
+    match custom {
+        Some(p) => Ok(p),
+        None => app.path().download_dir().map_err(|e| e.to_string()),
+    }
+}
+
+/// Cài đặt `clearOnExit`: xóa cookie và dữ liệu duyệt web khi thoát.
+/// Gọi bất đồng bộ nên có thể chưa xong trước khi tiến trình kết thúc (chưa kiểm chứng trên Windows).
+pub fn clear_browsing_on_exit(app: &AppHandle, state: &BrowserState) {
+    let enabled = app
+        .try_state::<DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("clearOnExit").ok().flatten())
+        .is_some_and(|v| v == "1");
+    if !enabled {
+        return;
+    }
+    // Mọi webview dùng chung một profile nên chỉ cần gọi trên một webview.
+    let first = state
+        .snapshot()
+        .tabs
+        .iter()
+        .find_map(|t| app.get_webview(&t.label));
+    if let Some(wv) = first {
+        let _ = wv.clear_all_browsing_data();
+    }
+}
+
 /// M2/M6: lưu danh sách tab hiện tại vào DB (phiên). Gọi khi đóng cửa sổ và định kỳ.
 pub fn persist_session(app: &AppHandle, state: &BrowserState) {
     if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.clone()) {
@@ -577,10 +644,10 @@ pub fn is_risky_file(name: &str) -> bool {
 fn on_download(app: &AppHandle, event: DownloadEvent<'_>) -> bool {
     match event {
         DownloadEvent::Requested { url, destination } => {
-            if let Ok(dir) = app.path().download_dir() {
+            if let Ok(dir) = download_dir(app) {
                 let name = url
                     .path_segments()
-                    .and_then(|segs| segs.filter(|p| !p.is_empty()).last())
+                    .and_then(|segs| segs.filter(|p| !p.is_empty()).next_back())
                     .map(sanitize_file_name)
                     .unwrap_or_else(|| "download".to_string());
                 let name = if is_risky_file(&name) {
@@ -706,7 +773,7 @@ mod tests {
         }
         let snap = s.snapshot();
         let t = snap.tabs.iter().find(|t| t.id == id).unwrap();
-        assert!(t.can_go_back());
+        assert!(t.can_go_back);
         // Quay lui tối đa còn MAX_HISTORY - 1 bước.
         let mut steps = 0;
         while s.back_target(id).is_some() {

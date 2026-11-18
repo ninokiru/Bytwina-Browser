@@ -5,6 +5,7 @@ import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
+import { applyTheme } from "./theme";
 
 const DEFAULT_HOME = "https://example.com/";
 
@@ -28,6 +29,9 @@ export default function App() {
         if (v === "vi" || v === "en") setLang(v as Lang);
       })
       .catch(() => undefined);
+    void cmd("settings_get", { key: "theme" })
+      .then((v) => applyTheme(typeof v === "string" ? v : "system"))
+      .catch(() => applyTheme("system"));
     void cmd("settings_get", { key: "homeUrl" })
       .then((v) => {
         if (typeof v === "string" && v) setHome(v);
@@ -314,7 +318,8 @@ const termsBox: CSSProperties = {
   padding: 24,
   fontFamily: "system-ui",
   fontSize: 14,
-  background: "#fff",
+  background: "var(--surface)",
+  color: "var(--text)",
 };
 
 const bar: CSSProperties = {
@@ -325,8 +330,9 @@ const bar: CSSProperties = {
   boxSizing: "border-box",
   fontFamily: "system-ui",
   fontSize: 13,
-  background: "#f2f2f4",
-  borderBottom: "1px solid #d0d0d6",
+  background: "var(--bg)",
+  color: "var(--text)",
+  borderBottom: "1px solid var(--border)",
 };
 const row: CSSProperties = {
   display: "flex",
@@ -341,19 +347,26 @@ const tab: CSSProperties = {
   width: 160,
   flexShrink: 0,
   padding: "4px 8px",
-  border: "1px solid #d0d0d6",
+  border: "1px solid var(--border)",
   borderRadius: 6,
-  background: "#fff",
+  background: "var(--surface)",
+  color: "var(--text)",
   cursor: "pointer",
   display: "flex",
   alignItems: "center",
   gap: 4,
 };
-const tabActive: CSSProperties = { ...tab, background: "#e0ecff", borderColor: "#7aa7ff" };
+const tabActive: CSSProperties = {
+  ...tab,
+  background: "var(--accent-bg)",
+  borderColor: "var(--accent-border)",
+};
 const address: CSSProperties = {
   flex: 1,
   padding: "6px 10px",
-  border: "1px solid #d0d0d6",
+  border: "1px solid var(--border)",
   borderRadius: 6,
+  background: "var(--surface)",
+  color: "var(--text)",
   fontSize: 13,
 };

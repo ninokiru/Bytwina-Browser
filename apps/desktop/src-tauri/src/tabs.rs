@@ -30,6 +30,7 @@ pub struct TabInfo {
 /// Thông tin cần để khôi phục tab lúc khởi động (M2 — session restoration).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct PersistedTab {
     pub url: String,
     #[allow(dead_code)] // ghi DB ở M2.

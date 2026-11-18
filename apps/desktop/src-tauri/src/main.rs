@@ -67,18 +67,28 @@ fn main() {
             )?;
 
             // M2: khôi phục phiên trước; nếu không có thì mở tab HOME_URL.
-            let (tabs, active_idx): (Vec<db::SessionTab>, i64) = app
+            let startup_mode = app
                 .state::<DbState>()
                 .0
                 .as_ref()
-                .and_then(|d| d.load_session().ok())
-                .unwrap_or_default();
+                .and_then(|d| d.get_setting("startupMode").ok().flatten())
+                .unwrap_or_else(|| "restore".to_string());
+            let (tabs, active_idx): (Vec<db::SessionTab>, i64) = if startup_mode == "restore" {
+                app.state::<DbState>()
+                    .0
+                    .as_ref()
+                    .and_then(|d| d.load_session().ok())
+                    .unwrap_or_default()
+            } else {
+                (Vec::new(), -1)
+            };
             if !accepted {
                 // Chưa chấp nhận điều khoản: không mở tab nào.
             } else if tabs.is_empty() {
-                let id = state.add_tab(navigation::HOME_URL.to_string());
+                let start = startup_url(app.handle(), &startup_mode);
+                let id = state.add_tab(start.clone());
                 state.activate(id).ok();
-                open_first(app.handle(), &state, id, navigation::HOME_URL);
+                open_first(app.handle(), &state, id, &start);
             } else {
                 let mut first_id = None;
                 for (i, t) in tabs.iter().enumerate() {
@@ -100,6 +110,7 @@ fn main() {
                     WindowEvent::Resized(_) => browser::layout(&handle, &layout_state),
                     // M2: lưu danh sách tab khi người dùng đóng cửa sổ.
                     WindowEvent::CloseRequested { .. } => {
+                        browser::clear_browsing_on_exit(&handle, &layout_state);
                         browser::persist_session(&handle, &layout_state)
                     }
                     _ => {}
@@ -117,6 +128,19 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy Bytwina Browser");
+}
+
+/// URL mở khi khởi động: chế độ "blank" → trang trống; còn lại → trang chủ đã lưu.
+fn startup_url(app: &tauri::AppHandle, mode: &str) -> String {
+    if mode == "blank" {
+        return navigation::NEW_TAB_URL.to_string();
+    }
+    app.try_state::<DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("homeUrl").ok().flatten())
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| navigation::to_url(&s))
+        .unwrap_or_else(|| navigation::HOME_URL.to_string())
 }
 
 /// Tạo webview cho tab đầu tiên và nạp URL (kể cả URL khôi phục).
