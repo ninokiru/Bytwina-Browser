@@ -499,7 +499,7 @@ impl Db {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_extra {
     use super::*;
 
     /// CSDL tạm trong thư mục hệ thống, mỗi test một thư mục riêng.

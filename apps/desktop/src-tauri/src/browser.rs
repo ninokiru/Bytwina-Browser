@@ -523,7 +523,7 @@ pub fn on_page_load<R: tauri::Runtime>(
             // M4: chế độ riêng tư không ghi lịch sử.
             if let Some(db) = app
                 .try_state::<crate::db::DbState>()
-                .and_then(|d| d.0.as_ref())
+                .and_then(|d| d.0.clone())
                 .filter(|_| !state.is_private())
             {
                 let title = state.title_of(id);
@@ -536,7 +536,7 @@ pub fn on_page_load<R: tauri::Runtime>(
 
 /// M2/M6: lưu danh sách tab hiện tại vào DB (phiên). Gọi khi đóng cửa sổ và định kỳ.
 pub fn persist_session(app: &AppHandle, state: &BrowserState) {
-    if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.as_ref()) {
+    if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.clone()) {
         let snap = state.snapshot();
         let active_index = snap
             .active_tab
@@ -593,7 +593,7 @@ fn on_download(app: &AppHandle, event: DownloadEvent<'_>) -> bool {
             true
         }
         DownloadEvent::Finished { url, path, success } => {
-            if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.as_ref()) {
+            if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.clone()) {
                 let path_str = path.as_deref().and_then(|p| p.to_str()).unwrap_or("");
                 let _ = db.record_download(url.as_str(), path_str, success);
             }

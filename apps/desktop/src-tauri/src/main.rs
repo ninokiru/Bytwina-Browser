@@ -32,7 +32,7 @@ fn main() {
             );
         })
         .setup(|app| {
-            let state: BrowserState = app.state();
+            let state: BrowserState = app.state::<BrowserState>().inner().clone();
             // M2: DB bật cho mọi tính năng lưu trữ; lỗi mở DB chỉ tắt M2, không chết app.
             if let Ok(dir) = app.path().app_data_dir() {
                 diagnostics::init(dir);
@@ -46,15 +46,14 @@ fn main() {
                 .path()
                 .app_data_dir()
                 .ok()
-                .and_then(db::open)
-                .map(DbState);
+                .and_then(db::open);
             if storage.is_none() {
                 diagnostics::log(
                     "error",
                     "không mở được CSDL; tắt lịch sử, dấu trang và phiên",
                 );
             }
-            app.manage(storage.unwrap_or_default());
+            app.manage(DbState(storage));
             // Điều khoản: chưa chấp nhận thì thanh công cụ phủ cửa sổ và không mở tab.
             let accepted = terms::is_accepted(app.handle());
             browser::set_toolbar_full(!accepted);
