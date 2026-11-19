@@ -82,10 +82,6 @@ impl Tab {
         }
     }
 
-    fn label(&self) -> &str {
-        &self.label
-    }
-
     fn can_go_back(&self) -> bool {
         self.hist_idx > 0
     }
@@ -462,9 +458,10 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
             // M4: gắn bộ chặn ngay khi có webview, trước navigation đầu tiên.
             // Chỉ webview tab đi qua đây; `toolbar` tạo riêng ở main.rs nên không bị.
             #[cfg(target_os = "windows")]
-            if let Some(blocker) = app.try_state::<crate::filters::BlockerHandle>() {
-                let handle = blocker.inner().clone();
-                drop(blocker);
+            if let Some(handle) = app
+                .try_state::<crate::filters::BlockerHandle>()
+                .map(|blocker| blocker.inner().clone())
+            {
                 crate::filters::webview2::attach(&wv, handle);
             }
             // Phóng to theo cài đặt đã lưu (áp dụng cho webview mới tạo).
