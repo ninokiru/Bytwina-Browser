@@ -677,9 +677,10 @@ pub fn on_page_load<R: tauri::Runtime>(
             {
                 let title = state.title_of(id);
                 let url = url.as_str().to_string();
-                let _ = tauri::async_runtime::spawn_blocking(move || {
+                // JoinHandle bị bỏ ngay: lời gọi chỉ cần được xếp hàng, không chờ kết quả.
+                drop(tauri::async_runtime::spawn_blocking(move || {
                     let _ = db.record_history(&title, &url);
-                });
+                }));
             }
         }
     }
