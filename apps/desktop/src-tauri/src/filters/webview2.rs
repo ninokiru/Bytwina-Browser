@@ -30,11 +30,11 @@ use windows::Win32::System::Com::IStream;
 
 use crate::filters::BlockerHandle;
 
-/// Handler + registration token, giữ theo nhãn webview.
-///
-/// Interface COM của windows 0.62 không phải `Send`/`Sync`, nên đăng ký nằm trong
-/// `thread_local`: mọi callback WebView2 và mọi closure của `with_webview` đều chạy
-/// trên đúng luồng UI này.
+// Handler + registration token, giữ theo nhãn webview.
+//
+// Interface COM của windows 0.62 không phải `Send`/`Sync`, nên đăng ký nằm trong
+// `thread_local`: mọi callback WebView2 và mọi closure của `with_webview` đều chạy
+// trên đúng luồng UI này.
 thread_local! {
     static REGISTRATIONS: RefCell<HashMap<String, (ICoreWebView2WebResourceRequestedEventHandler, i64)>> =
         RefCell::new(HashMap::new());
@@ -93,13 +93,16 @@ pub fn attach(webview: &Webview<tauri::Wry>, handle: BlockerHandle) {
 
         let handler = WebResourceRequestedEventHandler::create(closure);
         // webview2-com 0.39 sinh token dạng i64 thô, không phải EventRegistrationToken.
+        // `Param<Interface>` chỉ thỏa khi truyền theo tham chiếu (interface không Copy).
         let mut token: i64 = 0;
-        unsafe {
-            match core.add_WebResourceRequested(handler.clone(), &mut token) {
-                Ok(()) => REGISTRATIONS
-                    .with(|r| r.borrow_mut().insert(label.clone(), (handler, token))),
-                Err(e) => log::error!("[{label}] đăng ký WebResourceRequested thất bại: {e}"),
-            };
+        let added = unsafe { core.add_WebResourceRequested(&handler, &mut token) };
+        match added {
+            Ok(()) => {
+                REGISTRATIONS.with(|r| {
+                    r.borrow_mut().insert(label.clone(), (handler, token));
+                });
+            }
+            Err(e) => log::error!("[{label}] đăng ký WebResourceRequested thất bại: {e}"),
         }
     });
 }

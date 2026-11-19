@@ -53,7 +53,7 @@ pub fn update_lists(dir: &Path) -> Result<usize, String> {
     let mut ok = 0usize;
     for (name, url) in DEFAULT_LISTS {
         match agent
-            .get(url)
+            .get(*url)
             .call()
             .and_then(|mut resp| resp.body_mut().read_to_string())
         {
@@ -260,7 +260,7 @@ pub struct BlockerHandle(pub Arc<Blocker>);
 /// So sánh thô hai host sau khi bỏ `www.`. Thà nhận nhầm là cùng bên (không chặn
 /// tài liệu) còn hơn chặn nhầm trang người dùng đang mở.
 fn is_third_party(url: &str, source_url: &str) -> bool {
-    let (Some(page), Some(target)) = (source_host(source_url), host_of(url).ok()) else {
+    let (Some(page), Some(target)) = (source_host(source_url), host_of(url)) else {
         return false;
     };
     registrable(&page) != registrable(&target)
@@ -340,18 +340,18 @@ fn load_cache(dir: &Path) -> Option<Engine> {
     Some(engine)
 }
 
-fn host_of(url: &str) -> Result<String, ()> {
+fn host_of(url: &str) -> Option<String> {
     url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(str::to_owned))
-        .ok_or(())
+
 }
 
 fn source_host(source_url: &str) -> Option<String> {
     if source_url.is_empty() {
         return None;
     }
-    host_of(source_url).ok()
+    host_of(source_url)
 }
 
 #[cfg(test)]

@@ -794,7 +794,15 @@ pub fn persist_session(app: &AppHandle, state: &BrowserState) {
         // bỏ qua để không chiếm khóa CSDL và không ghi file vô ích.
         let signature: String = tabs
             .iter()
-            .map(|t| format!("{}|{}|{}|{};", t.url, t.title, t.pinned, t.group))
+            .map(|t| {
+                format!(
+                    "{}|{}|{}|{};",
+                    t.url,
+                    t.title,
+                    t.pinned,
+                    t.group.as_deref().unwrap_or("")
+                )
+            })
             .chain(std::iter::once(format!("active:{active_index}")))
             .collect();
         if LAST_SESSION_SIGNATURE

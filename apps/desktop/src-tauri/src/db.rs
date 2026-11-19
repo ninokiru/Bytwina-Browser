@@ -268,10 +268,10 @@ impl Db {
                      ORDER BY visited_at DESC LIMIT ?1",
                 )
                 .map_err(|e| e.to_string())?;
-            stmt.query_map(params![limit], history_row)
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?
+            let rows = stmt
+                .query_map(params![limit], history_row)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
         } else {
             let pattern = format!("%{keyword}%");
             let mut stmt = c
@@ -280,10 +280,10 @@ impl Db {
                      WHERE url LIKE ?1 OR title LIKE ?1 ORDER BY visited_at DESC LIMIT ?2",
                 )
                 .map_err(|e| e.to_string())?;
-            stmt.query_map(params![pattern, limit], history_row)
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?
+            let rows = stmt
+                .query_map(params![pattern, limit], history_row)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
         };
         Ok(items)
     }
