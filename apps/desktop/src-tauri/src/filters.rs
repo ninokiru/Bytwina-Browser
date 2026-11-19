@@ -550,8 +550,8 @@ mod tests {
         std::fs::write(&txt, "||track.example^\n").unwrap();
         // Ngày giờ tương lai để kết luận không phụ thuộc độ phân giải đồng hồ filesystem.
         let newer = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
-        let mut file = std::fs::OpenOptions::new().write(true).open(&txt).unwrap();
-        file.set_times(std::fs::FileTimes::new().set_modified(newer)).unwrap();
+        let file = std::fs::OpenOptions::new().write(true).open(&txt).unwrap();
+        file.set_modified(newer).unwrap();
 
         let fresh = Blocker::new(dir);
         fresh.load().unwrap();
