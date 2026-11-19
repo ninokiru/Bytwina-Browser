@@ -24,6 +24,11 @@ fn main() {
     tauri::Builder::default()
         .manage(BrowserState::new())
         .manage(PopupQueue::default())
+        // MacosLauncher bắt buộc trong chữ ký nhưng bị bỏ qua trên Windows.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![commands::browser_command])
         .on_page_load(|webview, payload| {
             let app = webview.app_handle().clone();

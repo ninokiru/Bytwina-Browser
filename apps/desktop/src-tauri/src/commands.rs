@@ -1,5 +1,8 @@
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
+// Cho `app.autolaunch()` (bật/tắt khởi động cùng Windows) — gọi phía Rust nên
+// không cần mục quyền trong capabilities, vốn chỉ gate lời gọi từ JS.
+use tauri_plugin_autostart::ManagerExt as _;
 
 use crate::browser::{self, BrowserState};
 use crate::navigation::{self, PopupQueue, NEW_TAB_URL};
@@ -387,8 +390,78 @@ pub async fn browser_command(
                 .map_err(|e| e.to_string())??;
             Ok(serde_json::json!({ "lists": lists }))
         }
+        // ===== M12: hệ thống =====
+        "autostart_get" => app
+            .autolaunch()
+            .is_enabled()
+            .map(Value::Bool)
+            .map_err(|e| e.to_string()),
+        "autostart_set" => {
+            let manager = app.autolaunch();
+            let result = if arg("on")? == "1" {
+                manager.enable()
+            } else {
+                manager.disable()
+            };
+            result.map_err(|e| format!("không đổi được khởi động cùng Windows: {e}"))?;
+            Ok(Value::Null)
+        }
+        "open_default_apps" => open_default_apps_page(),
+        "settings_reset" => {
+            with_db(&app, |db| {
+                for (key, value) in DEFAULT_SETTINGS {
+                    db.set_setting(key, value)?;
+                }
+                Ok(Value::Null)
+            })?;
+            // Đặt lại phải đổi cả hành vi đang chạy, không chỉ hàng trong CSDL.
+            browser::set_vertical(false);
+            browser::apply_zoom(&app, &state);
+            if let Some(blocker) = app.try_state::<crate::filters::BlockerHandle>() {
+                blocker.0.set_enabled(true);
+            }
+            browser::relayout(&app, &state);
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
         other => Err(format!("lệnh không biết: {other}")),
     }
+}
+
+/// Giá trị ghi khi người dùng bấm "Đặt lại cài đặt".
+/// Cố ý KHÔNG gồm: `workspace` (dữ liệu người dùng tạo), `acceptedTermsVersion`
+/// (sự đồng ý đã cho là sự thật pháp lý, không phải tuỳ chọn) và `language`
+/// (đổi ngôn ngữ giao diện ngay giữa phiên sẽ gây bối rối).
+const DEFAULT_SETTINGS: &[(&str, &str)] = &[
+    ("homeUrl", navigation::HOME_URL),
+    ("searchEngine", "duckduckgo"),
+    ("startupMode", "restore"),
+    ("downloadDir", ""),
+    ("zoom", "100"),
+    ("theme", "system"),
+    ("clearOnExit", "0"),
+    ("sleepMinutes", "0"),
+    ("tabLayout", "horizontal"),
+    ("adblockEnabled", "1"),
+    ("adblockDisabledSites", ""),
+];
+
+/// Mở trang "Ứng dụng mặc định" của Windows, cách Chrome/Edge dùng thay vì tự ghi
+/// đăng ký Association. Chuỗi cố định, không trộn dữ liệu người dùng vào lệnh.
+#[cfg(target_os = "windows")]
+fn open_default_apps_page() -> Result<Value, String> {
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", "ms-settings:defaultapps"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW: không nhấp nháy cửa sổ console
+        .spawn()
+        .map(|_| Value::Null)
+        .map_err(|e| format!("không mở được trang Cài đặt Windows: {e}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn open_default_apps_page() -> Result<Value, String> {
+    Err("chỉ Windows mới có trang ứng dụng mặc định để mở".into())
 }
 
 /// Tên workspace đang lưu (rỗng: hồ sơ mặc định).

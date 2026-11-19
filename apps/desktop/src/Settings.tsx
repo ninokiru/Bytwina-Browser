@@ -68,13 +68,17 @@ export default function Settings({
   const [ab, setAb] = useState<AdblockStatus | null>(null);
   const [abBusy, setAbBusy] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
+  // null: chưa kiểm tra được (plugin lỗi hoặc nền tảng không hỗ trợ).
+  const [autostart, setAutostart] = useState<boolean | null>(null);
+  const [resetArmed, setResetArmed] = useState(false);
 
   const loadAdblock = () =>
     cmd("adblock_status")
       .then((s) => setAb(s as AdblockStatus))
       .catch(() => setAb(null));
 
-  useEffect(() => {
+  // Đọc lại toàn bộ giá trị đang lưu — dùng lúc mở trang và sau khi đặt lại.
+  const loadAll = () => {
     const get = (key: string) =>
       cmd("settings_get", { key })
         .then((v) => (typeof v === "string" ? v : null))
@@ -105,6 +109,13 @@ export default function Settings({
     void loadAdblock();
     // Mục "Bạn và Bytwina" hiện thông tin ngay, không cần bấm nút lấy chẩn đoán.
     void loadDiagnostics();
+    void cmd("autostart_get")
+      .then((v) => setAutostart(v === true))
+      .catch(() => setAutostart(null));
+  };
+
+  useEffect(() => {
+    loadAll();
   }, []);
 
   // Tô sáng mục lục theo phần đang xem (cách của chrome://settings).
@@ -193,6 +204,30 @@ export default function Settings({
       .then(loadAdblock)
       .catch(() => undefined)
       .finally(() => setAbBusy(false));
+  };
+
+  const changeAutostart = (on: boolean) => {
+    setAutostart(on);
+    void cmd("autostart_set", { on: on ? "1" : "0" }).catch((e) => {
+      // Windows có thể từ chối ghi khoá Run: trả lại đúng trạng thái thật.
+      setAutostart(!on);
+      setMessage(String(e));
+    });
+  };
+
+  const openDefaultApps = () => {
+    void cmd("open_default_apps").catch((e) => setMessage(String(e)));
+  };
+
+  const resetSettings = () => {
+    setResetArmed(false);
+    void cmd("settings_reset")
+      .then(() => {
+        applyTheme("system");
+        setMessage(t("settings.resetDone"));
+        loadAll();
+      })
+      .catch((e) => setMessage(String(e)));
   };
 
   return (
@@ -445,9 +480,42 @@ export default function Settings({
           </Section>
 
           <Section id="settings-system" title={t("settings.system")}>
-            <p className="settings-soon">
-              <AlertIcon /> {t("settings.systemNote")}
+            <label className="settings-row">
+              {t("settings.autostart")}
+              <input
+                type="checkbox"
+                checked={autostart === true}
+                disabled={autostart === null}
+                onChange={(e) => changeAutostart(e.target.checked)}
+              />
+            </label>
+            <p className="hint">
+              {autostart === null ? t("settings.autostartUnknown") : t("settings.autostartHint")}
             </p>
+            <button type="button" className="btn" onClick={openDefaultApps}>
+              {t("settings.openDefaultApps")}
+            </button>
+            <p className="hint">{t("settings.defaultAppsHint")}</p>
+            {resetArmed ? (
+              <>
+                <p className="hint">{t("settings.resetConfirm")}</p>
+                <button type="button" className="btn danger" onClick={resetSettings}>
+                  {t("settings.resetNow")}
+                </button>
+                <button type="button" className="btn" onClick={() => setResetArmed(false)}>
+                  {t("settings.resetCancel")}
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn" onClick={() => setResetArmed(true)}>
+                {t("settings.reset")}
+              </button>
+            )}
+            {message && (
+              <p className="hint ok">
+                <CheckCircleIcon /> {message}
+              </p>
+            )}
           </Section>
         </div>
       </main>

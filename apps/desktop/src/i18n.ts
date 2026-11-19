@@ -55,8 +55,19 @@ const vi = {
   "settings.passwordsNote":
     "Bytwina chưa có kho mật khẩu: bản hiện tại không lưu và không tự điền mật khẩu.",
   "settings.system": "Hệ thống",
-  "settings.systemNote":
-    "Chưa có tuỳ chọn đặt Bytwina làm trình duyệt mặc định hay khởi động cùng Windows.",
+  "settings.autostart": "Khởi động Bytwina khi đăng nhập Windows",
+  "settings.autostartHint":
+    "Bật sẽ thêm ứng dụng vào danh sách tự chạy của tài khoản này (kho Run trong registry).",
+  "settings.autostartUnknown": "Không đọc được trạng thái tự khởi động trên máy này.",
+  "settings.openDefaultApps": "Chọn trình duyệt mặc định",
+  "settings.defaultAppsHint":
+    "Mở trang Ứng dụng mặc định của Windows; hệ điều hành quyết định trình duyệt nào mở liên kết.",
+  "settings.reset": "Đặt lại cài đặt về mặc định",
+  "settings.resetConfirm":
+    "Tìm kiếm, trang chủ, khi khởi động, giao diện, hiệu suất và chặn quảng cáo trở về mặc định. Dấu trang, lịch sử, workspace và mật khẩu không bị xoá.",
+  "settings.resetNow": "Đặt lại ngay",
+  "settings.resetCancel": "Huỷ",
+  "settings.resetDone": "Đã đặt lại cài đặt.",
   "settings.language": "Ngôn ngữ",
   "settings.langVi": "Tiếng Việt",
   "settings.langEn": "English",
@@ -203,8 +214,19 @@ const en: Record<Key, string> = {
   "settings.passwordsNote":
     "Bytwina has no password store yet: this build neither saves nor autofills passwords.",
   "settings.system": "System",
-  "settings.systemNote":
-    "No option yet to make Bytwina the default browser or start it with Windows.",
+  "settings.autostart": "Start Bytwina when I sign in to Windows",
+  "settings.autostartHint":
+    "Turning this on adds the app to this account's run list (the registry Run key).",
+  "settings.autostartUnknown": "Could not read the autostart state on this machine.",
+  "settings.openDefaultApps": "Choose your default browser",
+  "settings.defaultAppsHint":
+    "Opens the Windows Default apps page; the operating system decides which browser opens links.",
+  "settings.reset": "Restore preferences to their defaults",
+  "settings.resetConfirm":
+    "Search, homepage, startup, appearance, performance and ad blocking return to defaults. Bookmarks, history, workspaces and passwords are not deleted.",
+  "settings.resetNow": "Reset settings",
+  "settings.resetCancel": "Cancel",
+  "settings.resetDone": "Preferences restored to defaults.",
   "settings.language": "Language",
   "settings.langVi": "Tiếng Việt",
   "settings.langEn": "English",

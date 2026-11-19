@@ -27,6 +27,9 @@ ureq = "3"
 # Bộ gom rác cấp phát thay thế, chỉ bật khi đo hiệu năng (docs/PERFORMANCE.md).
 # Không bật mặc định: chưa có số đo trên máy đích và phần lớn RAM thuộc tiến trình WebView2.
 mimalloc = { version = "0.1", default-features = false, optional = true }
+# M12: "khởi động cùng Windows". Chỉ dùng phía Rust (ManagerExt::autolaunch) nên
+# không cần thêm quyền trong capabilities — capability chỉ gate lời gọi từ JS.
+tauri-plugin-autostart = "2"
 
 [features]
 default = []
