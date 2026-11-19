@@ -1,11 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+/// Bộ cấp phát thay thế, chỉ bật khi đo: `cargo build --features alloc-mimalloc`.
+#[cfg(feature = "alloc-mimalloc")]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use tauri::{LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
 
 mod browser;
 mod commands;
 mod db;
 mod diagnostics;
+mod filters;
 mod navigation;
 mod tabs;
 mod terms;
@@ -47,6 +53,39 @@ fn main() {
                 );
             }
             app.manage(DbState(storage));
+            // M4: bộ chặn quảng cáo. Nạp engine ở luồng nền vì parse hàng chục
+            // nghìn luật mất vài giây trên máy cấu hình thấp.
+            let filters_dir = app
+                .path()
+                .app_data_dir()
+                .map(|d| d.join("filters"))
+                .unwrap_or_default();
+            let blocker = filters::BlockerHandle(std::sync::Arc::new(filters::Blocker::new(
+                filters_dir,
+            )));
+            if let Some(db) = app.state::<DbState>().0.clone() {
+                let enabled = db
+                    .get_setting("adblockEnabled")
+                    .ok()
+                    .flatten()
+                    .map(|v| v != "0")
+                    .unwrap_or(true);
+                blocker.0.set_enabled(enabled);
+                if let Ok(Some(list)) = db.get_setting("adblockDisabledSites") {
+                    for host in serde_json::from_str::<Vec<String>>(&list).unwrap_or_default() {
+                        blocker.0.set_site_disabled(&host, true);
+                    }
+                }
+            }
+            app.manage(blocker.clone());
+            {
+                let handle = blocker.0.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = handle.load() {
+                        diagnostics::log("error", &format!("bộ chặn quảng cáo: {e}"));
+                    }
+                });
+            }
             // Điều khoản: chưa chấp nhận thì thanh công cụ phủ cửa sổ và không mở tab.
             let accepted = terms::is_accepted(app.handle());
             browser::set_toolbar_full(!accepted);

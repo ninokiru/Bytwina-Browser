@@ -17,6 +17,12 @@ static TOOLBAR_FULL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 /// Khi true, thanh công cụ phủ toàn cửa sổ để hiển thị bảng nổi (đã mở rộng).
 static PANEL_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Hình học lần bố trí gần nhất (rộng, cao, chế độ phủ) để bỏ sự kiện resize trùng.
+static LAST_LAYOUT: Mutex<Option<(u64, u64, bool)>> = Mutex::new(None);
+
+/// Chuỗi mô tả phiên đã ghi lần cuối, để vòng tự động lưu bỏ qua khi không có gì thay đổi.
+static LAST_SESSION_SIGNATURE: Mutex<Option<String>> = Mutex::new(None);
+
 pub fn set_toolbar_full(on: bool) {
     TOOLBAR_FULL.store(on, std::sync::atomic::Ordering::SeqCst);
 }
@@ -45,6 +51,8 @@ struct Inner {
 
 struct Tab {
     id: u32,
+    /// Nhãn webview, dựng một lần: trước đây mỗi lần vẽ lại `format!` cho mọi tab.
+    label: String,
     url: String,
     title: String,
     loading: bool,
@@ -61,6 +69,7 @@ impl Tab {
     fn new(id: u32, url: String, title: String) -> Self {
         Self {
             id,
+            label: format!("tab-{id}"),
             url,
             title,
             loading: false,
@@ -73,8 +82,8 @@ impl Tab {
         }
     }
 
-    fn label(&self) -> String {
-        format!("tab-{}", self.id)
+    fn label(&self) -> &str {
+        &self.label
     }
 
     fn can_go_back(&self) -> bool {
@@ -328,7 +337,7 @@ impl BrowserState {
             .iter()
             .map(|t| TabInfo {
                 id: t.id,
-                label: t.label(),
+                label: t.label.clone(),
                 url: t
                     .current()
                     .map(|e| e.url.clone())
@@ -349,6 +358,35 @@ impl BrowserState {
             active_tab: inner.active,
             private: inner.private,
         }
+    }
+
+    /// Nhãn các webview đã tạo, không clone URL/tiêu đề: nhóm hàm bố cục và ẩn tab
+    /// chạy mỗi lần kéo cỡ cửa sổ. Chỉ lấy danh sách rồi thả khóa trước khi gọi
+    /// WebView2, vì callback của webview có thể quay lại khóa này trên cùng luồng.
+    pub fn created_labels(&self) -> Vec<String> {
+        self.lock()
+            .tabs
+            .iter()
+            .filter(|t| t.created)
+            .map(|t| t.label.clone())
+            .collect()
+    }
+
+    pub fn tab_ids(&self) -> Vec<u32> {
+        self.lock().tabs.iter().map(|t| t.id).collect()
+    }
+
+    /// URL hiện hành của một tab (kể cả vị trí đang đứng trong lịch sử tab).
+    pub fn url_of(&self, id: u32) -> Option<String> {
+        let inner = self.lock();
+        inner
+            .tabs
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| match t.current() {
+                Some(e) => e.url.clone(),
+                None => t.url.clone(),
+            })
     }
 }
 
@@ -421,6 +459,14 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
     ) {
         Ok(wv) => {
             state.mark_created(id);
+            // M4: gắn bộ chặn ngay khi có webview, trước navigation đầu tiên.
+            // Chỉ webview tab đi qua đây; `toolbar` tạo riêng ở main.rs nên không bị.
+            #[cfg(target_os = "windows")]
+            if let Some(blocker) = app.try_state::<crate::filters::BlockerHandle>() {
+                let handle = blocker.inner().clone();
+                drop(blocker);
+                crate::filters::webview2::attach(&wv, handle);
+            }
             // Phóng to theo cài đặt đã lưu (áp dụng cho webview mới tạo).
             let _ = wv.set_zoom(zoom_factor(app));
         }
@@ -476,9 +522,9 @@ pub fn stop_active(app: &AppHandle, state: &BrowserState) {
 
 /// Ẩn mọi webview nội dung đã tạo trừ `active`.
 pub fn hide_others(app: &AppHandle, state: &BrowserState, active: u32) {
-    for tab in state.snapshot().tabs {
-        if tab.id != active && tab.created {
-            if let Some(wv) = app.get_webview(&tab.label) {
+    for label in state.created_labels() {
+        if tab_id_of(&label) != Some(active) {
+            if let Some(wv) = app.get_webview(&label) {
                 let _ = wv.hide();
             }
         }
@@ -491,12 +537,7 @@ pub fn focus_tab(app: &AppHandle, state: &BrowserState, id: u32) {
     // Bảng nổi đang phủ cửa sổ: vẫn tạo/nạp tab mới nhưng giữ ẩn, nếu không
     // webview vừa tạo sẽ nằm trên và che mất bảng.
     if PANEL_OPEN.load(std::sync::atomic::Ordering::SeqCst) {
-        let url = state
-            .snapshot()
-            .tabs
-            .iter()
-            .find(|t| t.id == id)
-            .map(|t| t.url.clone());
+        let url = state.url_of(id);
         ensure_webview(app, state, id);
         if let (Some(u), Some(wv)) = (url, app.get_webview(&label)) {
             if let Ok(parsed) = u.parse() {
@@ -512,12 +553,7 @@ pub fn focus_tab(app: &AppHandle, state: &BrowserState, id: u32) {
         let _ = wv.set_focus();
     } else {
         // Lazy: tab chưa từng hiển thị → tạo webview rồi nạp URL đang lưu.
-        let url = state
-            .snapshot()
-            .tabs
-            .iter()
-            .find(|t| t.id == id)
-            .map(|t| t.url.clone());
+        let url = state.url_of(id);
         ensure_webview(app, state, id);
         if let (Some(u), Some(wv)) = (url, app.get_webview(&label)) {
             if let Ok(parsed) = u.parse() {
@@ -529,6 +565,9 @@ pub fn focus_tab(app: &AppHandle, state: &BrowserState, id: u32) {
 
 pub fn close_webview(app: &AppHandle, id: u32) {
     if let Some(wv) = app.get_webview(&format!("tab-{id}")) {
+        // Huỷ đăng ký chặn trước khi đóng để handler giải phóng cùng tab.
+        #[cfg(target_os = "windows")]
+        crate::filters::webview2::detach(&wv);
         let _ = wv.close();
     }
 }
@@ -545,19 +584,25 @@ pub fn layout(app: &AppHandle, state: &BrowserState) {
         return;
     };
     let size = size.to_logical::<f64>(scale);
-    if let Some(toolbar) = app.get_webview("toolbar") {
-        let _ = toolbar.set_size(LogicalSize::new(
-            size.width,
-            toolbar_height_for(size.height),
-        ));
+    // Kéo mép cửa sổ sinh rất nhiều sự kiện Resized; hình học không đổi thì bỏ,
+    // tránh gọi COM thừa cho từng tab.
+    let mode = PANEL_OPEN.load(std::sync::atomic::Ordering::Relaxed)
+        || TOOLBAR_FULL.load(std::sync::atomic::Ordering::Relaxed);
+    let key = (size.width.to_bits(), size.height.to_bits(), mode);
+    if LAST_LAYOUT.lock().map(|g| *g == Some(key)).unwrap_or(false) {
+        return;
     }
-    for tab in state.snapshot().tabs {
-        if !tab.created {
-            continue;
-        }
-        if let Some(wv) = app.get_webview(&tab.label) {
+    if let Ok(mut g) = LAST_LAYOUT.lock() {
+        *g = Some(key);
+    }
+    let content = LogicalSize::new(size.width, (size.height - TOOLBAR_HEIGHT).max(0.0));
+    if let Some(toolbar) = app.get_webview("toolbar") {
+        let _ = toolbar.set_size(LogicalSize::new(size.width, toolbar_height_for(size.height)));
+    }
+    for label in state.created_labels() {
+        if let Some(wv) = app.get_webview(&label) {
             let _ = wv.set_position(LogicalPosition::new(0.0, TOOLBAR_HEIGHT));
-            let _ = wv.set_size(content_size(app));
+            let _ = wv.set_size(content);
         }
     }
 }
@@ -568,8 +613,8 @@ pub fn layout(app: &AppHandle, state: &BrowserState) {
 pub fn set_panel_open(app: &AppHandle, state: &BrowserState, on: bool) {
     PANEL_OPEN.store(on, std::sync::atomic::Ordering::SeqCst);
     if on {
-        for tab in state.snapshot().tabs {
-            if let Some(wv) = app.get_webview(&tab.label) {
+        for label in state.created_labels() {
+            if let Some(wv) = app.get_webview(&label) {
                 let _ = wv.hide();
             }
         }
@@ -635,10 +680,15 @@ pub fn sleep_idle_tabs(app: &AppHandle, state: &BrowserState) {
         return;
     }
     let limit = std::time::Duration::from_secs(minutes.saturating_mul(60));
-    for id in state.idle_candidates(limit) {
+    let idle = state.idle_candidates(limit);
+    if idle.is_empty() {
+        return;
+    }
+    for id in idle {
         close_webview(app, id);
         state.mark_sleeping(id);
     }
+    // Chỉ báo lại toolbar khi thực sự có tab ngủ: vòng lặp này chạy mỗi 30 giây.
     emit_state(app, state);
 }
 
@@ -656,8 +706,8 @@ pub fn zoom_factor(app: &AppHandle) -> f64 {
 /// Áp dụng phóng to hiện hành cho mọi webview nội dung đang có.
 pub fn apply_zoom(app: &AppHandle, state: &BrowserState) {
     let factor = zoom_factor(app);
-    for tab in state.snapshot().tabs {
-        if let Some(wv) = app.get_webview(&tab.label) {
+    for label in state.created_labels() {
+        if let Some(wv) = app.get_webview(&label) {
             let _ = wv.set_zoom(factor);
         }
     }
@@ -671,7 +721,7 @@ pub fn apply_private(app: &AppHandle, state: &BrowserState, on: bool) {
         return;
     }
     let active = state.active_id();
-    let ids: Vec<u32> = state.snapshot().tabs.iter().map(|t| t.id).collect();
+    let ids = state.tab_ids();
     state.set_private(on);
     for id in ids {
         close_webview(app, id);
@@ -740,8 +790,26 @@ pub fn persist_session(app: &AppHandle, state: &BrowserState) {
                 group: t.group.clone(),
             })
             .collect();
+        // Vòng lưu tự động chạy mỗi 30 giây; hầu hết lần không có gì thay đổi nên
+        // bỏ qua để không chiếm khóa CSDL và không ghi file vô ích.
+        let signature: String = tabs
+            .iter()
+            .map(|t| format!("{}|{}|{}|{};", t.url, t.title, t.pinned, t.group))
+            .chain(std::iter::once(format!("active:{active_index}")))
+            .collect();
+        if LAST_SESSION_SIGNATURE
+            .lock()
+            .map(|g| g.as_deref() == Some(signature.as_str()))
+            .unwrap_or(false)
+        {
+            return;
+        }
         if let Err(e) = db.save_session(&tabs, active_index) {
             crate::diagnostics::log("error", &format!("lưu phiên thất bại: {e}"));
+            return;
+        }
+        if let Ok(mut g) = LAST_SESSION_SIGNATURE.lock() {
+            *g = Some(signature);
         }
     }
 }
@@ -962,5 +1030,36 @@ mod tests {
         assert_eq!(s.title_of(id), "Trang X");
         let snap = s.snapshot();
         assert!(snap.tabs[0].pinned);
+    }
+
+    /// Số đo cho phần bố cục: đọc nhãn phải rẻ hơn nhiều so với đọc toàn bộ
+    /// trạng thái. Chạy bằng `cargo test --release -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn probe_state_read_paths() {
+        const N: u32 = 20_000;
+        let s = BrowserState::new();
+        for i in 0..20 {
+            let id = s.add_tab(format!(
+                "https://site{i}.example.vn/trang-chu?utm_source=home&page={i}"
+            ));
+            s.mark_created(id);
+            s.set_title(id, "Tiêu đề trang khá dài để đo chi phí sao chép");
+        }
+        let started = std::time::Instant::now();
+        for _ in 0..N {
+            std::hint::black_box(s.snapshot());
+        }
+        let full = started.elapsed();
+        let started = std::time::Instant::now();
+        for _ in 0..N {
+            std::hint::black_box(s.created_labels());
+        }
+        let labels = started.elapsed();
+        println!(
+            "20 tab — snapshot: {:.1} µs/lần, created_labels: {:.1} µs/lần",
+            full.as_secs_f64() * 1e6 / N as f64,
+            labels.as_secs_f64() * 1e6 / N as f64
+        );
     }
 }

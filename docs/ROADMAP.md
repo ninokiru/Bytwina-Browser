@@ -22,7 +22,12 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
   - [x] Chế độ riêng tư: không ghi lịch sử (cookie vẫn được lưu; xem docs/SECURITY.md)
   - [x] Xóa dữ liệu duyệt web (lịch sử, tải xuống, phiên)
   - [x] Chặn popup theo danh sách quảng cáo tối thiểu (không phải filter list bảo trì)
-  - [ ] Chặn tài nguyên quảng cáo/tracker trong trang (cần WebResourceRequested)
+  - [~] Chặn tài nguyên quảng cáo/tracker trong trang (ADR-015)
+    - [x] Engine adblock-rs 0.13 (bỏ `single-thread`), tải EasyList/EasyPrivacy/uBlock/ABPVN, cache engine đã serialize
+    - [x] IPC: `adblock_status`, `adblock_set`, `adblock_site`, `adblock_update`, `adblock_reload`
+    - [x] Mục Cài đặt: bật/tắt, số danh sách đang dùng, số request đã chặn, nút cập nhật
+    - [ ] Nối `WebResourceRequested` (đang làm — code COM webview2-com 0.39)
+    - [ ] M4b: ẩn phần tử (cosmetic) + scriptlet, bộ đếm theo tab, nút khiên trên ô địa chỉ
   - [ ] Quản lý quyền site (WebView2 permission handler, chưa khảo sát)
   - [x] Điều hướng link trong trang theo chính sách HTTPS-first (ADR-003, ADR-011)
 - [~] M5 — Tính năng nâng cao
@@ -32,7 +37,12 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
   - [ ] Reader mode (cần chèn script vào trang; chưa quyết định)
   - [ ] PDF: phụ thuộc WebView2, chưa kiểm tra
   - [ ] Trang tab mới có giao diện riêng
-- [ ] M6 — Hiệu năng (chưa có số đo)
+- [~] M6 — Hiệu năng
+  - [x] Giảm việc ở đường nóng: label cache, `created_labels()` thay `snapshot()` trong layout/ẩn tab/zoom, layout bỏ sự kiện trùng, vòng 30s không gửi trạng thái thừa (ADR-016)
+  - [x] Micro-probe trong Rust (`-- --ignored`) + workflow `benchmarks.yml` in số vào Summary
+  - [x] `strip = true`; feature `alloc-mimalloc` để A/B bộ cấp phát (mặc định tắt)
+  - [ ] Số đo thật trên máy Windows: cold/warm startup, RAM rảnh, 1/5/10 tab, chuyển tab, CPU nền (`scripts/bench.ps1`)
+  - [ ] Điều chỉnh ngưỡng tab ngủ và chính sách giữ trạng thái theo số đo
 - [ ] M7 — Phát hành
 
 

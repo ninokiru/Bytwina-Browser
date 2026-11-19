@@ -102,6 +102,15 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
     os: "Windows 11 (26100)",
     dbAvailable: true,
   }),
+  adblock_status: () => ({
+    enabled: true,
+    ready: true,
+    blocked: 128,
+    lists: ["easylist", "easyprivacy", "ublock-filters", "abpvn"],
+    disabledSites: ["shop.example.vn"],
+    dir: "C:\\Users\\duong\\AppData\\Roaming\\dev.bytwina.browser\\filters",
+  }),
+  adblock_update: () => ({ downloaded: 5 }),
 };
 
 (globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {

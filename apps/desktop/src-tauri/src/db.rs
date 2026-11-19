@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -6,14 +7,21 @@ use serde::{Deserialize, Serialize};
 
 /// Lưu trữ SQLite cho M2: bookmarks, history, preferences, session.
 /// Kết nối đặt sau Arc<Mutex> để các lệnh async dùng song song mà không giữ khóa DB.
+/// `settings` là bản sao toàn bộ bảng settings: đường đọc nóng (mỗi lượt điều hướng,
+/// mỗi lần tạo tab) không phải chạm khóa connection nữa.
 #[derive(Clone)]
 pub struct Db {
     conn: std::sync::Arc<Mutex<Connection>>,
+    settings: std::sync::Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Db {
     fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn settings_cache(&self) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
+        self.settings.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -59,16 +67,37 @@ fn now() -> i64 {
         .unwrap_or(0)
 }
 
+fn history_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryItem> {
+    Ok(HistoryItem {
+        id: r.get(0)?,
+        title: r.get(1)?,
+        url: r.get(2)?,
+        visited_at: r.get(3)?,
+    })
+}
+
 /// Mở DB và chạy migrations. Trả về None nếu môi trường không cho phép
 /// (mọi tính năng M2 tự tắt, trình duyệt nền vẫn chạy).
 pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     let _ = std::fs::create_dir_all(&app_data_dir);
     let conn = Connection::open(app_data_dir.join("bytwina.db")).ok()?;
-    conn.pragma_update(None, "journal_mode", "WAL").ok()?;
-    conn.pragma_update(None, "synchronous", "NORMAL").ok()?;
+    // WAL thất bại vẫn dùng được (vd. thư mục nằm trên ổ đồng bộ); không vì thế
+    // mà tắt toàn bộ lịch sử/dấu trang/phiên.
+    let _ = conn.pragma_update(None, "journal_mode", "WAL");
+    let _ = conn.pragma_update(None, "synchronous", "NORMAL");
     migrate(&conn).ok()?;
+    let mut cached = HashMap::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT key, value FROM settings") {
+        if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        {
+            for (k, v) in rows.flatten() {
+                cached.insert(k, v);
+            }
+        }
+    }
     Some(Db {
         conn: std::sync::Arc::new(Mutex::new(conn)),
+        settings: std::sync::Arc::new(Mutex::new(cached)),
     })
 }
 
@@ -203,35 +232,60 @@ impl Db {
     }
 
     pub fn record_history(&self, title: &str, url: &str) -> Result<(), String> {
-        self.conn()
-            .execute(
-                "INSERT INTO history (title, url, visited_at) VALUES (?1, ?2, ?3)",
-                params![title, url, now()],
-            )
-            .map_err(|e| e.to_string())?;
+        let c = self.conn();
+        // Reload và quay tới lui không nên tạo bản trùng: nếu bản ghi mới nhất đã là
+        // URL này thì chỉ bổ sung tiêu đề (lần đầu có thể chưa đọc được title).
+        let last: Option<String> = c
+            .query_row("SELECT url FROM history ORDER BY id DESC LIMIT 1", [], |r| r.get(0))
+            .ok();
+        if last.as_deref() == Some(url) {
+            if !title.is_empty() {
+                c.execute(
+                    "UPDATE history SET title = ?1 WHERE id = (SELECT MAX(id) FROM history)",
+                    params![title],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            return Ok(());
+        }
+        c.execute(
+            "INSERT INTO history (title, url, visited_at) VALUES (?1, ?2, ?3)",
+            params![title, url, now()],
+        )
+        .map_err(|e| e.to_string())?;
         Ok(())
     }
 
+    /// Tìm trong lịch sử. Để trống ô tìm kiếm là trường hợp phổ biến nhất nên đi
+    /// thẳng theo chỉ mục thời gian; `LIKE '%x%'` chỉ dùng khi có từ khóa.
     pub fn search_history(&self, query: &str, limit: i64) -> Result<Vec<HistoryItem>, String> {
         let c = self.conn();
-        let pattern = format!("%{query}%");
-        let mut stmt = c
-            .prepare(
-                "SELECT id, title, url, visited_at FROM history
-                 WHERE url LIKE ?1 OR title LIKE ?1 ORDER BY visited_at DESC LIMIT ?2",
-            )
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(params![pattern, limit], |r| {
-                Ok(HistoryItem {
-                    id: r.get(0)?,
-                    title: r.get(1)?,
-                    url: r.get(2)?,
-                    visited_at: r.get(3)?,
-                })
-            })
-            .map_err(|e| e.to_string())?;
-        rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
+        let keyword = query.trim();
+        let items = if keyword.is_empty() {
+            let mut stmt = c
+                .prepare(
+                    "SELECT id, title, url, visited_at FROM history
+                     ORDER BY visited_at DESC LIMIT ?1",
+                )
+                .map_err(|e| e.to_string())?;
+            stmt.query_map(params![limit], history_row)
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?
+        } else {
+            let pattern = format!("%{keyword}%");
+            let mut stmt = c
+                .prepare(
+                    "SELECT id, title, url, visited_at FROM history
+                     WHERE url LIKE ?1 OR title LIKE ?1 ORDER BY visited_at DESC LIMIT ?2",
+                )
+                .map_err(|e| e.to_string())?;
+            stmt.query_map(params![pattern, limit], history_row)
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?
+        };
+        Ok(items)
     }
 
     pub fn clear_history(&self) -> Result<(), String> {
@@ -249,24 +303,13 @@ impl Db {
                 params![key, value],
             )
             .map_err(|e| e.to_string())?;
+        // Ghi DB xong mới cập nhật bộ nhớ để cache không bao giờ đi trước sự thật.
+        self.settings_cache().insert(key.to_string(), value.to_string());
         Ok(())
     }
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
-        let c = self.conn();
-        c.query_row(
-            "SELECT value FROM settings WHERE key = ?1",
-            params![key],
-            |r| r.get::<_, String>(0),
-        )
-        .map(Some)
-        .or_else(|e| {
-            if e == rusqlite::Error::QueryReturnedNoRows {
-                Ok(None)
-            } else {
-                Err(e.to_string())
-            }
-        })
+        Ok(self.settings_cache().get(key).cloned())
     }
 
     /// Ghi lại danh sách tab hiện hành (session restore).
@@ -382,6 +425,20 @@ mod tests {
         assert_eq!(db.search_history("", 50).unwrap().len(), 2);
         db.clear_history().unwrap();
         assert!(db.search_history("", 50).unwrap().is_empty());
+    }
+
+    #[test]
+    fn repeated_visit_updates_last_row_instead_of_duplicating() {
+        let db = temp_db("hist-dedup");
+        db.record_history("", "https://one.test/").unwrap();
+        // Reload: cùng URL vẫn là bản ghi mới nhất → chỉ bổ sung tiêu đề.
+        db.record_history("Trang một", "https://one.test/").unwrap();
+        let rows = db.search_history("", 50).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title, "Trang một");
+        // URL khác vẫn tạo bản ghi mới.
+        db.record_history("Trang hai", "https://two.test/").unwrap();
+        assert_eq!(db.search_history("", 50).unwrap().len(), 2);
     }
 
     #[test]

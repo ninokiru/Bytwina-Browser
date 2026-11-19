@@ -15,7 +15,32 @@ url = "2"
 tokio = { version = "1", features = ["time"] }
 log = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
+# M4: chặn quảng cáo. Tắt feature `single-thread` mặc định để Engine là
+# Send + Sync (ADR-015); nếu giữ nguyên thì không chia sẻ được qua state Tauri.
+adblock = { version = "0.13", default-features = false, features = [
+    "embedded-domain-resolver",
+    "full-regex-handling",
+] }
+# Tải danh sách lọc lúc chạy. Thuần Rust, blocking (chạy trong luồng nền),
+# mặc định đã có rustls + gzip.
+ureq = "3"
+# Bộ gom rác cấp phát thay thế, chỉ bật khi đo hiệu năng (docs/PERFORMANCE.md).
+# Không bật mặc định: chưa có số đo trên máy đích và phần lớn RAM thuộc tiến trình WebView2.
+mimalloc = { version = "0.1", default-features = false, optional = true }
+
+[features]
+default = []
+alloc-mimalloc = ["dep:mimalloc"]
+
+# Phiên bản khớp đúng những gì Tauri/wry đang dùng để Cargo gộp về một bản
+# (webview2-com 0.39, windows 0.62). Không tự ý nâng: lệch phiên bản là hai bản
+# crate song song và kiểu COM không tương thích nhau.
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com"] }
 
 [profile.release]
 codegen-units = 1
 lto = true
+# Bỏ bảng ký hiệu: giảm kích thước bộ cài và phần ảnh ánh xạ khi chạy.
+strip = true

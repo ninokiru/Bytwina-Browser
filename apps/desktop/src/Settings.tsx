@@ -12,6 +12,15 @@ interface Diagnostics {
   dbAvailable: boolean;
 }
 
+interface AdblockStatus {
+  enabled: boolean;
+  ready: boolean;
+  blocked: number;
+  lists: string[];
+  disabledSites: string[];
+  dir: string;
+}
+
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200];
 
 // Mỗi mục đều được backend đọc từ CSDL (settings_get/settings_set) và có tác dụng thật.
@@ -34,6 +43,13 @@ export default function Settings({
   const [sleep, setSleep] = useState("0");
   const [message, setMessage] = useState("");
   const [diag, setDiag] = useState<Diagnostics | null>(null);
+  const [ab, setAb] = useState<AdblockStatus | null>(null);
+  const [abBusy, setAbBusy] = useState(false);
+
+  const loadAdblock = () =>
+    cmd("adblock_status")
+      .then((s) => setAb(s as AdblockStatus))
+      .catch(() => setAb(null));
 
   useEffect(() => {
     const get = (key: string) =>
@@ -59,6 +75,7 @@ export default function Settings({
       setClearOnExit(c === "1");
       if (sl) setSleep(sl);
     });
+    void loadAdblock();
   }, []);
 
   const save = (key: string, value: string) => {
@@ -93,6 +110,20 @@ export default function Settings({
 
   const loadDiagnostics = () => {
     void cmd("diagnostics").then((d) => setDiag(d as Diagnostics));
+  };
+
+  const changeAdblock = (on: boolean) => {
+    setAb((v) => (v ? { ...v, enabled: on } : v));
+    void cmd("adblock_set", { on: on ? "1" : "0" }).catch(() => undefined);
+  };
+
+  // Tải danh sách và dựng lại engine chạy ở luồng nền nên phải khoá nút.
+  const updateAdblock = () => {
+    setAbBusy(true);
+    void cmd("adblock_update")
+      .then(loadAdblock)
+      .catch(() => undefined)
+      .finally(() => setAbBusy(false));
   };
 
   return (
@@ -180,6 +211,28 @@ export default function Settings({
             ))}
           </select>
         </label>
+      </Section>
+
+      <Section title={t("settings.adblock")}>
+        <label className="settings-row">
+          {t("settings.adblockRow")}
+          <input
+            type="checkbox"
+            checked={ab?.enabled ?? true}
+            onChange={(e) => changeAdblock(e.target.checked)}
+          />
+        </label>
+        <p className="hint">
+          {t("settings.adblockLists")}:{" "}
+          {ab && ab.lists.length > 0 ? ab.lists.join(", ") : t("settings.adblockNone")}
+        </p>
+        <p className="hint">
+          {t("settings.adblockBlocked")}: {ab?.blocked ?? 0}
+        </p>
+        <p className="hint">{t("settings.adblockHint")}</p>
+        <button type="button" className="btn block" disabled={abBusy} onClick={updateAdblock}>
+          {abBusy ? t("settings.adblockUpdating") : t("settings.adblockUpdate")}
+        </button>
       </Section>
 
       <Section title={t("settings.privacy")}>

@@ -161,3 +161,61 @@
   - Trạng thái "cửa sổ mất tiêu điểm" chỉ dựa vào sự kiện focus/blur của webview toolbar, chưa kiểm chứng trên máy thật; nếu sai thì dải tab chỉ giữ màu thường.
   - `preview.tsx` không còn dò nút theo `title` (các nút đã đổi chỗ) mà theo thuộc tính `data-panel`.
 - **Chưa kiểm chứng:** Chưa chạy được trên Windows; màu và hình dạng chỉ đúng theo token đã đối chiếu, cần người dùng xem bản build thật.
+
+## ADR-015: Chặn quảng cáo bằng adblock-rs + WebResourceRequested của WebView2
+
+- **Trạng thái:** Chấp nhận một phần (2026-11-19). Bước chặn mạng đang làm; ẩn phần tử (cosmetic) để M4b.
+- **Bối cảnh:** Yêu cầu chặn quảng cáo mức Cốc Cốc/Brave. Ràng buộc đã xác minh:
+  - `WebviewBuilder::on_web_resource_request` của Tauri chỉ chạy cho protocol `tauri`, không áp dụng cho trang từ xa → không chặn bằng API Tauri.
+  - `WebResourceRequested` của WebView2 **không có `Cancel()`**; cách từ chối là tự tạo response rỗng (`CreateWebResourceResponse` + `put_Response`).
+  - `Fetch` không phải loại tài nguyên riêng (WebView2 gộp vào `XmlHttpRequest`); `WebSocket` không được đảm bảo chặn; `AddWebResourceRequestedFilter` bản 2 tham số bị lỗi với iframe nên phải dùng bản 3 tham số (source kinds).
+  - `reqwest` chỉ là phụ thuộc của Tauri trên Android/Apple → Windows không có sẵn HTTP client.
+- **Quyết định:**
+  - Engine lọc: crate `adblock` 0.13.6 (MPL-2.0, Brave viết), `default-features = false` để bỏ `single-thread`; nếu giữ thì `Engine` là `!Send + !Sync` và không đặt vào state Tauri được.
+  - Engine bất biến ⇒ mỗi lần cập nhật danh sách là dựng engine mới rồi hoán đổi `Arc`; đọc bằng `RwLock` vì callback chặn chạy trên luồng UI của cửa sổ.
+  - Điểm chặn: COM `ICoreWebView2::add_WebResourceRequested` qua `Webview::with_webview`, cài cho từng webview tab trước điều hướng đầu tiên, không cài cho `toolbar`.
+  - Danh sách: EasyList, EasyPrivacy, uBlock filters/privacy, ABPVN (tiếng Việt). Tải lúc chạy bằng `ureq` 3 (blocking → chạy ở luồng nền), cache `.txt` + engine đã serialize trong `app_data/filters/`. Không nhúng danh sách vào repo vì giấy phép GPL-3 và dung lượng.
+  - Loại `document`/`main_frame`/`sub_frame`: WebView2 không phân biệt khung gốc với iframe, nên chỉ chặn khi đích và trang nguồn khác miền; nếu không thì bỏ qua. Đây là đánh đổi để không bao giờ làm trắng trang người dùng đang mở.
+  - `Request::new(..., method)` truyền `"GET"` cố định ở bản này ⇒ các luật có `$method=post` chưa áp dụng.
+- **Giới hạn đã biết (ghi rõ, không nói quá):**
+  - Chưa có cosmetic filtering (ẩn phần tử), chưa có scriptlet/`$redirect` (cần `resource-assembler` + tài nguyên uBO), chưa chặn `websocket` tin cậy, `$popup` bị adblock-rs bỏ qua, chưa có `inline-script`.
+  - Bộ đếm "đã chặn" là số request toàn phiên, chưa tách theo tab; chưa có per-site bật/tắt trên UI (mới có API).
+  - Chưa kiểm chứng trên Windows: toàn bộ số liệu về hiệu năng và độ phủ chỉ là tài liệu của crate/WebView2, chưa đo trên máy thật.
+- **Phương án đã loại:**
+  - Extension MV3 (uBlock Origin Lite) trong WebView2: phải bật `AreBrowserExtensionsEnabled` từ trước khi tạo environment, phần mở rộng gắn với user data folder chứ không theo tab, Microsoft không tài liệu hóa `declarativeNetRequest` trong WebView2.
+  - Chỉ dùng Tracking Prevention của Edge (`PreferredTrackingPreventionLevel`): chặn theo danh sách của Microsoft, không áp dụng được EasyList và không ẩn được phần tử.
+
+## ADR-016: Tối ưu đường nóng bằng cách giảm việc, không thêm thư viện
+
+- **Trạng thái:** Chấp nhận (2026-11-19). Chưa có số đo — xem docs/PERFORMANCE.md.
+- **Bối cảnh:** Máy đích Pentium G7400 / 8 GB. Điểm nóng phía Rust là những hàm gọi rất dày:
+  `layout()` chạy theo từng sự kiện resize, `hide_others()`/`apply_zoom()` theo mỗi lần chuyển tab,
+  `should_block()` theo mỗi request mạng.
+- **Phát hiện khi đọc code:** `BrowserState::snapshot()` clone URL + tiêu đề + `format!` nhãn cho mọi tab.
+  Hàm này được gọi ở 9 chỗ nội bộ, trong đó 6 chỗ chỉ cần nhãn hoặc chỉ cần id.
+- **Quyết định:**
+  - Lưu `label` ngay khi tạo tab; thêm `created_labels()`, `tab_ids()`, `url_of()` để đường bố cục không dựng `StatePayload`.
+    Các hàm này lấy danh sách rồi **thả khóa trước khi gọi WebView2**, vì callback của webview có thể quay lại cùng khóa này trên cùng luồng.
+  - `layout()` tính kích thước vùng nội dung một lần; bỏ qua sự kiện resize có cùng hình học và cùng chế độ phủ (`LAST_LAYOUT`).
+  - Vòng lặp 30 giây chỉ gửi trạng thái khi thực sự có tab ngủ.
+  - Bộ chặn: cờ `has_overrides` để bỏ hẳn việc soát tên miền khi người dùng chưa tắt chặn ở đâu; so sánh host bằng `eq_ignore_ascii_case` thay vì `to_ascii_lowercase` cấp phát mỗi request.
+  - `strip = true` cho bản release.
+- **Không làm (và lý do):**
+  - Không thêm `arc-swap` cho `Engine`: khóa đọc `RwLock` không cạnh tranh rẻ hơn nhiều so với parse URL bên trong `check_network_request`; thêm dependency để tiết kiệm vài chục ns là không xứng.
+  - Không tự viết bộ lọc tiền kiểm theo tên miền: adblock-rs đã đánh chỉ mục theo token của hostname; làm lại là trùng lặp.
+  - Không bật `panic = "abort"`: chưa kiểm chứng tương tác unwind với callback COM.
+  - `mimalloc` chỉ là feature `alloc-mimalloc`, mặc định tắt; chỉ bật khi `benchmarks.yml` cho thấy khác biệt.
+- **Bằng chứng cần có trước khi nói "nhanh hơn":** số từ `cargo test --release -- --ignored --nocapture`
+  và `scripts/bench.ps1` trên máy Windows thật.
+
+### Vòng 2 — audit tầng DB/IPC (cùng ADR-016)
+
+Subagent đọc `db.rs`/`commands.rs`/`browser.rs`/`main.rs` và đếm số lần chạm CSDL theo từng thao tác. Đã sửa:
+- `Db` giữ bản sao toàn bộ bảng `settings` (`Arc<Mutex<HashMap>>`, nạp một lần lúc mở DB). `get_setting` không còn lấy khóa connection; `set_setting` ghi DB trước rồi cập nhật bộ nhớ nên cache không đi trước sự thật. Trước đó mỗi lượt điều hướng đọc 2-3 lần (`acceptedTermsVersion`, `searchEngine`, `zoom`).
+- `terms::is_accepted` chỉ cache kết quả "đã chấp nhận" (AtomicBool). Không cache kết quả false để việc chấp nhận ở lần chạy sau vẫn đúng.
+- `search_history` tách nhánh: ô tìm kiếm trống thì lấy `ORDER BY visited_at DESC LIMIT n` theo chỉ mục; chỉ dùng `LIKE '%x%'` (không index được) khi có từ khóa. Mở bảng Lịch sử trước đây luôn là một lần quét cả bảng.
+- `record_history` không tạo bản trùng: nếu bản ghi mới nhất đã là URL này thì chỉ cập nhật tiêu đề. Đây là nguồn khiến bảng lịch sử phình và làm nặng chính truy vấn ở trên.
+- `persist_session` so chữ ký phiên với lần ghi gần nhất và bỏ qua khi không đổi (vòng 30 giây trước đây luôn mở transaction `DELETE` + `INSERT` lại toàn bộ tab).
+- Pragma `journal_mode=WAL` / `synchronous` không còn làm tắt cả CSDL khi thất bại (thư mục dữ liệu nằm trên ổ đồng bộ vẫn dùng được).
+
+Chưa làm, cần số đo trước: rời việc nạp engine chặn quảng cáo khỏi lúc khởi động (hiện chạy nền ngay khi mở app, chiếm 1 nhân trên máy 2 nhân), và FTS5 thay `LIKE` cho tìm lịch sử.

@@ -267,8 +267,65 @@ pub async fn browser_command(
                     .unwrap_or(Value::Null),
             )
         }
+        // ===== M4: chặn quảng cáo =====
+        "adblock_status" => {
+            let handle = app.state::<crate::filters::BlockerHandle>();
+            to_json(handle.0.status())
+        }
+        "adblock_set" => {
+            let on = arg("on")? == "1";
+            let handle = app.state::<crate::filters::BlockerHandle>();
+            handle.0.set_enabled(on);
+            persist_setting(&app, "adblockEnabled", if on { "1" } else { "0" });
+            Ok(Value::Null)
+        }
+        "adblock_site" => {
+            let host = arg("host")?;
+            let off = arg("on")? == "1";
+            let handle = app.state::<crate::filters::BlockerHandle>();
+            handle.0.set_site_disabled(&host, off);
+            let sites = handle.0.disabled_sites();
+            persist_setting(
+                &app,
+                "adblockDisabledSites",
+                &serde_json::to_string(&sites).unwrap_or_default(),
+            );
+            Ok(Value::Null)
+        }
+        // Dựng lại engine tốn giây nên chạy ngoài luồng UI.
+        // Tải danh sách + dựng lại engine: tốn giây nên chạy ngoài luồng UI.
+        "adblock_update" => {
+            let handle = app
+                .state::<crate::filters::BlockerHandle>()
+                .0
+                .clone();
+            let downloaded = tauri::async_runtime::spawn_blocking(move || handle.update())
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(serde_json::json!({ "downloaded": downloaded }))
+        }
+        "adblock_reload" => {
+            let handle = app
+                .state::<crate::filters::BlockerHandle>()
+                .0
+                .clone();
+            let lists = tauri::async_runtime::spawn_blocking(move || handle.reload())
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(serde_json::json!({ "lists": lists }))
+        }
         other => Err(format!("lệnh không biết: {other}")),
     }
+}
+
+/// Ghi một cài đặt đơn giản, bỏ qua lỗi khi CSDL không khả dụng.
+fn persist_setting(app: &AppHandle, key: &str, value: &str) {
+    let key = key.to_string();
+    let value = value.to_string();
+    let _ = with_db(app, move |db| {
+        db.set_setting(&key, &value)?;
+        Ok(())
+    });
 }
 
 /// Tiền tố tìm kiếm theo cài đặt `searchEngine` (mặc định DuckDuckGo).
