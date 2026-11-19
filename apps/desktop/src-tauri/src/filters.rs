@@ -165,7 +165,7 @@ impl Blocker {
         }
     }
 
-    /// Nạp engine: ưu tiên cache đã nối gọn, hỏng hoặc thiếu thì đọc lại từ .txt.
+    /// Nạp engine: ưu tiên cache đã nối gọn, hỏng, thiếu hoặc cũ hơn .txt thì đọc lại.
     /// Không có .txt nào thì engine vẫn trống (trạng thái `ready` = false).
     pub fn load(&self) -> Result<(), String> {
         if let Some(engine) = load_cache(&self.dir) {
@@ -333,11 +333,40 @@ fn save_cache(dir: &Path, engine: &Engine) -> Result<(), String> {
     Ok(())
 }
 
+/// Engine đã nối gọn, chỉ khi cache còn dùng được. Cũ hơn danh sách thì trả `None`
+/// để bên gọi dựng lại từ .txt.
 fn load_cache(dir: &Path) -> Option<Engine> {
+    if !cache_is_fresh(dir) {
+        return None;
+    }
     let bytes = std::fs::read(cache_path(dir)).ok()?;
     let mut engine = Engine::default();
     engine.deserialize(&bytes).ok()?;
     Some(engine)
+}
+
+/// Cache chỉ còn dùng được khi không có danh sách nào sửa sau lúc nó ghi.
+/// Không có cache, không đọc được thời gian, hoặc có .txt mới hơn đều trả `false`
+/// để bên gọi dựng lại engine từ .txt.
+fn cache_is_fresh(dir: &Path) -> bool {
+    let cache_time = match std::fs::metadata(cache_path(dir)).and_then(|m| m.modified()) {
+        Ok(t) => t,
+        Err(_) => return false,
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("txt") {
+            continue;
+        }
+        // `>` chứ không phải `>=`: cache luôn ghi sau .txt nên bằng thời gian là còn hợp lệ.
+        if path.metadata().and_then(|m| m.modified()).is_ok_and(|t| t > cache_time) {
+            return false;
+        }
+    }
+    true
 }
 
 fn host_of(url: &str) -> Option<String> {
@@ -507,6 +536,41 @@ mod tests {
             "https://blog.example/",
             "image"
         ));
+    }
+
+    /// Cache chỉ là bản tăng tốc: sửa danh sách thì lần nạp sau phải theo luật mới,
+    /// người dùng không cần bấm "Tải lại".
+    #[test]
+    fn stale_cache_is_rebuilt_from_lists() {
+        let b = blocker_with("||quantserve.com^\n");
+        let dir = b.dir.clone();
+        assert!(cache_is_fresh(&dir), "vừa ghi cache thì phải còn mới");
+
+        let txt = dir.join("test.txt");
+        std::fs::write(&txt, "||track.example^\n").unwrap();
+        // Ngày giờ tương lai để kết luận không phụ thuộc độ phân giải đồng hồ filesystem.
+        let newer = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+        let mut file = std::fs::OpenOptions::new().write(true).open(&txt).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(newer)).unwrap();
+
+        let fresh = Blocker::new(dir);
+        fresh.load().unwrap();
+        assert!(
+            fresh.should_block(
+                "https://track.example/p.gif",
+                "https://blog.example/",
+                "image"
+            ),
+            "luật mới trong .txt phải có hiệu lực"
+        );
+        assert!(
+            !fresh.should_block(
+                "https://q.quantserve.com/q.gif",
+                "https://blog.example/",
+                "image"
+            ),
+            "engine cũ trong cache đã bị thay"
+        );
     }
 
     /// Số đo tốc độ quyết định chặn. Bỏ qua khi test thường; chạy bằng:
