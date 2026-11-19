@@ -14,7 +14,7 @@ serde_json = "1"
 url = "2"
 tokio = { version = "1", features = ["time"] }
 log = "0.4"
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 # M4: chặn quảng cáo. Tắt feature `single-thread` mặc định để Engine là
 # Send + Sync (ADR-015); nếu giữ nguyên thì không chia sẻ được qua state Tauri.
 adblock = { version = "0.13", default-features = false, features = [
