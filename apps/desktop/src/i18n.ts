@@ -40,7 +40,19 @@ const vi = {
   "title.tabs": "Tìm tab",
   "title.reading": "Danh sách đọc",
   "title.settings": "Cài đặt",
-  "settings.general": "Chung",
+  "settings.you": "Bạn và Bytwina",
+  "settings.youHint": "Thông tin đọc từ ứng dụng đang chạy, không gửi đi đâu.",
+  "settings.search": "Tìm kiếm và địa chỉ",
+  "settings.performance": "Hiệu suất",
+  "settings.performanceHint":
+    "Tab ngủ đóng webview của tab ít dùng để giải phóng RAM; mở lại thì trang nạp lại.",
+  "settings.languages": "Ngôn ngữ",
+  "settings.passwords": "Tự động điền và mật khẩu",
+  "settings.passwordsNote":
+    "Bytwina chưa có kho mật khẩu: bản hiện tại không lưu và không tự điền mật khẩu.",
+  "settings.system": "Hệ thống",
+  "settings.systemNote":
+    "Chưa có tuỳ chọn đặt Bytwina làm trình duyệt mặc định hay khởi động cùng Windows.",
   "settings.language": "Ngôn ngữ",
   "settings.langVi": "Tiếng Việt",
   "settings.langEn": "English",
@@ -53,7 +65,6 @@ const vi = {
   "settings.downloads": "Tải xuống",
   "settings.downloadsHint":
     "File lưu vào thư mục Downloads của Windows. File thực thi (.exe, .bat, .ps1…) được đổi tên thành .download.",
-  "settings.about": "Giới thiệu",
   "settings.version": "Phiên bản",
   "settings.webview": "WebView2",
   "settings.storage": "Lưu trữ",
@@ -66,6 +77,8 @@ const vi = {
   "settings.engineBing": "Bing",
   "settings.engineBrave": "Brave Search",
   "settings.startup": "Khi khởi động",
+  "settings.startupHint":
+    "Khôi phục tab mở lại đúng các trang của phiên trước; phiên được lưu mỗi 30 giây.",
   "settings.startupRestore": "Mở lại các tab trước đó",
   "settings.startupHome": "Mở trang chủ",
   "settings.startupBlank": "Mở trang trống",
@@ -143,7 +156,19 @@ const en: Record<Key, string> = {
   "title.tabs": "Find tabs",
   "title.reading": "Reading list",
   "title.settings": "Settings",
-  "settings.general": "General",
+  "settings.you": "You and Bytwina",
+  "settings.youHint": "Read from the running app; nothing is sent anywhere.",
+  "settings.search": "Search and address bar",
+  "settings.performance": "Performance",
+  "settings.performanceHint":
+    "Sleeping tabs close their webview to free RAM; reopening reloads the page.",
+  "settings.languages": "Language",
+  "settings.passwords": "Autofill and passwords",
+  "settings.passwordsNote":
+    "Bytwina has no password store yet: this build neither saves nor autofills passwords.",
+  "settings.system": "System",
+  "settings.systemNote":
+    "No option yet to make Bytwina the default browser or start it with Windows.",
   "settings.language": "Language",
   "settings.langVi": "Tiếng Việt",
   "settings.langEn": "English",
@@ -156,7 +181,6 @@ const en: Record<Key, string> = {
   "settings.downloads": "Downloads",
   "settings.downloadsHint":
     "Files are saved to the Windows Downloads folder. Executable files (.exe, .bat, .ps1…) are renamed with a .download suffix.",
-  "settings.about": "About",
   "settings.version": "Version",
   "settings.webview": "WebView2",
   "settings.storage": "Storage",
@@ -169,6 +193,8 @@ const en: Record<Key, string> = {
   "settings.engineBing": "Bing",
   "settings.engineBrave": "Brave Search",
   "settings.startup": "On startup",
+  "settings.startupHint":
+    "Restore tabs reopens the pages from the previous session; sessions are saved every 30 seconds.",
   "settings.startupRestore": "Continue where you left off",
   "settings.startupHome": "Open the home page",
   "settings.startupBlank": "Open a blank page",

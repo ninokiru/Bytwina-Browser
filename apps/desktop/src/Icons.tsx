@@ -198,3 +198,53 @@ export const MoreIcon = (p: Props) => (
     <circle cx="12" cy="19" r="1.7" />
   </Icon>
 );
+
+// Bộ icon cho mục lục trang Cài đặt (mục nào cũng có icon như Cốc Cốc/Chrome).
+export const UserIcon = (p: Props) => (
+  <Icon {...p}>
+    <circle cx="12" cy="8" r="3.6" />
+    <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+  </Icon>
+);
+
+export const PaletteIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2 0-1.2-.7-1.4-.7-2.2 0-.7.6-1.3 1.4-1.3H17a4 4 0 0 0 4-4c0-4.5-4-8.5-9-8.5Z" />
+    <circle cx="8.5" cy="10.5" r="1" />
+    <circle cx="12" cy="7.5" r="1" />
+    <circle cx="15.5" cy="10.5" r="1" />
+  </Icon>
+);
+
+export const PowerIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M12 4v8" />
+    <path d="M7.5 7a6.5 6.5 0 1 0 9 0" />
+  </Icon>
+);
+
+export const ShieldIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M12 3.5 19 6v5.5c0 4.2-2.9 7.4-7 9-4.1-1.6-7-4.8-7-9V6l7-2.5Z" />
+  </Icon>
+);
+
+export const BoltIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M13 3 6 13.5h5L10 21l7-10.5h-5L13 3Z" />
+  </Icon>
+);
+
+export const TranslateIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M4 6h9M8.5 4v2M11 6c-.8 4-3.6 7.5-7 9M7 11c1.2 2.4 3.4 4.2 6 5" />
+    <path d="M13 20l4.5-10L22 20M15 17h5" />
+  </Icon>
+);
+
+export const KeyIcon = (p: Props) => (
+  <Icon {...p}>
+    <circle cx="8" cy="12" r="3.5" />
+    <path d="M11.5 12H20M17 12v3.5M20 12v2.5" />
+  </Icon>
+);

@@ -1,9 +1,25 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { Fragment, useEffect, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { cmd } from "./tabs";
 import { getLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
-import { CheckCircleIcon, DownloadIcon, SettingsIcon, TrashIcon } from "./Icons";
+import {
+  AlertIcon,
+  BoltIcon,
+  CheckCircleIcon,
+  CloseIcon,
+  DownloadIcon,
+  KeyIcon,
+  LockIcon,
+  PaletteIcon,
+  PowerIcon,
+  SearchIcon,
+  SettingsIcon,
+  ShieldIcon,
+  TrashIcon,
+  TranslateIcon,
+  UserIcon,
+} from "./Icons";
 
 interface Diagnostics {
   appVersion: string;
@@ -47,6 +63,7 @@ export default function Settings({
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [ab, setAb] = useState<AdblockStatus | null>(null);
   const [abBusy, setAbBusy] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
 
   const loadAdblock = () =>
     cmd("adblock_status")
@@ -78,6 +95,30 @@ export default function Settings({
       if (sl) setSleep(sl);
     });
     void loadAdblock();
+    // Mục "Bạn và Bytwina" hiện thông tin ngay, không cần bấm nút lấy chẩn đoán.
+    void loadDiagnostics();
+  }, []);
+
+  // Tô sáng mục lục theo phần đang xem (cách của chrome://settings).
+  useEffect(() => {
+    const seen = new Set<string>();
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) seen.add(e.target.id);
+          else seen.delete(e.target.id);
+        }
+        // Cuộn nhanh có thể khiến không mục nào giao cắt vùng theo dõi: giữ nguyên mục cũ.
+        const top = SECTIONS.find((s) => seen.has(s.id));
+        if (top) setActiveSection(top.id);
+      },
+      { rootMargin: "0px 0px -55% 0px" },
+    );
+    for (const s of SECTIONS) {
+      const el = document.getElementById(s.id);
+      if (el) obs.observe(el);
+    }
+    return () => obs.disconnect();
   }, []);
 
   const save = (key: string, value: string) => {
@@ -132,196 +173,229 @@ export default function Settings({
     <div className="settings-page">
       <aside className="settings-nav">
         <div className="settings-nav-head">
-          <SettingsIcon /> {t("bar.settings")}
+          <img src="/brand-mark.png" alt="" />
+          <span>{t("bar.settings")}</span>
         </div>
-        {SECTIONS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className="settings-nav-item"
-            onClick={() => jump(s.id)}
-          >
-            {t(s.label)}
-          </button>
+        {SECTIONS.map((s, i) => (
+          <Fragment key={s.id}>
+            {i > 0 && SECTIONS[i - 1].group !== s.group && <div className="settings-nav-sep" />}
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === s.id ? " active" : ""}`}
+              onClick={() => jump(s.id)}
+            >
+              <s.icon />
+              <span>{t(s.label)}</span>
+            </button>
+          </Fragment>
         ))}
-        <div className="menu-sep" />
+        <div className="settings-nav-sep" />
         <button type="button" className="settings-nav-item" onClick={onClose}>
-          {t("panel.close")}
+          <CloseIcon />
+          <span>{t("panel.close")}</span>
         </button>
       </aside>
       <main className="settings-main">
         <div className="settings">
-      <Section id="settings-general" title={t("settings.general")}>
-        <label className="settings-row">
-          {t("settings.language")}
-          <select value={lang} onChange={(e) => changeLang(e.target.value as Lang)}>
-            <option value="vi">{t("settings.langVi")}</option>
-            <option value="en">{t("settings.langEn")}</option>
-          </select>
-        </label>
-        <label className="settings-row">
-          {t("settings.searchEngine")}
-          <select
-            value={engine}
-            onChange={(e) => {
-              setEngine(e.target.value);
-              save("searchEngine", e.target.value);
-            }}
-          >
-            <option value="duckduckgo">{t("settings.engineDuck")}</option>
-            <option value="google">{t("settings.engineGoogle")}</option>
-            <option value="bing">{t("settings.engineBing")}</option>
-            <option value="brave">{t("settings.engineBrave")}</option>
-          </select>
-        </label>
-        <label className="settings-row">
-          {t("settings.startup")}
-          <select
-            value={startup}
-            onChange={(e) => {
-              setStartup(e.target.value);
-              save("startupMode", e.target.value);
-            }}
-          >
-            <option value="restore">{t("settings.startupRestore")}</option>
-            <option value="home">{t("settings.startupHome")}</option>
-            <option value="blank">{t("settings.startupBlank")}</option>
-          </select>
-        </label>
-        <label className="settings-stack">
-          {t("settings.homepage")}
-          <input
-            className="field"
-            value={home}
-            onChange={(e) => setHome(e.target.value)}
-            onBlur={saveHome}
-          />
-        </label>
-        <p className="hint">{t("settings.homeHint")}</p>
-        <label className="settings-row">
-          {t("settings.sleep")}
-          <select
-            value={sleep}
-            onChange={(e) => {
-              setSleep(e.target.value);
-              save("sleepMinutes", e.target.value);
-            }}
-          >
-            <option value="0">{t("settings.sleepOff")}</option>
-            <option value="5">5 min</option>
-            <option value="15">15 min</option>
-            <option value="30">30 min</option>
-          </select>
-        </label>
-      </Section>
+          <Section id="settings-you" title={t("settings.you")}>
+            <dl className="diag">
+              <dt>{t("settings.version")}</dt>
+              <dd>{diag?.appVersion ?? "—"}</dd>
+              <dt>{t("settings.webview")}</dt>
+              <dd>{diag?.webviewVersion ?? "—"}</dd>
+              <dt>{t("settings.storage")}</dt>
+              <dd>
+                {diag
+                  ? diag.dbAvailable
+                    ? t("settings.storageOk")
+                    : t("settings.storageOff")
+                  : "—"}
+              </dd>
+            </dl>
+            <p className="hint">{t("settings.youHint")}</p>
+            <button type="button" className="btn" onClick={loadDiagnostics}>
+              {t("settings.diagnostics")}
+            </button>
+          </Section>
 
-      <Section id="settings-appearance" title={t("settings.appearance")}>
-        <label className="settings-row">
-          {t("settings.theme")}
-          <select value={theme} onChange={(e) => changeTheme(e.target.value)}>
-            <option value="system">{t("settings.themeSystem")}</option>
-            <option value="light">{t("settings.themeLight")}</option>
-            <option value="dark">{t("settings.themeDark")}</option>
-          </select>
-        </label>
-        <label className="settings-row">
-          {t("settings.zoom")}
-          <select value={zoom} onChange={(e) => changeZoom(e.target.value)}>
-            {ZOOM_OPTIONS.map((z) => (
-              <option key={z} value={String(z)}>
-                {z}%
-              </option>
-            ))}
-          </select>
-        </label>
-      </Section>
+          <Section id="settings-appearance" title={t("settings.appearance")}>
+            <label className="settings-row">
+              {t("settings.theme")}
+              <select value={theme} onChange={(e) => changeTheme(e.target.value)}>
+                <option value="system">{t("settings.themeSystem")}</option>
+                <option value="light">{t("settings.themeLight")}</option>
+                <option value="dark">{t("settings.themeDark")}</option>
+              </select>
+            </label>
+            <label className="settings-row">
+              {t("settings.zoom")}
+              <select value={zoom} onChange={(e) => changeZoom(e.target.value)}>
+                {ZOOM_OPTIONS.map((z) => (
+                  <option key={z} value={String(z)}>
+                    {z}%
+                  </option>
+                ))}
+              </select>
+            </label>
+          </Section>
 
-      <Section id="settings-adblock" title={t("settings.adblock")}>
-        <label className="settings-row">
-          {t("settings.adblockRow")}
-          <input
-            type="checkbox"
-            checked={ab?.enabled ?? true}
-            onChange={(e) => changeAdblock(e.target.checked)}
-          />
-        </label>
-        <p className="hint">
-          {t("settings.adblockLists")}:{" "}
-          {ab && ab.lists.length > 0 ? ab.lists.join(", ") : t("settings.adblockNone")}
-        </p>
-        <p className="hint">
-          {t("settings.adblockBlocked")}: {ab?.blocked ?? 0}
-        </p>
-        <p className="hint">{t("settings.adblockHint")}</p>
-        <button type="button" className="btn block" disabled={abBusy} onClick={updateAdblock}>
-          {abBusy ? t("settings.adblockUpdating") : t("settings.adblockUpdate")}
-        </button>
-      </Section>
+          <Section id="settings-search" title={t("settings.search")}>
+            <label className="settings-row">
+              {t("settings.searchEngine")}
+              <select
+                value={engine}
+                onChange={(e) => {
+                  setEngine(e.target.value);
+                  save("searchEngine", e.target.value);
+                }}
+              >
+                <option value="duckduckgo">{t("settings.engineDuck")}</option>
+                <option value="google">{t("settings.engineGoogle")}</option>
+                <option value="bing">{t("settings.engineBing")}</option>
+                <option value="brave">{t("settings.engineBrave")}</option>
+              </select>
+            </label>
+            <label className="settings-stack">
+              {t("settings.homepage")}
+              <input
+                className="field"
+                value={home}
+                onChange={(e) => setHome(e.target.value)}
+                onBlur={saveHome}
+              />
+            </label>
+            <p className="hint">{t("settings.homeHint")}</p>
+          </Section>
 
-      <Section id="settings-privacy" title={t("settings.privacy")}>
-        <label className="settings-row">
-          {t("settings.privateMode")}
-          <input
-            type="checkbox"
-            checked={privateMode}
-            onChange={(e) => void cmd("private_set", { on: e.target.checked ? "1" : "0" })}
-          />
-        </label>
-        <p className="hint">{t("settings.privateHint")}</p>
-        <label className="settings-row">
-          {t("settings.clearOnExit")}
-          <input
-            type="checkbox"
-            checked={clearOnExit}
-            onChange={(e) => {
-              setClearOnExit(e.target.checked);
-              save("clearOnExit", e.target.checked ? "1" : "0");
-            }}
-          />
-        </label>
-        <p className="hint">{t("settings.clearOnExitHint")}</p>
-        <p className="hint">
-          {t("settings.cookies")}: {t("settings.cookiesNote")}
-        </p>
-        <button type="button" className="btn danger block" onClick={clearData}>
-          <TrashIcon /> {t("settings.clearData")}
-        </button>
-        {message && (
-          <p className="hint ok">
-            <CheckCircleIcon /> {message}
-          </p>
-        )}
-      </Section>
+          <Section id="settings-startup" title={t("settings.startup")}>
+            <label className="settings-row">
+              {t("settings.startup")}
+              <select
+                value={startup}
+                onChange={(e) => {
+                  setStartup(e.target.value);
+                  save("startupMode", e.target.value);
+                }}
+              >
+                <option value="restore">{t("settings.startupRestore")}</option>
+                <option value="home">{t("settings.startupHome")}</option>
+                <option value="blank">{t("settings.startupBlank")}</option>
+              </select>
+            </label>
+            <p className="hint">{t("settings.startupHint")}</p>
+          </Section>
 
-      <Section id="settings-downloads" title={t("settings.downloads")}>
-        <input
-          className="field"
-          value={downloadDir}
-          placeholder={t("settings.downloadDirPlaceholder")}
-          onChange={(e) => setDownloadDir(e.target.value)}
-          onBlur={() => save("downloadDir", downloadDir.trim())}
-        />
-        <p className="hint">
-          <DownloadIcon /> {t("settings.downloadDirHint")}
-        </p>
-        <p className="hint">{t("settings.downloadsHint")}</p>
-      </Section>
+          <Section id="settings-privacy" title={t("settings.privacy")}>
+            <label className="settings-row">
+              {t("settings.privateMode")}
+              <input
+                type="checkbox"
+                checked={privateMode}
+                onChange={(e) => void cmd("private_set", { on: e.target.checked ? "1" : "0" })}
+              />
+            </label>
+            <p className="hint">{t("settings.privateHint")}</p>
+            <label className="settings-row">
+              {t("settings.clearOnExit")}
+              <input
+                type="checkbox"
+                checked={clearOnExit}
+                onChange={(e) => {
+                  setClearOnExit(e.target.checked);
+                  save("clearOnExit", e.target.checked ? "1" : "0");
+                }}
+              />
+            </label>
+            <p className="hint">{t("settings.clearOnExitHint")}</p>
+            <p className="hint">
+              {t("settings.cookies")}: {t("settings.cookiesNote")}
+            </p>
+            <button type="button" className="btn danger block" onClick={clearData}>
+              <TrashIcon /> {t("settings.clearData")}
+            </button>
+            {message && (
+              <p className="hint ok">
+                <CheckCircleIcon /> {message}
+              </p>
+            )}
+          </Section>
 
-      <Section id="settings-about" title={t("settings.about")}>
-        <button type="button" className="btn" onClick={loadDiagnostics}>
-          {t("settings.diagnostics")}
-        </button>
-        {diag && (
-          <dl className="diag">
-            <dt>{t("settings.version")}</dt>
-            <dd>{diag.appVersion}</dd>
-            <dt>{t("settings.webview")}</dt>
-            <dd>{diag.webviewVersion}</dd>
-            <dt>{t("settings.storage")}</dt>
-            <dd>{diag.dbAvailable ? t("settings.storageOk") : t("settings.storageOff")}</dd>
-          </dl>
-        )}
-      </Section>
+          <Section id="settings-adblock" title={t("settings.adblock")}>
+            <label className="settings-row">
+              {t("settings.adblockRow")}
+              <input
+                type="checkbox"
+                checked={ab?.enabled ?? true}
+                onChange={(e) => changeAdblock(e.target.checked)}
+              />
+            </label>
+            <p className="hint">
+              {t("settings.adblockLists")}:{" "}
+              {ab && ab.lists.length > 0 ? ab.lists.join(", ") : t("settings.adblockNone")}
+            </p>
+            <p className="hint">
+              {t("settings.adblockBlocked")}: {ab?.blocked ?? 0}
+            </p>
+            <p className="hint">{t("settings.adblockHint")}</p>
+            <button type="button" className="btn block" disabled={abBusy} onClick={updateAdblock}>
+              {abBusy ? t("settings.adblockUpdating") : t("settings.adblockUpdate")}
+            </button>
+          </Section>
+
+          <Section id="settings-performance" title={t("settings.performance")}>
+            <label className="settings-row">
+              {t("settings.sleep")}
+              <select
+                value={sleep}
+                onChange={(e) => {
+                  setSleep(e.target.value);
+                  save("sleepMinutes", e.target.value);
+                }}
+              >
+                <option value="0">{t("settings.sleepOff")}</option>
+                <option value="5">5 min</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+              </select>
+            </label>
+            <p className="hint">{t("settings.performanceHint")}</p>
+          </Section>
+
+          <Section id="settings-downloads" title={t("settings.downloads")}>
+            <input
+              className="field"
+              value={downloadDir}
+              placeholder={t("settings.downloadDirPlaceholder")}
+              onChange={(e) => setDownloadDir(e.target.value)}
+              onBlur={() => save("downloadDir", downloadDir.trim())}
+            />
+            <p className="hint">
+              <DownloadIcon /> {t("settings.downloadDirHint")}
+            </p>
+            <p className="hint">{t("settings.downloadsHint")}</p>
+          </Section>
+
+          <Section id="settings-languages" title={t("settings.languages")}>
+            <label className="settings-row">
+              {t("settings.language")}
+              <select value={lang} onChange={(e) => changeLang(e.target.value as Lang)}>
+                <option value="vi">{t("settings.langVi")}</option>
+                <option value="en">{t("settings.langEn")}</option>
+              </select>
+            </label>
+          </Section>
+
+          <Section id="settings-passwords" title={t("settings.passwords")}>
+            <p className="settings-soon">
+              <AlertIcon /> {t("settings.passwordsNote")}
+            </p>
+          </Section>
+
+          <Section id="settings-system" title={t("settings.system")}>
+            <p className="settings-soon">
+              <AlertIcon /> {t("settings.systemNote")}
+            </p>
+          </Section>
         </div>
       </main>
     </div>
@@ -337,14 +411,20 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-/// Mục lục trái của trang Cài đặt, theo bố cục chrome://settings.
-const SECTIONS: { id: string; label: Key }[] = [
-  { id: "settings-general", label: "settings.general" },
-  { id: "settings-appearance", label: "settings.appearance" },
-  { id: "settings-adblock", label: "settings.adblock" },
-  { id: "settings-privacy", label: "settings.privacy" },
-  { id: "settings-downloads", label: "settings.downloads" },
-  { id: "settings-about", label: "settings.about" },
+/// Mục lục trái của trang Cài đặt: mỗi mục có icon, thuộc một nhóm phân cách,
+/// và thứ tự phải khớp thứ tự các thẻ trong ô nội dung (bôi theo cuộn dùng nó).
+const SECTIONS: { id: string; label: Key; icon: ComponentType; group: number }[] = [
+  { id: "settings-you", label: "settings.you", icon: UserIcon, group: 0 },
+  { id: "settings-appearance", label: "settings.appearance", icon: PaletteIcon, group: 0 },
+  { id: "settings-search", label: "settings.search", icon: SearchIcon, group: 0 },
+  { id: "settings-startup", label: "settings.startup", icon: PowerIcon, group: 0 },
+  { id: "settings-privacy", label: "settings.privacy", icon: LockIcon, group: 1 },
+  { id: "settings-adblock", label: "settings.adblock", icon: ShieldIcon, group: 1 },
+  { id: "settings-performance", label: "settings.performance", icon: BoltIcon, group: 1 },
+  { id: "settings-downloads", label: "settings.downloads", icon: DownloadIcon, group: 1 },
+  { id: "settings-languages", label: "settings.languages", icon: TranslateIcon, group: 1 },
+  { id: "settings-passwords", label: "settings.passwords", icon: KeyIcon, group: 2 },
+  { id: "settings-system", label: "settings.system", icon: SettingsIcon, group: 2 },
 ];
 
 function jump(id: string) {
