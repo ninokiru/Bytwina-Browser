@@ -1,6 +1,10 @@
 # Nhật ký thay đổi
 
 ## Chưa phát hành
+### Sửa
+- Bộ chặn: `load()` bỏ cache engine khi có `.txt` mới hơn, nên danh sách người dùng tự đặt vào thư mục có hiệu lực ở lần mở trình duyệt sau mà không cần bấm "Tải lại".
+
+## 0.0.2 — 2026-11-19
 ### Thêm
 - Tab: thanh địa chỉ, điều hướng, ghim tab, nhóm tab, tìm tab.
 - Dữ liệu: dấu trang, lịch sử, cài đặt, phiên (khôi phục khi mở lại, lưu mỗi 30 giây).
@@ -42,3 +46,5 @@
 - Trang http không mã hóa bị chặn (ADR-011).
 - Chế độ riêng tư chưa tách dữ liệu hồ sơ trên đĩa (WebView2 dùng chung user data folder).
 - Tab dọc, reader mode, cập nhật tự động, ký số: chưa có.
+- Chặn quảng cáo bản 0.0.2 mới ở mức network (chặn request); chưa lọc thẩm mỹ — chưa ẩn phần tử theo luật `##`, chưa scriptlet, chưa `:has()`.
+- Danh sách lọc tải lúc chạy: mở trình duyệt lần đầu (hoặc khi mất mạng) thì engine còn trống, bộ đếm hiện 0 cho tới khi cập nhật xong.
