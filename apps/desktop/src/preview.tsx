@@ -132,27 +132,26 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 
 if (panel) {
-  const titles: Record<string, string> = {
-    settings: "Cài đặt",
-    history: "Lịch sử",
-    bookmarks: "Đã lưu",
-    downloads: "Tải xuống",
-    tabs: "Tìm tab",
-    reading: "Danh sách đọc",
-    dictionary: "Từ điển",
-  };
-  const label = titles[panel] ?? panel;
-  // Chờ React gắn xong thanh công cụ rồi bấm nút mở bảng tương ứng.
+  // Nút mở bảng mang data-panel; bảng nằm sau menu ⋮ thì mở menu trước.
   let tries = 0;
+  let menuOpened = false;
   const timer = setInterval(() => {
-    const button = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.getAttribute("title") === label,
-    );
-    if (button) {
-      button.click();
+    const target = document.querySelector<HTMLElement>(`[data-panel="${panel}"]`);
+    if (target) {
+      target.click();
       clearInterval(timer);
-    } else if (++tries > 50) {
+      return;
+    }
+    if (++tries > 60) {
       clearInterval(timer);
+      return;
+    }
+    if (!menuOpened && tries > 5) {
+      const menu = document.querySelector<HTMLElement>('[data-panel="menu"]');
+      if (menu) {
+        menu.click();
+        menuOpened = true;
+      }
     }
   }, 100);
 }

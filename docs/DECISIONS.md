@@ -143,3 +143,21 @@
   - Frontend vẽ lớp phủ `.scrim` bắt đầu từ 96 px, nên hai hàng thanh công cụ vẫn bấm được (đổi bảng, đóng bảng).
 - **Đánh đổi:** Trong lúc mở bảng, nội dung trang bị ẩn (không phải thu nhỏ) và không thể cuộn/đọc song song; đổi lại bảng có đủ chiều cao và hoạt động ổn định trên WebView2 mà không cần cửa sổ phụ.
 - **Hướng thay thế sau này:** cửa sổ/webview riêng cho bảng, hoặc webview toolbar trong suốt phủ toàn cửa sổ nếu WebView2 cho phép hit-test theo vùng.
+
+## ADR-014: Bảng màu lấy từ token Chrome, nhận diện thương hiệu theo Cốc Cốc
+
+- **Trạng thái:** Chấp nhận (2026-11-19).
+- **Bối cảnh:** Giao diện trước dùng bảng màu tự đặt (chàm→tím) nên trông như mockup. Chủ dự án yêu cầu tham khảo Chrome và Cốc Cốc.
+- **Quyết định:**
+  - `styles.css` đổi toàn bộ giá trị biến sang token Chrome đã xác minh từ mã nguồn Chromium (mixer màu + `TabStyle`): dải tab `#D3E3FD` / nền nhạt khi mất tiêu điểm `#E6E8EA`, tab đang chọn `#FFFFFF`, omnibox `#EDF2FA` → `#FFFFFF` khi gõ, vách ngăn `#A8C7FA`, chữ `#1F1F1F`/`#474747`, điểm nhấn `#0B57D0`, đỏ cảnh báo `#D93025`; chủ đề tối `#202124`/`#35363A`/`#A8C7FA`.
+  - Hình tab theo Chrome: chỉ bo hai góc trên 10 px, cao 34 px, rộng 72–232 px, vách ngăn mảnh giữa tab không hoạt động, đang tải thì có thanh tiến độ ở đáy tab.
+  - Cấu trúc giữ hai hàng nhưng chia 40 px + 56 px = `TOOLBAR_HEIGHT = 96` (không đổi hằng số Rust); dùng `box-shadow inset` thay `border-bottom` để 1 px viền không ăn vào phần chia sẵn.
+  - Gom các tính năng phụ (lịch sử, danh sách đọc, tải xuống, từ điển, chế độ riêng tư, cài đặt) vào menu `⋮` như Chrome; trên dải tab chỉ còn "tìm tab" và `⋮`. `PanelKind` thêm `"menu"` và Panel nhận thêm `onOpen`.
+  - Sao đánh dấu và "thêm vào danh sách đọc" đặt bên trong ô địa chỉ (vị trí của Chrome); trạng thái đã lưu đọc lại từ `bookmark_list`.
+  - Nhận diện Cốc Cốc giữ ở hai chỗ: logo góc trái dải tab và màu xanh `#4FBA69` cho khóa HTTPS.
+- **Đánh đổi:**
+  - Menu `⋮` mở theo cơ chế ADR-013 (phủ toàn cửa sổ, tạm ẩn nội dung) vì webview con không đổi được z-order — khác Chrome là menu nổi đè lên trang.
+  - Tab ghim 76 px phải ẩn tiêu đề và chấm nhóm tab, nếu không nút ghim/đóng tràn khỏi tab và mất vùng bấm.
+  - Trạng thái "cửa sổ mất tiêu điểm" chỉ dựa vào sự kiện focus/blur của webview toolbar, chưa kiểm chứng trên máy thật; nếu sai thì dải tab chỉ giữ màu thường.
+  - `preview.tsx` không còn dò nút theo `title` (các nút đã đổi chỗ) mà theo thuộc tính `data-panel`.
+- **Chưa kiểm chứng:** Chưa chạy được trên Windows; màu và hình dạng chỉ đúng theo token đã đối chiếu, cần người dùng xem bản build thật.

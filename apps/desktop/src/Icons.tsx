@@ -190,3 +190,11 @@ export const BookmarkPlusIcon = (p: Props) => (
     <path d="M6 4h9a3 3 0 0 1 3 3v13l-6-3.6L6 20V4Z" />
   </Icon>
 );
+
+export const MoreIcon = (p: Props) => (
+  <Icon {...p} fill="currentColor" stroke="none">
+    <circle cx="12" cy="5" r="1.7" />
+    <circle cx="12" cy="12" r="1.7" />
+    <circle cx="12" cy="19" r="1.7" />
+  </Icon>
+);

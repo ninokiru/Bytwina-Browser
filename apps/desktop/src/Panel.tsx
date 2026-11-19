@@ -11,7 +11,9 @@ import {
   ClockIcon,
   CloseIcon,
   DownloadIcon,
+  GlassesIcon,
   GridIcon,
+  MoreIcon,
   SearchIcon,
   SettingsIcon,
   StarIcon,
@@ -45,7 +47,8 @@ export type PanelKind =
   | "reading"
   | "tabs"
   | "settings"
-  | "dictionary";
+  | "dictionary"
+  | "menu";
 
 interface DownloadItem {
   id: number;
@@ -59,12 +62,14 @@ export default function Panel({
   kind,
   onClose,
   onNavigate,
+  onOpen,
   privateMode,
   onHomeChange,
 }: {
   kind: PanelKind;
   onClose: () => void;
   onNavigate: (url: string) => void;
+  onOpen: (kind: PanelKind) => void;
   privateMode: boolean;
   onHomeChange: (url: string) => void;
 }) {
@@ -333,6 +338,41 @@ export default function Panel({
       );
       break;
 
+    case "menu":
+      body = (
+        <div className="menu-list">
+          <MenuItem icon={<StarIcon />} label={t("title.bookmarks")} onOpen={onOpen} kind="bookmarks" />
+          <MenuItem icon={<ClockIcon />} label={t("title.history")} onOpen={onOpen} kind="history" />
+          <MenuItem icon={<GridIcon />} label={t("title.tabs")} onOpen={onOpen} kind="tabs" />
+          <MenuItem icon={<BookIcon />} label={t("title.reading")} onOpen={onOpen} kind="reading" />
+          <MenuItem
+            icon={<DownloadIcon />}
+            label={t("title.downloads")}
+            onOpen={onOpen}
+            kind="downloads"
+          />
+          <MenuItem
+            icon={<BookTextIcon />}
+            label={t("title.dictionary")}
+            onOpen={onOpen}
+            kind="dictionary"
+          />
+          <div className="menu-sep" />
+          <button
+            type="button"
+            className={`menu-row${privateMode ? " on" : ""}`}
+            onClick={() => {
+              void cmd("private_set", { on: privateMode ? "0" : "1" });
+              onClose();
+            }}
+          >
+            <GlassesIcon /> {t("bar.privateToggle")}
+          </button>
+          <MenuItem icon={<SettingsIcon />} label={t("title.settings")} onOpen={onOpen} kind="settings" />
+        </div>
+      );
+      break;
+
     default:
       body = <Settings privateMode={privateMode} onHomeChange={onHomeChange} />;
       break;
@@ -389,6 +429,8 @@ function titleKey(kind: PanelKind): Key {
       return "title.reading";
     case "dictionary":
       return "title.dictionary";
+    case "menu":
+      return "bar.menu";
     default:
       return "title.settings";
   }
@@ -408,9 +450,34 @@ function titleIcon(kind: PanelKind): ReactNode {
       return <BookIcon />;
     case "dictionary":
       return <BookTextIcon />;
+    case "menu":
+      return <MoreIcon />;
     default:
       return <SettingsIcon />;
   }
+}
+
+function MenuItem({
+  icon,
+  label,
+  kind,
+  onOpen,
+}: {
+  icon: ReactNode;
+  label: string;
+  kind: PanelKind;
+  onOpen: (kind: PanelKind) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="menu-row"
+      data-panel={kind}
+      onClick={() => onOpen(kind)}
+    >
+      {icon} {label}
+    </button>
+  );
 }
 
 function fileName(path: string): string {

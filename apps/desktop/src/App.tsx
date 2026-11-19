@@ -8,17 +8,14 @@ import { applyTheme } from "./theme";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  BookIcon,
-  BookTextIcon,
-  BookmarkPlusIcon,
-  ClockIcon,
   CloseIcon,
-  DownloadIcon,
+  BookmarkPlusIcon,
   GlassesIcon,
   GlobeIcon,
   GridIcon,
   HomeIcon,
   LockIcon,
+  MoreIcon,
   PinIcon,
   PlusIcon,
   ReloadIcon,
@@ -30,6 +27,11 @@ import {
 
 const DEFAULT_HOME = "https://example.com/";
 
+// Chỉ cần đúng phần App dùng để tô ngôi sao.
+interface Bookmark {
+  url: string;
+}
+
 // Toolbar là webview tin cậy duy nhất được phép gọi IPC (capabilities/default.json).
 export default function App() {
   useLang();
@@ -40,6 +42,9 @@ export default function App() {
   // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
   const [termsOk, setTermsOk] = useState<boolean | null>(null);
   const [home, setHome] = useState(DEFAULT_HOME);
+  const [starred, setStarred] = useState(false);
+  // Chrome làm nhạt dải tab khi cửa sổ mất tiêu điểm.
+  const [blurred, setBlurred] = useState(false);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -66,6 +71,32 @@ export default function App() {
   useEffect(() => {
     if (!editing && active) setInput(active.url);
   }, [active?.url, active?.id, editing]);
+
+  useEffect(() => {
+    const focus = () => setBlurred(false);
+    const blur = () => setBlurred(true);
+    // Chỉ theo dõi sự kiện: trong webview con, document.hasFocus() không phản ánh
+    // tiêu điểm cửa sổ nên khởi tạo theo nó sẽ làm dải tab nhạt vĩnh viễn.
+    window.addEventListener("focus", focus);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("focus", focus);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
+
+  // Ngôi sao sáng khi URL hiện hành đã có trong danh sách đã lưu.
+  // panel là phụ thuộc để đọc lại sau khi bảng "Đã lưu" sửa/xóa bookmark.
+  useEffect(() => {
+    const url = active?.url;
+    if (!url || url === "about:blank") {
+      setStarred(false);
+      return;
+    }
+    void cmd("bookmark_list")
+      .then((list) => setStarred(((list as Bookmark[]) ?? []).some((b) => b.url === url)))
+      .catch(() => setStarred(false));
+  }, [active?.url, panel]);
 
   useEffect(() => {
     const un = listen<BrowserStatePayload>("browser://state", (e) => setState(e.payload));
@@ -183,7 +214,7 @@ export default function App() {
   }
 
   return (
-    <div className="chrome">
+    <div className={`chrome${blurred ? " blurred" : ""}`}>
       <header className="tabbar">
         <div className={`brand${state.private ? " private" : ""}`} title="Bytwina Browser">
           <img src="/brand-mark.png" alt="Bytwina" />
@@ -261,62 +292,23 @@ export default function App() {
             <PlusIcon />
           </button>
         </div>
+        {/* Chrome để rất ít nút trên dải tab; phần còn lại vào menu ⋮. */}
         <div className="tools">
           <button
-            className={`icon-btn${panel === "bookmarks" ? " active" : ""}`}
-            title={t("title.bookmarks")}
-            onClick={() => toggle("bookmarks")}
-          >
-            <StarIcon />
-          </button>
-          <button
-            className={`icon-btn${panel === "history" ? " active" : ""}`}
-            title={t("title.history")}
-            onClick={() => toggle("history")}
-          >
-            <ClockIcon />
-          </button>
-          <button
             className={`icon-btn${panel === "tabs" ? " active" : ""}`}
+            data-panel="tabs"
             title={t("bar.findTabs")}
             onClick={() => toggle("tabs")}
           >
             <GridIcon />
           </button>
           <button
-            className={`icon-btn${panel === "reading" ? " active" : ""}`}
-            title={t("bar.reading")}
-            onClick={() => toggle("reading")}
+            className={`icon-btn${panel === "menu" ? " active" : ""}`}
+            data-panel="menu"
+            title={t("bar.menu")}
+            onClick={() => toggle("menu")}
           >
-            <BookIcon />
-          </button>
-          <button
-            className={`icon-btn${panel === "downloads" ? " active" : ""}`}
-            title={t("bar.downloads")}
-            onClick={() => toggle("downloads")}
-          >
-            <DownloadIcon />
-          </button>
-          <button
-            className={`icon-btn${state.private ? " private-on" : ""}`}
-            title={t("bar.privateToggle")}
-            onClick={() => void cmd("private_set", { on: state.private ? "0" : "1" })}
-          >
-            <GlassesIcon />
-          </button>
-          <button
-            className={`icon-btn${panel === "dictionary" ? " active" : ""}`}
-            title={t("bar.dictionary")}
-            onClick={() => toggle("dictionary")}
-          >
-            <BookTextIcon />
-          </button>
-          <button
-            className={`icon-btn${panel === "settings" ? " active" : ""}`}
-            title={t("bar.settings")}
-            onClick={() => toggle("settings")}
-          >
-            <SettingsIcon />
+            <MoreIcon />
           </button>
         </div>
       </header>
@@ -372,6 +364,35 @@ export default function App() {
               if (e.key === "Escape") setEditing(false);
             }}
           />
+          {/* Chrome đặt ngôi sao đánh dấu bên trong ô địa chỉ. */}
+          <button
+            type="button"
+            className={`omni-chip${starred ? " on" : ""}`}
+            title={t("bar.bookmark")}
+            onClick={() => {
+              // bookmark_add là UPSERT theo URL: bấm lại sẽ ghi đè tiêu đề/folder cũ.
+              if (!active || starred) return;
+              void cmd("bookmark_add", {
+                title: active.title || active.url,
+                url: active.url,
+                folder: "",
+              })
+                .then(() => setStarred(true))
+                .catch(() => setStarred(false));
+            }}
+          >
+            <StarIcon />
+          </button>
+          <button
+            type="button"
+            className="omni-chip"
+            title={t("bar.addReading")}
+            onClick={() => {
+              if (active) void cmd("reading_add", { title: active.title, url: active.url });
+            }}
+          >
+            <BookmarkPlusIcon />
+          </button>
           {active?.loading && <span className="omni-spinner" />}
         </div>
 
@@ -403,23 +424,12 @@ export default function App() {
             <HomeIcon />
           </button>
           <button
-            className="icon-btn"
-            title={t("bar.bookmark")}
-            onClick={() => {
-              if (active)
-                void cmd("bookmark_add", { title: active.title, url: active.url, folder: "" });
-            }}
+            className={`icon-btn${panel === "settings" ? " active" : ""}`}
+            data-panel="settings"
+            title={t("bar.settings")}
+            onClick={() => toggle("settings")}
           >
-            <StarIcon />
-          </button>
-          <button
-            className="icon-btn"
-            title={t("bar.addReading")}
-            onClick={() => {
-              if (active) void cmd("reading_add", { title: active.title, url: active.url });
-            }}
-          >
-            <BookmarkPlusIcon />
+            <SettingsIcon />
           </button>
         </div>
       </div>
@@ -434,6 +444,7 @@ export default function App() {
           <Panel
             kind={panel}
             onClose={() => setPanel(null)}
+            onOpen={(kind) => setPanel(kind)}
             onNavigate={(url) => {
               setPanel(null);
               if (active) void cmd("navigate", { id: String(active.id), input: url });
@@ -479,8 +490,9 @@ function favLetter(tb: TabInfo): string {
 }
 
 // Màu ổn định theo URL để mỗi trang có "favicon" riêng mà không cần tải mạng.
+// Sáng 40% để chữ trắng trên đó vẫn đủ tương phản.
 function favColor(seed: string): string {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) % 360;
-  return `hsl(${hash} 62% 52%)`;
+  return `hsl(${hash} 62% 40%)`;
 }
