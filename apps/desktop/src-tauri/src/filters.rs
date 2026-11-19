@@ -358,8 +358,15 @@ fn source_host(source_url: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// Số thứ tự cho thư mục tạm: `cargo test` chạy các test song song trong cùng
+    /// một tiến trình, nên chỉ dùng pid thì mọi test ghi chung `test.txt` và
+    /// `engine.bin` — `load()` của test sau đọc lại engine của luật test trước.
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+
     fn blocker_with(rules: &str) -> Blocker {
-        let dir = std::env::temp_dir().join(format!("bytwina-abpc-test-{}", std::process::id()));
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("bytwina-abpc-test-{n}-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("test.txt"), rules);
         let blocker = Blocker::new(dir);
