@@ -1,5 +1,15 @@
 # Nhật ký thay đổi
 
+## Chưa phát hành
+### Thêm
+- Trang tab mới: logo, lời chào theo giờ, ô tìm kiếm lớn bo tròn, bộ chọn công cụ tìm kiếm (DuckDuckGo, Google, Bing, Brave) lưu ngay vào cài đặt, lưới quick link lấy từ dấu trang rồi bù bằng lịch sử, gợi ý tìm kiếm khi chưa có dữ liệu, dòng ghi chú riêng tư. Trang nằm trong webview toolbar nên không cần thay đổi Rust.
+- Thanh địa chỉ: pill cố định 34 px, hover đổi nền, focus bằng vòng accent — không còn co giãn chiều cao khi bấm vào.
+### Thay đổi
+- Tab dọc: tab đang chọn có vạch accent 3 px bên trái; nút ghim chỉ hiện khi rê tab để tab đang chọn không bị hai nút chiếm chỗ.
+- Menu ⋮ thu về 320 px như menu trình duyệt; bảng danh sách giữ 430 px.
+- Ô địa chỉ để trống khi ở tab mới thay vì hiện `about:blank`.
+- Tôn trọng thiết lập giảm chuyển động của Windows (`prefers-reduced-motion`).
+
 ## 0.0.3 — 2026-11-19
 ### Thêm
 - Tab dọc: mục Cài đặt "Bố cục tab và workspace" chuyển thanh công cụ thành cột trái 260 px, tab và thanh địa chỉ xếp dọc, nội dung dịch sang phải.

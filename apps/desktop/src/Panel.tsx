@@ -409,7 +409,11 @@ export default function Panel({
   }
 
   return (
-    <div className="panel" role="dialog" aria-label={t(titleKey(kind))}>
+    <div
+      className={`panel${kind === "menu" ? " panel-menu" : ""}`}
+      role="dialog"
+      aria-label={t(titleKey(kind))}
+    >
       <div className="panel-head">
         <div className="panel-title">
           {titleIcon(kind)} {t(titleKey(kind))}

@@ -10,6 +10,7 @@ const params = new URLSearchParams(location.search);
 const panel = params.get("panel");
 const vertical = params.get("vertical") === "1";
 const split = params.get("split") === "1";
+const newtab = params.get("newtab") === "1";
 
 const tabs = [
   {
@@ -63,7 +64,12 @@ const tabs = [
 ];
 
 const state = {
-  tabs,
+  tabs: newtab
+    ? [
+        { ...tabs[0], url: "about:blank", title: "", loading: false, canGoBack: false },
+        ...tabs.slice(1),
+      ]
+    : tabs,
   activeTab: 1,
   private: false,
   vertical,
@@ -102,8 +108,9 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
   },
   state: () => state,
   popup_drain: () => ({ urls: [] }),
-  bookmark_list: () => bookmarks,
-  history_search: () => history,
+  settings_set: () => null,
+  bookmark_list: () => (params.get("empty") === "1" ? [] : bookmarks),
+  history_search: () => (params.get("empty") === "1" ? [] : history),
   reading_list: () => reading,
   downloads_list: () => downloads,
   diagnostics: () => ({

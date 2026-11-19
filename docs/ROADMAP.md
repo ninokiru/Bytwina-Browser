@@ -6,7 +6,8 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
 - [x] M8 — Kiểm thử và ổn định (test tự động đã viết, checklist Windows chưa chạy; xem docs/TESTING.md)
 - [~] M9 — Phát hành 1.0 (phần không cần hạ tầng: CHANGELOG, USER_GUIDE, SUPPORT; ký số, cập nhật, website chưa làm)
 - [~] M10 — Trải nghiệm nâng cao (đã làm: tìm tab, danh sách đọc, theme sáng/tối, tab ngủ, tra từ điển, chia màn hình, workspace; chưa làm: quick actions, per-site, PiP, cử chỉ)
-- [~] M1 — Nền tảng trình duyệt: thanh địa chỉ, điều hướng, tab, trang tab mới (`about:blank`)
+- [~] M1 — Nền tảng trình duyệt: thanh địa chỉ, điều hướng, tab, trang tab mới
+  - [x] Trang tab mới trong webview toolbar: ô tìm kiếm lớn, chọn công cụ tìm kiếm, quick link từ dấu trang/lịch sử, gợi ý khi rỗng (chưa kiểm chứng runtime trên Windows)
   - [ ] Phím tắt toàn cục (Ctrl+T/W/L/R hiện chỉ hoạt động khi focus vào toolbar)
   - [x] Popup: chặn cửa sổ mới, URL hợp lệ mở thành tab nền (hàng đợi 16 mục)
 - [~] M2 — Dữ liệu: SQLite (bookmark, lịch sử, cài đặt, phiên). Schema v2.

@@ -131,6 +131,22 @@ const vi = {
   "terms.title": "Điều khoản sử dụng và chính sách quyền riêng tư",
   "terms.accept": "Tôi đồng ý",
   "terms.decline": "Từ chối và thoát",
+  "newtab.morning": "Chào buổi sáng",
+  "newtab.afternoon": "Chào buổi chiều",
+  "newtab.evening": "Chào buổi tối",
+  "newtab.placeholder": "Tìm kiếm hoặc nhập địa chỉ",
+  "newtab.search": "Tìm",
+  "newtab.engine": "Công cụ tìm kiếm",
+  "newtab.shortcuts": "Thường truy cập",
+  "newtab.customize": "Tùy chỉnh",
+  "newtab.hint": "Ctrl+T mở tab mới · Ctrl+L chọn thanh địa chỉ",
+  "newtab.tryThese": "Thử tìm",
+  "newtab.suggest.news": "Tin công nghệ hôm nay",
+  "newtab.suggest.weather": "Thời tiết Hà Nội",
+  "newtab.suggest.rate": "Tỷ giá USD hôm nay",
+  "newtab.suggest.calendar": "Lịch âm hôm nay",
+  "newtab.privacy":
+    "Tìm kiếm đi thẳng tới công cụ bạn chọn; Bytwina không chèn theo dõi.",
 };
 
 export type Key = keyof typeof vi;
@@ -263,6 +279,21 @@ const en: Record<Key, string> = {
   "terms.title": "Terms of use and privacy policy",
   "terms.accept": "I agree",
   "terms.decline": "Decline and exit",
+  "newtab.morning": "Good morning",
+  "newtab.afternoon": "Good afternoon",
+  "newtab.evening": "Good evening",
+  "newtab.placeholder": "Search or type an address",
+  "newtab.search": "Search",
+  "newtab.engine": "Search engine",
+  "newtab.shortcuts": "Frequently visited",
+  "newtab.customize": "Customize",
+  "newtab.hint": "Ctrl+T new tab · Ctrl+L focus the address bar",
+  "newtab.tryThese": "Try searching",
+  "newtab.suggest.news": "Tech news today",
+  "newtab.suggest.weather": "Weather in Hanoi",
+  "newtab.suggest.rate": "USD exchange rate today",
+  "newtab.suggest.calendar": "Lunar calendar today",
+  "newtab.privacy": "Searches go straight to the engine you pick; Bytwina adds no tracking.",
 };
 
 const dict: Record<Lang, Record<Key, string>> = { vi, en };

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
+import NewTab from "./NewTab";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
@@ -74,9 +75,15 @@ export default function App() {
 
   const active: TabInfo | undefined = state.tabs.find((tb) => tb.id === state.activeTab);
 
+  // Tab mới (about:blank) hiển thị trang tab mới ngay trong webview toolbar,
+  // giống Chrome/Brave: ô tìm kiếm lớn, quick link, không cần trang mạng.
+  const isNewTab = active != null && (active.url === "about:blank" || active.url === "");
+  const showNewTab = isNewTab && panel == null;
+
   // Đồng bộ ô địa chỉ khi tab chuyển trang, trừ khi người dùng đang gõ.
+  // Tab mới hiện ô trống (như Chrome) thay vì chuỗi about:blank.
   useEffect(() => {
-    if (!editing && active) setInput(active.url);
+    if (!editing && active) setInput(active.url === "about:blank" ? "" : active.url);
   }, [active?.url, active?.id, editing]);
 
   useEffect(() => {
@@ -178,11 +185,12 @@ export default function App() {
     };
   }, [state, panel]);
 
-  // Bảng nổi nằm trong webview thanh công cụ: mở bảng thì nới webview này
-  // phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả lại bố cục cũ.
+  // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
+  // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
+  const overlay = panel != null || showNewTab;
   useEffect(() => {
-    void cmd("panel_open", { on: panel ? "1" : "0" }).catch(() => undefined);
-  }, [panel]);
+    void cmd("panel_open", { on: overlay ? "1" : "0" }).catch(() => undefined);
+  }, [overlay]);
 
   const go = () => {
     if (active == null) return;
@@ -234,7 +242,11 @@ export default function App() {
   }
 
   return (
-    <div className={`chrome${blurred ? " blurred" : ""}${state.vertical ? " vertical" : ""}`}>
+    <div
+      className={`chrome${blurred ? " blurred" : ""}${state.vertical ? " vertical" : ""}${
+        overlay ? " overlay" : ""
+      }`}
+    >
       <header className="tabbar">
         <div className={`brand${state.private ? " private" : ""}`} title="Bytwina Browser">
           <img src="/brand-mark.png" alt="" />
@@ -465,6 +477,17 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {showNewTab && (
+        <NewTab
+          privateMode={state.private}
+          onNavigate={(value) => {
+            // Backend tự phân biệt URL và từ khóa tìm kiếm (navigation::to_url_with).
+            if (active) void cmd("navigate", { id: String(active.id), input: value });
+          }}
+          onOpenSettings={() => setPanel("settings")}
+        />
+      )}
 
       {panel && (
         <div
