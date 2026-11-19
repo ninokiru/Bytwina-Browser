@@ -37,9 +37,14 @@ jobs:
         run: |
           $f = Get-ChildItem -Recurse -Filter *-setup.exe apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis | Select-Object -First 1
           if (-not $f) { throw "NSIS installer not found" }
-          $hash = (Get-FileHash -Algorithm SHA256 $f.FullName).Hash.ToLower()
-          "$hash  $($f.Name)" | Out-File -Encoding ascii SHA256SUMS.txt
-          echo "INSTALLER=$($f.FullName)" >> $env:GITHUB_ENV
+          # gh thay dấu cách bằng dấu chấm khi đặt tên asset. Đặt tên lại ngay ở đây
+          # để dòng hash trỏ đúng file người dùng tải về, không phá `sha256sum -c`.
+          $name = $f.Name -replace ' ', '.'
+          $asset = Join-Path $f.DirectoryName $name
+          if ($asset -ne $f.FullName) { Copy-Item $f.FullName $asset -Force }
+          $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()
+          "$hash  $name" | Out-File -Encoding ascii SHA256SUMS.txt
+          echo "INSTALLER=$asset" >> $env:GITHUB_ENV
       - name: Create release
         shell: pwsh
         env:
