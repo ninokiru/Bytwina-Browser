@@ -40,10 +40,10 @@ jobs:
           {
             echo '### cargo audit'
             echo '```'
-            grep -E 'Crate:|Version:|Title:|Date:|warning:|error:' audit.txt | head -n 120
+            grep -E 'Crate:|Version:|Title:|Date:|URL:|warning:|error:' audit.txt | head -n 160
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          grep -E 'Crate:|Title:' audit.txt | head -n 20 | while IFS= read -r line; do
+          grep -E 'Crate:|Title:|URL:' audit.txt | head -n 20 | while IFS= read -r line; do
             echo "::error::$line"
           done
           exit "$status"

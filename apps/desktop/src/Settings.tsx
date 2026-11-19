@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { cmd } from "./tabs";
-import { getLang, setLang, t, useLang, type Lang } from "./i18n";
+import { getLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
-import { CheckCircleIcon, DownloadIcon, TrashIcon } from "./Icons";
+import { CheckCircleIcon, DownloadIcon, SettingsIcon, TrashIcon } from "./Icons";
 
 interface Diagnostics {
   appVersion: string;
@@ -27,9 +27,11 @@ const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200];
 export default function Settings({
   privateMode,
   onHomeChange,
+  onClose,
 }: {
   privateMode: boolean;
   onHomeChange: (url: string) => void;
+  onClose: () => void;
 }) {
   useLang();
   const [lang, setLangState] = useState<Lang>(getLang());
@@ -127,8 +129,29 @@ export default function Settings({
   };
 
   return (
-    <div className="settings">
-      <Section title={t("settings.general")}>
+    <div className="settings-page">
+      <aside className="settings-nav">
+        <div className="settings-nav-head">
+          <SettingsIcon /> {t("bar.settings")}
+        </div>
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className="settings-nav-item"
+            onClick={() => jump(s.id)}
+          >
+            {t(s.label)}
+          </button>
+        ))}
+        <div className="menu-sep" />
+        <button type="button" className="settings-nav-item" onClick={onClose}>
+          {t("panel.close")}
+        </button>
+      </aside>
+      <main className="settings-main">
+        <div className="settings">
+      <Section id="settings-general" title={t("settings.general")}>
         <label className="settings-row">
           {t("settings.language")}
           <select value={lang} onChange={(e) => changeLang(e.target.value as Lang)}>
@@ -192,7 +215,7 @@ export default function Settings({
         </label>
       </Section>
 
-      <Section title={t("settings.appearance")}>
+      <Section id="settings-appearance" title={t("settings.appearance")}>
         <label className="settings-row">
           {t("settings.theme")}
           <select value={theme} onChange={(e) => changeTheme(e.target.value)}>
@@ -213,7 +236,7 @@ export default function Settings({
         </label>
       </Section>
 
-      <Section title={t("settings.adblock")}>
+      <Section id="settings-adblock" title={t("settings.adblock")}>
         <label className="settings-row">
           {t("settings.adblockRow")}
           <input
@@ -235,7 +258,7 @@ export default function Settings({
         </button>
       </Section>
 
-      <Section title={t("settings.privacy")}>
+      <Section id="settings-privacy" title={t("settings.privacy")}>
         <label className="settings-row">
           {t("settings.privateMode")}
           <input
@@ -270,7 +293,7 @@ export default function Settings({
         )}
       </Section>
 
-      <Section title={t("settings.downloads")}>
+      <Section id="settings-downloads" title={t("settings.downloads")}>
         <input
           className="field"
           value={downloadDir}
@@ -284,7 +307,7 @@ export default function Settings({
         <p className="hint">{t("settings.downloadsHint")}</p>
       </Section>
 
-      <Section title={t("settings.about")}>
+      <Section id="settings-about" title={t("settings.about")}>
         <button type="button" className="btn" onClick={loadDiagnostics}>
           {t("settings.diagnostics")}
         </button>
@@ -299,15 +322,31 @@ export default function Settings({
           </dl>
         )}
       </Section>
+        </div>
+      </main>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section className="settings-section">
+    <section id={id} className="settings-section">
       <h2 className="settings-title">{title}</h2>
       {children}
     </section>
   );
+}
+
+/// Mục lục trái của trang Cài đặt, theo bố cục chrome://settings.
+const SECTIONS: { id: string; label: Key }[] = [
+  { id: "settings-general", label: "settings.general" },
+  { id: "settings-appearance", label: "settings.appearance" },
+  { id: "settings-adblock", label: "settings.adblock" },
+  { id: "settings-privacy", label: "settings.privacy" },
+  { id: "settings-downloads", label: "settings.downloads" },
+  { id: "settings-about", label: "settings.about" },
+];
+
+function jump(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }

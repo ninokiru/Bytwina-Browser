@@ -374,8 +374,14 @@ export default function Panel({
       break;
 
     default:
-      body = <Settings privateMode={privateMode} onHomeChange={onHomeChange} />;
+      body = null;
       break;
+  }
+
+  // Cài đặt chiếm toàn vùng dưới thanh công cụ thay vì thẻ nổi 430px:
+  // nó có mục lục riêng theo bố cục chrome://settings.
+  if (kind === "settings") {
+    return <Settings privateMode={privateMode} onHomeChange={onHomeChange} onClose={onClose} />;
   }
 
   return (

@@ -1010,7 +1010,68 @@ button:disabled {
 
 /* ---------- Cài đặt ---------- */
 
+/* Trang Cài đặt phủ toàn vùng dưới thanh công cụ (webview toolbar đã được nới
+   ra toàn cửa sổ khi có bảng mở — ADR-013). */
+.settings-page {
+  position: fixed;
+  top: 96px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  background: var(--bg);
+  color: var(--text);
+  animation: scrim-in 140ms ease;
+}
+
+.settings-nav {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 12px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.settings-nav-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-nav-head svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.settings-nav-item {
+  padding: 8px 14px;
+  border-radius: 999px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-nav-item:hover {
+  background: var(--surface-2);
+}
+
+.settings-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 28px 48px;
+}
+
 .settings {
+  max-width: 720px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1020,10 +1081,11 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
+  padding: 14px 16px;
   border-radius: 12px;
-  background: var(--surface-2);
+  background: var(--surface);
   border: 1px solid var(--border);
+  scroll-margin-top: 16px;
 }
 
 .settings-title {
