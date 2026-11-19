@@ -106,6 +106,18 @@ export default function App() {
     };
   }, []);
 
+  // bytwina://... bị chặn ngay trong lệnh navigate; Rust báo tên trang xuống đây để
+  // toolbar mở bảng tương ứng. Không có protocol thật nào được đăng ký.
+  useEffect(() => {
+    const un = listen<string>("browser://page", (e) => {
+      if (e.payload === "newtab") void cmd("new_tab");
+      else setPanel(e.payload as PanelKind);
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
   // popup_drain chỉ có tác dụng khi webview nội dung xin mở cửa sổ mới;
   // backend không thể báo sự kiện cho toolbar nên polled theo chu kỳ ngắn.
   useEffect(() => {
@@ -168,7 +180,8 @@ export default function App() {
   const go = () => {
     if (active == null) return;
     setEditing(false);
-    void cmd("navigate", { id: String(active.id), input });
+    // bytwina://... không có thật bị từ chối ở backend: giữ lại ô địa chỉ, không log lỗi.
+    void cmd("navigate", { id: String(active.id), input }).catch(() => undefined);
   };
 
   const toggle = (kind: PanelKind) => setPanel((cur) => (cur === kind ? null : kind));
@@ -217,7 +230,8 @@ export default function App() {
     <div className={`chrome${blurred ? " blurred" : ""}`}>
       <header className="tabbar">
         <div className={`brand${state.private ? " private" : ""}`} title="Bytwina Browser">
-          <img src="/brand-mark.png" alt="Bytwina" />
+          <img src="/brand-mark.png" alt="" />
+          <b>Bytwina</b>
         </div>
         {state.private && (
           <span className="private-pill">

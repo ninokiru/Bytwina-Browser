@@ -218,6 +218,16 @@ impl BrowserState {
         }
     }
 
+    /// Ghi URL vừa được yêu cầu và bật trạng thái tải.
+    /// Ô địa chỉ cần đổi ngay khi người dùng Enter, không chờ trang tải xong.
+    pub fn set_requested(&self, id: u32, url: &str) {
+        let mut inner = self.lock();
+        if let Some(t) = inner.tabs.iter_mut().find(|t| t.id == id) {
+            t.url = url.to_string();
+            t.loading = true;
+        }
+    }
+
     /// Đánh dấu tab đã ngủ: webview đã đóng, lịch sử giữ nguyên.
     pub fn mark_sleeping(&self, id: u32) {
         let mut inner = self.lock();
@@ -334,10 +344,15 @@ impl BrowserState {
             .map(|t| TabInfo {
                 id: t.id,
                 label: t.label.clone(),
-                url: t
-                    .current()
-                    .map(|e| e.url.clone())
-                    .unwrap_or_else(|| t.url.clone()),
+                // Đang tải thì vẽ URL vừa yêu cầu; nếu lấy từ lịch sử thì ô địa chỉ
+                // chỉ nhảy sang trang mới khi trang đó tải xong.
+                url: if t.loading {
+                    t.url.clone()
+                } else {
+                    t.current()
+                        .map(|e| e.url.clone())
+                        .unwrap_or_else(|| t.url.clone())
+                },
                 title: t.title.clone(),
                 loading: t.loading,
                 created: t.created,
@@ -482,6 +497,9 @@ pub async fn navigate_to(app: &AppHandle, state: &BrowserState, id: u32, url: &s
         }
     };
     let label = format!("tab-{id}");
+    // Vẽ trước khi làm bất cứ việc chậm nào: tạo webview có thể phải chờ tới 5 giây.
+    state.set_requested(id, url);
+    emit_state(app, state);
     if app.get_webview(&label).is_none() {
         ensure_webview(app, state, id);
         // Chờ webview xuất hiện tối đa ~5s để không treo vô hạn nếu add_child thất bại.
@@ -650,13 +668,18 @@ pub fn on_page_load<R: tauri::Runtime>(
             state.set_loading(id, false);
             // M2: ghi lịch sử toàn cục khi DB khả dụng.
             // M4: chế độ riêng tư không ghi lịch sử.
+            // Ghi ở luồng nền: đây là thao tác ổ đĩa, đứng trên đường vẽ trạng thái
+            // thì tiêu đề/URL trên tab và ô địa chỉ hiện trễ hơn trang trên màn hình.
             if let Some(db) = app
                 .try_state::<crate::db::DbState>()
                 .and_then(|d| d.0.clone())
                 .filter(|_| !state.is_private())
             {
                 let title = state.title_of(id);
-                let _ = db.record_history(&title, url.as_str());
+                let url = url.as_str().to_string();
+                let _ = tauri::async_runtime::spawn_blocking(move || {
+                    let _ = db.record_history(&title, &url);
+                });
             }
         }
     }

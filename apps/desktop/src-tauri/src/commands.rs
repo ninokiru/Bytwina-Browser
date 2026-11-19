@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::browser::{self, BrowserState};
 use crate::navigation::{self, PopupQueue, NEW_TAB_URL};
@@ -71,7 +71,20 @@ pub async fn browser_command(
                 return Err("cần chấp nhận điều khoản trước".into());
             }
             let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
-            let target = navigation::to_url_with(&arg("input")?, search_prefix(&app));
+            let input = arg("input")?;
+            // bytwina://... là trang nội bộ: báo toolbar mở bảng, webview của tab
+            // không được đụng tới (nạp nó sẽ chỉ ra trang lỗi hoặc trang tìm kiếm).
+            match navigation::internal_page(&input) {
+                Some(navigation::Internal::Known(page)) => {
+                    let _ = app.emit_to("toolbar", "browser://page", page);
+                    return Ok(Value::Null);
+                }
+                Some(navigation::Internal::Unknown) => {
+                    return Err(format!("không có trang nội bộ nào tên: {input}"));
+                }
+                None => {}
+            }
+            let target = navigation::to_url_with(&input, search_prefix(&app));
             browser::navigate_to(&app, &state, id, &target).await;
             browser::emit_state(&app, &state);
             Ok(Value::Null)

@@ -10,6 +10,37 @@ pub const NEW_TAB_URL: &str = "about:blank";
 
 const SEARCH_ENGINE: &str = "https://duckduckgo.com/?q=";
 
+/// Trang nội bộ nhận từ ô địa chỉ qua scheme `bytwina://`.
+/// Không đăng ký protocol thật nào: `navigate` chặn chuỗi này trước khi nó tới
+/// `to_url_with`, nếu không nó sẽ thành một truy vấn tìm kiếm (xem to_url_with).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Internal {
+    /// Bảng hoặc hành động mà toolbar đã biết, mở theo đúng tên này.
+    Known(&'static str),
+    /// Đúng scheme nhưng không có trang nào trùng tên.
+    Unknown,
+}
+
+/// Nhận dạng `bytwina://<tên>`. Scheme và tên trang không phân biệt hoa thường.
+pub fn internal_page(input: &str) -> Option<Internal> {
+    let (scheme, rest) = input.trim().split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("bytwina") {
+        return None;
+    }
+    let name = rest.split(['/', '?', '#']).next().unwrap_or_default().to_ascii_lowercase();
+    let page = match name.as_str() {
+        "settings" => "settings",
+        "history" => "history",
+        "downloads" => "downloads",
+        "bookmarks" => "bookmarks",
+        "reading" => "reading",
+        "dictionary" => "dictionary",
+        "newtab" => "newtab",
+        _ => return Some(Internal::Unknown),
+    };
+    Some(Internal::Known(page))
+}
+
 /// Chuyển ô nhập địa chỉ thành URL tuyệt đối:
 /// - có scheme http/https → chuẩn hóa qua url::Url (host chữ thường, giữ đường dẫn);
 /// - scheme khác (file, javascript, data…) → từ chối, coi như tìm kiếm;
@@ -123,6 +154,23 @@ mod tests {
     fn domain_gets_https() {
         assert_eq!(to_url("example.com"), "https://example.com/");
         assert_eq!(to_url("  Example.COM/path "), "https://example.com/path");
+    }
+
+    /// Chuỗi nội bộ phải được nhận ra TRƯỚC khi to_url_with biến nó thành tìm kiếm.
+    #[test]
+    fn internal_pages_recognized() {
+        assert_eq!(
+            internal_page("bytwina://settings"),
+            Some(Internal::Known("settings"))
+        );
+        assert_eq!(
+            internal_page("  BYTWINA://History/  "),
+            Some(Internal::Known("history"))
+        );
+        assert_eq!(internal_page("bytwina://nope"), Some(Internal::Unknown));
+        assert_eq!(internal_page("bytwina://"), Some(Internal::Unknown));
+        assert_eq!(internal_page("https://example.com"), None);
+        assert_eq!(internal_page("example.com"), None);
     }
 
     #[test]

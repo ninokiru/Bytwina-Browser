@@ -153,14 +153,15 @@ button:disabled {
 
 /* ---------- Thương hiệu ---------- */
 
-/* Logo nhận diện ở góc trái dải tab (cách của Cốc Cốc), không đặt trong thẻ trắng. */
+/* Logo nhận diện ở góc trái dải tab (cách của Cốc Cốc) kèm tên Bytwina.
+   Chiều cao 28 + margin 4 + padding hàng tab 6 = 38, vẫn dưới 40 px của hàng tab. */
 .brand {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
   flex: 0 0 auto;
-  padding: 3px;
+  padding: 0 8px 0 2px;
   margin-bottom: 4px;
   border-radius: 8px;
   background: transparent;
@@ -173,10 +174,17 @@ button:disabled {
 }
 
 .brand img {
-  width: 100%;
-  height: 100%;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   display: block;
+}
+
+.brand b {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--text);
 }
 
 .brand.private {
