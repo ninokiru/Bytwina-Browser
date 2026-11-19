@@ -25,9 +25,28 @@ jobs:
         with:
           tool: cargo-audit
       - name: Cargo audit
+        shell: bash
         run: |
           # Chưa commit Cargo.lock thì không có gì để kiểm tra; ghi rõ để không báo xanh giả.
-          if [ -f Cargo.lock ]; then cargo audit; else echo "::warning::Thiếu Cargo.lock, bỏ qua cargo audit"; fi
+          if [ ! -f Cargo.lock ]; then
+            echo "::warning::Thiếu Cargo.lock, bỏ qua cargo audit"
+            exit 0
+          fi
+          set +e
+          cargo audit 2>&1 | tee audit.txt
+          status=${PIPESTATUS[0]}
+          # Bản đầy đủ vào Summary: log của action cần quyền đăng nhập mới đọc được,
+          # còn Summary thì xem qua API và ngay trên giao diện.
+          {
+            echo '### cargo audit'
+            echo '```'
+            grep -E 'Crate:|Version:|Title:|Date:|warning:|error:' audit.txt | head -n 120
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'Crate:|Title:' audit.txt | head -n 20 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          exit "$status"
 
   npm-audit:
     runs-on: ubuntu-latest
