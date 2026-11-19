@@ -69,9 +69,10 @@ pub fn attach(webview: &Webview<tauri::Wry>, handle: BlockerHandle) {
                 ) {
                     log::error!("[{label}] đặt filter 3 tham số thất bại: {e}");
                 }
-            } else if let Err(e) =
-                core.AddWebResourceRequestedFilter("*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)
-            {
+            } else if let Err(e) = core.AddWebResourceRequestedFilter(
+                &HSTRING::from("*"),
+                COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+            ) {
                 log::error!("[{label}] đặt filter thất bại: {e}");
             }
         }
@@ -139,7 +140,7 @@ unsafe fn on_requested(
         let response = environment.CreateWebResourceResponse(
             None::<&IStream>,
             404,
-            "Blocked",
+            &HSTRING::from("Blocked"),
             PCWSTR::null(),
         )?;
         args.SetResponse(&response)?;

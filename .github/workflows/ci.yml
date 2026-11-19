@@ -51,9 +51,28 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri -> target
+      # Mọi bước của job Rust đều in lỗi ra annotation + Summary: log của action
+      # cần đăng nhập mới đọc được, annotation thì xem qua API công khai.
       - name: Check
-        run: cargo check --all-targets
+        shell: bash
+        run: |
+          set +e
+          cargo check --all-targets 2>&1 | tee check.txt
+          status=${PIPESTATUS[0]}
+          hits=$(grep -E '^error|^warning: unused|-->' check.txt | head -n 12)
+          if [ -z "$hits" ]; then hits=$(tail -n 12 check.txt); fi
+          printf '%s\n' "$hits" | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          {
+            echo '### Check'
+            echo '```'
+            tail -c 40000 check.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: Clippy
+        if: always()
         shell: bash
         run: |
           set +e
@@ -94,6 +113,7 @@ jobs:
       # Định dạng chạy cuối: trước đây nó đứng đầu nên chỉ một lỗi xuống dòng
       # cũng làm Clippy/Check/Tests bị bỏ qua, không thấy lỗi biên dịch thật.
       - name: Format
+        if: always()
         shell: bash
         run: |
           set +e
