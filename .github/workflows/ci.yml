@@ -51,8 +51,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri -> target
-      - name: Format
-        run: cargo fmt --all -- --check
+      - name: Check
+        run: cargo check --all-targets
       - name: Clippy
         shell: bash
         run: |
@@ -72,8 +72,6 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
-      - name: Check
-        run: cargo check --all-targets
       - name: Tests
         shell: bash
         run: |
@@ -92,4 +90,24 @@ jobs:
             tail -c 40000 test.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      # Định dạng chạy cuối: trước đây nó đứng đầu nên chỉ một lỗi xuống dòng
+      # cũng làm Clippy/Check/Tests bị bỏ qua, không thấy lỗi biên dịch thật.
+      - name: Format
+        shell: bash
+        run: |
+          set +e
+          cargo fmt --all -- --check 2>&1 | tee fmt.txt
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Định dạng — cần chạy `cargo fmt --all`'
+              echo '```diff'
+              head -c 20000 fmt.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep -E '^Diff in' fmt.txt | head -n 20 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          fi
           exit "$status"
