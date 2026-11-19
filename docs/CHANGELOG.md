@@ -1,6 +1,6 @@
 # Nhật ký thay đổi
 
-## Chưa phát hành
+## 0.0.3 — 2026-11-19
 ### Thêm
 - Tab dọc: mục Cài đặt "Bố cục tab và workspace" chuyển thanh công cụ thành cột trái 260 px, tab và thanh địa chỉ xếp dọc, nội dung dịch sang phải.
 - Chia màn hình: hai tab cạnh nhau, có khe 4 px; mở bằng nút chia trên thanh công cụ (chọn ô phải trong danh sách tab) hoặc nút chia ở từng hàng tab. Bấm tab đang ở ô phải để hoán đổi hai ô.

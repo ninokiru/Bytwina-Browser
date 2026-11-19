@@ -107,7 +107,7 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
   reading_list: () => reading,
   downloads_list: () => downloads,
   diagnostics: () => ({
-    appVersion: "0.0.2",
+    appVersion: "0.0.3",
     webviewVersion: "126.0.2592.87",
     os: "Windows 11 (26100)",
     dbAvailable: true,
