@@ -5,14 +5,14 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
 - [x] M0 — Nền tảng kỹ thuật (prototype đa WebView2; chưa nghiệm thu trên Windows)
 - [x] M8 — Kiểm thử và ổn định (test tự động đã viết, checklist Windows chưa chạy; xem docs/TESTING.md)
 - [~] M9 — Phát hành 1.0 (phần không cần hạ tầng: CHANGELOG, USER_GUIDE, SUPPORT; ký số, cập nhật, website chưa làm)
-- [~] M10 — Trải nghiệm nâng cao (đã làm: tìm tab, danh sách đọc; chưa làm: split view, workspace, quick actions, per-site, theme, tab sleep, PiP, cử chỉ)
+- [~] M10 — Trải nghiệm nâng cao (đã làm: tìm tab, danh sách đọc, theme sáng/tối, tab ngủ, tra từ điển, chia màn hình, workspace; chưa làm: quick actions, per-site, PiP, cử chỉ)
 - [~] M1 — Nền tảng trình duyệt: thanh địa chỉ, điều hướng, tab, trang tab mới (`about:blank`)
   - [ ] Phím tắt toàn cục (Ctrl+T/W/L/R hiện chỉ hoạt động khi focus vào toolbar)
   - [x] Popup: chặn cửa sổ mới, URL hợp lệ mở thành tab nền (hàng đợi 16 mục)
 - [~] M2 — Dữ liệu: SQLite (bookmark, lịch sử, cài đặt, phiên). Schema v2.
   - [x] Phiên lưu cả tab ghim và nhóm tab
   - [ ] Sao lưu/khôi phục DB, WAL checkpoint khi thoát
-  - [ ] Tách profile (cần nghiên cứu WebView2 user data folder)
+  - [ ] Tách profile: đã có thư mục dữ liệu riêng theo workspace; còn thiếu sao lưu và chọn profile mặc định (chưa kiểm chứng runtime)
 - [~] M3 — Tải xuống
   - [x] Sự kiện `on_download`: chọn thư mục Downloads, tránh ghi đè, ghi lịch sử tải vào DB
   - [x] Danh sách tải xuống trong panel "⤓"; xóa danh sách
@@ -33,7 +33,8 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
 - [~] M5 — Tính năng nâng cao
   - [x] Ghim tab (tab ghim nằm đầu thanh tab)
   - [x] Nhóm tab (gán tên nhóm, hiển thị tiền tố `[nhóm]`)
-  - [ ] Tab dọc (cần thay đổi bố cục Rust: toolbar hiện có chiều cao cố định)
+  - [x] Tab dọc: thanh công cụ thành cột trái 260 px, tab xếp dọc (chưa kiểm chứng runtime)
+  - [x] Chia màn hình: hai webview cạnh nhau, đổi ô phải bằng danh sách tab
   - [ ] Reader mode (cần chèn script vào trang; chưa quyết định)
   - [ ] PDF: phụ thuộc WebView2, chưa kiểm tra
   - [ ] Trang tab mới có giao diện riêng

@@ -11,6 +11,23 @@ use crate::tabs::{HistoryEntry, StatePayload, TabInfo};
 
 pub const TOOLBAR_HEIGHT: f64 = 96.0;
 
+/// Bề rộng cột bên trái khi bật tab dọc (toolbar thành cột, nội dung dịch sang phải).
+pub const SIDEBAR_WIDTH: f64 = 260.0;
+
+/// Khe giữa hai ô khi chia màn hình.
+const SPLIT_GAP: f64 = 4.0;
+
+/// Bật bố cục tab dọc (cài đặt `tabLayout` = "vertical").
+static VERTICAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_vertical(on: bool) {
+    VERTICAL.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+pub fn is_vertical() -> bool {
+    VERTICAL.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Khi true, thanh công cụ phủ toàn cửa sổ (màn hình điều khoản chưa chấp nhận).
 static TOOLBAR_FULL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -27,14 +44,26 @@ pub fn set_toolbar_full(on: bool) {
     TOOLBAR_FULL.store(on, std::sync::atomic::Ordering::SeqCst);
 }
 
-/// Chiều cao thanh công cụ theo chiều cao cửa sổ hiện hành.
-pub fn toolbar_height_for(window_height: f64) -> f64 {
+/// Cỡ webview toolbar theo cỡ cửa sổ: phủ toàn cửa sổ khi cần bảng nổi,
+/// cột trái ở chế độ tab dọc, không thì dải ngang phía trên.
+pub fn toolbar_size_for(window_width: f64, window_height: f64) -> LogicalSize<f64> {
     let full = TOOLBAR_FULL.load(std::sync::atomic::Ordering::SeqCst)
         || PANEL_OPEN.load(std::sync::atomic::Ordering::SeqCst);
     if full {
-        window_height
+        LogicalSize::new(window_width, window_height)
+    } else if is_vertical() {
+        LogicalSize::new(SIDEBAR_WIDTH.min(window_width), window_height)
     } else {
-        TOOLBAR_HEIGHT
+        LogicalSize::new(window_width, TOOLBAR_HEIGHT)
+    }
+}
+
+/// Vùng nội dung (x, y, rộng, cao) theo cỡ cửa sổ logic.
+fn content_area(w: f64, h: f64) -> (f64, f64, f64, f64) {
+    if is_vertical() {
+        (SIDEBAR_WIDTH, 0.0, (w - SIDEBAR_WIDTH).max(0.0), h)
+    } else {
+        (0.0, TOOLBAR_HEIGHT, w, (h - TOOLBAR_HEIGHT).max(0.0))
     }
 }
 const MAX_HISTORY: usize = 50;
@@ -47,6 +76,8 @@ struct Inner {
     active: Option<u32>,
     next_id: u32,
     private: bool,
+    /// Tab hiển thị ở ô phải khi chia màn hình (tab đang hoạt động ở ô trái).
+    split: Option<u32>,
 }
 
 struct Tab {
@@ -126,6 +157,7 @@ impl BrowserState {
                 active: None,
                 next_id: 1,
                 private: false,
+                split: None,
             })),
         }
     }
@@ -187,6 +219,10 @@ impl BrowserState {
                 .filter(|n| inner.tabs.iter().any(|t| t.id == *n));
             inner.active = next;
         }
+        // Ô chia màn hình không còn hợp lệ nếu tab đó bị đóng hoặc trùng tab hoạt động.
+        if inner.split == Some(id) || inner.split == inner.active {
+            inner.split = None;
+        }
         Ok(())
     }
 
@@ -195,11 +231,40 @@ impl BrowserState {
         if !inner.tabs.iter().any(|t| t.id == id) {
             return Err(format!("không tìm thấy tab {id}"));
         }
+        // Bấm tab đang ở ô phải: hoán đổi hai ô thay vì xóa chia màn hình.
+        let prev = inner.active;
+        if inner.split == Some(id) {
+            inner.split = prev.filter(|p| *p != id);
+        }
         inner.active = Some(id);
         if let Some(t) = inner.tabs.iter_mut().find(|t| t.id == id) {
             t.last_active = std::time::Instant::now();
         }
         Ok(())
+    }
+
+    /// Chọn tab cho ô phải (None: tắt chia màn hình). Tab phải tồn tại và khác tab hoạt động.
+    pub fn set_split(&self, id: Option<u32>) -> Result<(), String> {
+        let mut inner = self.lock();
+        if let Some(id) = id {
+            if !inner.tabs.iter().any(|t| t.id == id) {
+                return Err(format!("không tìm thấy tab {id}"));
+            }
+            if inner.active == Some(id) {
+                return Err("tab đang hoạt động không thể là ô phải".into());
+            }
+        }
+        inner.split = id;
+        Ok(())
+    }
+
+    /// (tab ô trái, tab ô phải) khi đang chia màn hình hợp lệ.
+    pub fn split_pair(&self) -> Option<(u32, u32)> {
+        let inner = self.lock();
+        match (inner.active, inner.split) {
+            (Some(a), Some(s)) if a != s => Some((a, s)),
+            _ => None,
+        }
     }
 
     pub fn active_id(&self) -> Option<u32> {
@@ -244,7 +309,11 @@ impl BrowserState {
             .tabs
             .iter()
             .filter(|t| {
-                t.created && !t.loading && Some(t.id) != active && t.last_active.elapsed() >= limit
+                t.created
+                    && !t.loading
+                    && Some(t.id) != active
+                    && Some(t.id) != inner.split
+                    && t.last_active.elapsed() >= limit
             })
             .map(|t| t.id)
             .collect()
@@ -368,6 +437,8 @@ impl BrowserState {
             tabs,
             active_tab: inner.active,
             private: inner.private,
+            vertical: is_vertical(),
+            split_tab: inner.split.filter(|s| inner.active != Some(*s)),
         }
     }
 
@@ -406,19 +477,62 @@ pub fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, state: &BrowserState) {
     let _ = app.emit_to("toolbar", "browser://state", state.snapshot());
 }
 
-fn content_size(app: &AppHandle) -> LogicalSize<f64> {
-    app.get_window("main")
-        .and_then(|w| {
-            let scale = w.scale_factor().ok()?;
-            let s = w.inner_size().ok()?.to_logical::<f64>(scale);
-            // Vùng nội dung luôn bắt đầu dưới thanh công cụ chuẩn, kể cả khi bảng
-            // nổi tạm phủ toàn cửa sổ — webview nội dung chỉ bị ẩn, không đổi cỡ.
-            Some(LogicalSize::new(
-                s.width,
-                (s.height - TOOLBAR_HEIGHT).max(0.0),
-            ))
-        })
-        .unwrap_or(LogicalSize::new(1200.0, 704.0))
+/// Cỡ cửa sổ chính theo đơn vị logic.
+fn window_logical(app: &AppHandle) -> Option<LogicalSize<f64>> {
+    let w = app.get_window("main")?;
+    let scale = w.scale_factor().ok()?;
+    Some(w.inner_size().ok()?.to_logical::<f64>(scale))
+}
+
+/// Vị trí và cỡ webview của tab: toàn vùng nội dung, hoặc một nửa khi chia màn hình.
+/// Vùng nội dung không đổi khi bảng nổi phủ cửa sổ — webview nội dung chỉ bị ẩn.
+fn rect_for(
+    app: &AppHandle,
+    state: &BrowserState,
+    id: u32,
+) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    let win = window_logical(app).unwrap_or(LogicalSize::new(1200.0, 800.0));
+    let (x, y, w, h) = content_area(win.width, win.height);
+    match state.split_pair() {
+        Some((left, right)) if id == left || id == right => {
+            let half = ((w - SPLIT_GAP) / 2.0).floor().max(0.0);
+            if id == left {
+                (LogicalPosition::new(x, y), LogicalSize::new(half, h))
+            } else {
+                (
+                    LogicalPosition::new(x + half + SPLIT_GAP, y),
+                    LogicalSize::new((w - half - SPLIT_GAP).max(0.0), h),
+                )
+            }
+        }
+        _ => (LogicalPosition::new(x, y), LogicalSize::new(w, h)),
+    }
+}
+
+/// Thư mục dữ liệu riêng của workspace hiện tại (cài đặt `workspace`); None là profile mặc định.
+fn workspace_dir(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let name = app
+        .try_state::<DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("workspace").ok().flatten())?;
+    if !valid_workspace_name(&name) || name.is_empty() {
+        return None;
+    }
+    Some(
+        app.path()
+            .app_data_dir()
+            .ok()?
+            .join("workspaces")
+            .join(name),
+    )
+}
+
+/// Tên workspace: tối đa 24 ký tự chữ/số/gạch; rỗng = profile mặc định.
+pub fn valid_workspace_name(name: &str) -> bool {
+    name.len() <= 24
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Tạo webview nội dung cho tab nếu chưa tồn tại.
@@ -430,7 +544,7 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
         state.mark_created(id);
         return;
     }
-    let builder = WebviewBuilder::new(&label, WebviewUrl::External(BLANK_URL.parse().unwrap()))
+    let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(BLANK_URL.parse().unwrap()))
         .on_navigation(navigation::page_navigation_allowed)
         // Chế độ riêng tư: tab mới không giữ cookie trong profile (cần WebView2 ≥ 101.0.1210.39).
         .incognito(state.is_private())
@@ -460,14 +574,15 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
                 navigation::handle_new_window(queue, url)
             }
         });
+    // Workspace riêng: cookie/đăng nhập lưu ở thư mục riêng (chưa kiểm chứng trên Windows).
+    if let Some(dir) = workspace_dir(app) {
+        builder = builder.data_directory(dir);
+    }
     let Some(window) = app.get_window("main") else {
         return;
     };
-    match window.add_child(
-        builder,
-        LogicalPosition::new(0.0, TOOLBAR_HEIGHT),
-        content_size(app),
-    ) {
+    let (pos, size) = rect_for(app, state, id);
+    match window.add_child(builder, pos, size) {
         Ok(wv) => {
             state.mark_created(id);
             // M4: gắn bộ chặn ngay khi có webview, trước navigation đầu tiên.
@@ -535,10 +650,12 @@ pub fn stop_active(app: &AppHandle, state: &BrowserState) {
     }
 }
 
-/// Ẩn mọi webview nội dung đã tạo trừ `active`.
+/// Ẩn mọi webview nội dung đã tạo trừ `active` và tab ở ô chia màn hình.
 pub fn hide_others(app: &AppHandle, state: &BrowserState, active: u32) {
+    let split = state.split_pair().map(|(_, s)| s);
     for label in state.created_labels() {
-        if tab_id_of(&label) != Some(active) {
+        let id = tab_id_of(&label);
+        if id != Some(active) && id != split {
             if let Some(wv) = app.get_webview(&label) {
                 let _ = wv.hide();
             }
@@ -576,6 +693,30 @@ pub fn focus_tab(app: &AppHandle, state: &BrowserState, id: u32) {
             }
         }
     }
+    // Chia màn hình: hiện ô phải (tạo nếu cần) rồi xếp lại hai ô.
+    if let Some((_, right)) = state.split_pair() {
+        let right_label = format!("tab-{right}");
+        if let Some(wv) = app.get_webview(&right_label) {
+            let _ = wv.show();
+        } else {
+            let url = state.url_of(right);
+            ensure_webview(app, state, right);
+            if let (Some(u), Some(wv)) = (url, app.get_webview(&right_label)) {
+                if let Ok(parsed) = u.parse() {
+                    let _ = wv.navigate(parsed);
+                }
+            }
+        }
+    }
+    relayout(app, state);
+}
+
+/// Bố trí lại dù hình học cửa sổ không đổi (đổi kiểu tab, bật/tắt chia màn hình).
+pub fn relayout(app: &AppHandle, state: &BrowserState) {
+    if let Ok(mut g) = LAST_LAYOUT.lock() {
+        *g = None;
+    }
+    layout(app, state);
 }
 
 pub fn close_webview(app: &AppHandle, id: u32) {
@@ -610,14 +751,17 @@ pub fn layout(app: &AppHandle, state: &BrowserState) {
     if let Ok(mut g) = LAST_LAYOUT.lock() {
         *g = Some(key);
     }
-    let content = LogicalSize::new(size.width, (size.height - TOOLBAR_HEIGHT).max(0.0));
     if let Some(toolbar) = app.get_webview("toolbar") {
-        let _ = toolbar.set_size(LogicalSize::new(size.width, toolbar_height_for(size.height)));
+        let _ = toolbar.set_size(toolbar_size_for(size.width, size.height));
     }
     for label in state.created_labels() {
+        let Some(id) = tab_id_of(&label) else {
+            continue;
+        };
         if let Some(wv) = app.get_webview(&label) {
-            let _ = wv.set_position(LogicalPosition::new(0.0, TOOLBAR_HEIGHT));
-            let _ = wv.set_size(content);
+            let (pos, area) = rect_for(app, state, id);
+            let _ = wv.set_position(pos);
+            let _ = wv.set_size(area);
         }
     }
 }
@@ -936,6 +1080,9 @@ fn tab_id_of(label: &str) -> Option<u32> {
 mod tests {
     use super::*;
 
+    /// Bố cục đọc biến toàn cục `VERTICAL`; khoá để các test không giẫm nhau.
+    static LAYOUT_TEST_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn add_activate_close_cycle() {
         let s = BrowserState::new();
@@ -1059,6 +1206,94 @@ mod tests {
         assert_eq!(s.title_of(id), "Trang X");
         let snap = s.snapshot();
         assert!(snap.tabs[0].pinned);
+    }
+
+    #[test]
+    fn split_pair_requires_two_tabs() {
+        let s = BrowserState::new();
+        let a = s.add_tab("https://a.test/".into());
+        let b = s.add_tab("https://b.test/".into());
+        s.activate(a).unwrap();
+        assert_eq!(s.split_pair(), None);
+        // Tab hoạt động không thể đồng thời là ô phải; tab lạ bị từ chối.
+        assert!(s.set_split(Some(a)).is_err());
+        assert!(s.set_split(Some(999)).is_err());
+        s.set_split(Some(b)).unwrap();
+        assert_eq!(s.split_pair(), Some((a, b)));
+        assert_eq!(s.snapshot().split_tab, Some(b));
+        s.set_split(None).unwrap();
+        assert_eq!(s.split_pair(), None);
+        assert_eq!(s.snapshot().split_tab, None);
+    }
+
+    #[test]
+    fn closing_split_tab_clears_split() {
+        let s = BrowserState::new();
+        let a = s.add_tab("https://a.test/".into());
+        let b = s.add_tab("https://b.test/".into());
+        s.activate(a).unwrap();
+        s.set_split(Some(b)).unwrap();
+        s.close_tab(b).unwrap();
+        assert_eq!(s.split_pair(), None);
+        assert_eq!(s.active_id(), Some(a));
+    }
+
+    #[test]
+    fn closing_left_tab_into_split_clears_panes() {
+        let s = BrowserState::new();
+        let a = s.add_tab("https://a.test/".into());
+        let b = s.add_tab("https://b.test/".into());
+        s.activate(a).unwrap();
+        s.set_split(Some(b)).unwrap();
+        s.close_tab(a).unwrap();
+        // b trở thành tab hoạt động nên không thể vừa là ô phải.
+        assert_eq!(s.active_id(), Some(b));
+        assert_eq!(s.split_pair(), None);
+    }
+
+    #[test]
+    fn activating_split_tab_swaps_panes() {
+        let s = BrowserState::new();
+        let a = s.add_tab("https://a.test/".into());
+        let b = s.add_tab("https://b.test/".into());
+        s.activate(a).unwrap();
+        s.set_split(Some(b)).unwrap();
+        s.activate(b).unwrap();
+        assert_eq!(s.split_pair(), Some((b, a)));
+    }
+
+    #[test]
+    fn workspace_names_are_validated() {
+        // Rỗng là hợp lệ: quay về hồ sơ mặc định.
+        assert!(valid_workspace_name(""));
+        assert!(valid_workspace_name("cong-viec_1"));
+        assert!(!valid_workspace_name("có dấu"));
+        assert!(!valid_workspace_name("a/b"));
+        assert!(!valid_workspace_name("a b"));
+        assert!(!valid_workspace_name(&"x".repeat(25)));
+    }
+
+    #[test]
+    fn layout_geometry_follows_tab_style() {
+        let _guard = LAYOUT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_vertical(false);
+        assert_eq!(toolbar_size_for(1200.0, 800.0).width, 1200.0);
+        assert_eq!(toolbar_size_for(1200.0, 800.0).height, TOOLBAR_HEIGHT);
+        assert_eq!(
+            content_area(1200.0, 800.0),
+            (0.0, TOOLBAR_HEIGHT, 1200.0, 800.0 - TOOLBAR_HEIGHT)
+        );
+        set_vertical(true);
+        assert_eq!(toolbar_size_for(1200.0, 800.0).width, SIDEBAR_WIDTH);
+        assert_eq!(toolbar_size_for(1200.0, 800.0).height, 800.0);
+        assert_eq!(
+            content_area(1200.0, 800.0),
+            (SIDEBAR_WIDTH, 0.0, 1200.0 - SIDEBAR_WIDTH, 800.0)
+        );
+        // Cửa sổ hẹp hơn cột: toolbar co lại, vùng nội dung không âm.
+        assert_eq!(toolbar_size_for(200.0, 600.0).width, 200.0);
+        assert_eq!(content_area(200.0, 600.0).2, 0.0);
+        set_vertical(false);
     }
 
     /// Số đo cho phần bố cục: đọc nhãn phải rẻ hơn nhiều so với đọc toàn bộ

@@ -6,7 +6,10 @@ import ReactDOM from "react-dom/client";
 import "./styles.css";
 
 const theme = new URLSearchParams(location.search).get("theme") ?? "light";
-const panel = new URLSearchParams(location.search).get("panel");
+const params = new URLSearchParams(location.search);
+const panel = params.get("panel");
+const vertical = params.get("vertical") === "1";
+const split = params.get("split") === "1";
 
 const tabs = [
   {
@@ -59,7 +62,13 @@ const tabs = [
   },
 ];
 
-const state = { tabs, activeTab: 1, private: false };
+const state = {
+  tabs,
+  activeTab: 1,
+  private: false,
+  vertical,
+  splitTab: split ? 2 : null,
+};
 
 const bookmarks = [
   { id: 1, title: "Tauri 2 — Tài liệu chính thức", url: "https://tauri.app/", folder: "Tài liệu" },
@@ -88,6 +97,7 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
     if (args.key === "language") return "vi";
     if (args.key === "theme") return theme;
     if (args.key === "homeUrl") return "https://bytwina.dev/";
+    if (args.key === "tabLayout") return vertical ? "vertical" : "horizontal";
     return null;
   },
   state: () => state,

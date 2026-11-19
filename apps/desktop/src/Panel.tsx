@@ -16,6 +16,7 @@ import {
   MoreIcon,
   SearchIcon,
   SettingsIcon,
+  SplitIcon,
   StarIcon,
   TrashIcon,
 } from "./Icons";
@@ -78,6 +79,8 @@ export default function Panel({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [tabList, setTabList] = useState<TabInfo[]>([]);
+  const [activeTab, setActiveTab] = useState<number | null>(null);
+  const [splitTab, setSplitTab] = useState<number | null>(null);
   const [tabQuery, setTabQuery] = useState("");
   const [reading, setReading] = useState<ReadingItem[]>([]);
   const [siteHost, setSiteHost] = useState("");
@@ -111,8 +114,14 @@ export default function Panel({
     } else if (kind === "history") {
       setHistory(((await cmd("history_search", { query: debouncedQuery })) as HistoryItem[]) ?? []);
     } else if (kind === "tabs") {
-      const s = (await cmd("state")) as { tabs: TabInfo[] } | null;
+      const s = (await cmd("state")) as {
+        tabs: TabInfo[];
+        activeTab: number | null;
+        splitTab: number | null;
+      } | null;
       setTabList(s?.tabs ?? []);
+      setActiveTab(s?.activeTab ?? null);
+      setSplitTab(s?.splitTab ?? null);
     } else if (kind === "reading") {
       setReading(((await cmd("reading_list")) as ReadingItem[]) ?? []);
     } else if (kind === "downloads") {
@@ -244,6 +253,21 @@ export default function Panel({
                   >
                     <span className="list-title">{tb.title || tb.url}</span>
                     <span className="list-sub">{tb.url}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`split-btn${tb.id === splitTab ? " on" : ""}`}
+                    title={
+                      tb.id === splitTab ? t("panel.splitClear") : t("panel.splitRight")
+                    }
+                    disabled={tb.id === activeTab}
+                    onClick={() => {
+                      void cmd("split_set", {
+                        id: tb.id === splitTab ? "" : String(tb.id),
+                      }).then(onClose);
+                    }}
+                  >
+                    <SplitIcon />
                   </button>
                 </li>
               ))}

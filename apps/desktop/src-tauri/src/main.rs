@@ -5,7 +5,7 @@
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use tauri::{LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
+use tauri::{LogicalPosition, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
 
 mod browser;
 mod commands;
@@ -89,6 +89,15 @@ fn main() {
             // Điều khoản: chưa chấp nhận thì thanh công cụ phủ cửa sổ và không mở tab.
             let accepted = terms::is_accepted(app.handle());
             browser::set_toolbar_full(!accepted);
+            // Bố cục tab đã lưu phải có hiệu lực trước khi tạo toolbar để cỡ
+            // webview và vùng nội dung khớp ngay lần vẽ đầu tiên.
+            let vertical = app
+                .state::<DbState>()
+                .0
+                .as_ref()
+                .and_then(|d| d.get_setting("tabLayout").ok().flatten())
+                .is_some_and(|v| v == "vertical");
+            browser::set_vertical(vertical);
 
             let window = tauri::window::WindowBuilder::new(app, "main")
                 .title("Bytwina Browser")
@@ -101,7 +110,7 @@ fn main() {
             window.add_child(
                 WebviewBuilder::new("toolbar", WebviewUrl::App("index.html".into())),
                 LogicalPosition::new(0.0, 0.0),
-                LogicalSize::new(1200.0, browser::toolbar_height_for(800.0)),
+                browser::toolbar_size_for(1200.0, 800.0),
             )?;
 
             // M2: khôi phục phiên trước; nếu không có thì mở tab HOME_URL.

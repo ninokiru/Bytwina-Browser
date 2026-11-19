@@ -9,6 +9,7 @@ import {
   CheckCircleIcon,
   CloseIcon,
   DownloadIcon,
+  GridIcon,
   KeyIcon,
   LockIcon,
   PaletteIcon,
@@ -57,6 +58,9 @@ export default function Settings({
   const [downloadDir, setDownloadDir] = useState("");
   const [zoom, setZoom] = useState("100");
   const [theme, setTheme] = useState("system");
+  const [tabLayout, setTabLayout] = useState("horizontal");
+  const [workspace, setWorkspace] = useState("");
+  const [workspaceError, setWorkspaceError] = useState("");
   const [clearOnExit, setClearOnExit] = useState(false);
   const [sleep, setSleep] = useState("0");
   const [message, setMessage] = useState("");
@@ -84,7 +88,9 @@ export default function Settings({
       get("theme"),
       get("clearOnExit"),
       get("sleepMinutes"),
-    ]).then(([h, e, s, d, z, th, c, sl]) => {
+      get("tabLayout"),
+      get("workspace"),
+    ]).then(([h, e, s, d, z, th, c, sl, tl, ws]) => {
       if (h) setHome(h);
       if (e) setEngine(e);
       if (s) setStartup(s);
@@ -93,6 +99,8 @@ export default function Settings({
       if (th) setTheme(th);
       setClearOnExit(c === "1");
       if (sl) setSleep(sl);
+      if (tl) setTabLayout(tl);
+      if (ws) setWorkspace(ws);
     });
     void loadAdblock();
     // Mục "Bạn và Bytwina" hiện thông tin ngay, không cần bấm nút lấy chẩn đoán.
@@ -145,6 +153,24 @@ export default function Settings({
   const changeZoom = (next: string) => {
     setZoom(next);
     void cmd("zoom_set", { percent: next }).catch(() => undefined);
+  };
+
+  const changeTabLayout = (next: string) => {
+    setTabLayout(next);
+    void cmd("tab_layout", { layout: next }).catch(() => undefined);
+  };
+
+  // Workspace chỉ áp dụng khi tạo webview mới, nên backend tải lại tab đang mở.
+  const saveWorkspace = () => {
+    const name = workspace.trim();
+    if (!/^[A-Za-z0-9_-]{0,24}$/.test(name)) {
+      setWorkspaceError(t("settings.workspaceInvalid"));
+      return;
+    }
+    setWorkspaceError("");
+    void cmd("workspace_set", { name })
+      .then(() => setWorkspace(name))
+      .catch(() => setWorkspaceError(t("settings.workspaceInvalid")));
   };
 
   const clearData = () => {
@@ -237,6 +263,33 @@ export default function Settings({
                 ))}
               </select>
             </label>
+          </Section>
+
+          <Section id="settings-layout" title={t("settings.layout")}>
+            <label className="settings-row">
+              {t("settings.tabLayout")}
+              <select value={tabLayout} onChange={(e) => changeTabLayout(e.target.value)}>
+                <option value="horizontal">{t("settings.layoutHorizontal")}</option>
+                <option value="vertical">{t("settings.layoutVertical")}</option>
+              </select>
+            </label>
+            <p className="hint">{t("settings.layoutHint")}</p>
+            <label className="settings-stack">
+              {t("settings.workspaceName")}
+              <input
+                className="field"
+                value={workspace}
+                placeholder={t("settings.workspacePlaceholder")}
+                onChange={(e) => setWorkspace(e.target.value)}
+                onBlur={saveWorkspace}
+              />
+            </label>
+            <p className="hint">{t("settings.workspaceHint")}</p>
+            {workspaceError && (
+              <p className="hint">
+                <AlertIcon /> {workspaceError}
+              </p>
+            )}
           </Section>
 
           <Section id="settings-search" title={t("settings.search")}>
@@ -416,6 +469,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 const SECTIONS: { id: string; label: Key; icon: ComponentType; group: number }[] = [
   { id: "settings-you", label: "settings.you", icon: UserIcon, group: 0 },
   { id: "settings-appearance", label: "settings.appearance", icon: PaletteIcon, group: 0 },
+  { id: "settings-layout", label: "settings.layout", icon: GridIcon, group: 0 },
   { id: "settings-search", label: "settings.search", icon: SearchIcon, group: 0 },
   { id: "settings-startup", label: "settings.startup", icon: PowerIcon, group: 0 },
   { id: "settings-privacy", label: "settings.privacy", icon: LockIcon, group: 1 },

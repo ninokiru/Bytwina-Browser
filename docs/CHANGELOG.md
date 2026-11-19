@@ -1,8 +1,10 @@
 # Nhật ký thay đổi
 
 ## Chưa phát hành
-### Sửa
-- Bộ chặn: `load()` bỏ cache engine khi có `.txt` mới hơn, nên danh sách người dùng tự đặt vào thư mục có hiệu lực ở lần mở trình duyệt sau mà không cần bấm "Tải lại".
+### Thêm
+- Tab dọc: mục Cài đặt "Bố cục tab và workspace" chuyển thanh công cụ thành cột trái 260 px, tab và thanh địa chỉ xếp dọc, nội dung dịch sang phải.
+- Chia màn hình: hai tab cạnh nhau, có khe 4 px; mở bằng nút chia trên thanh công cụ (chọn ô phải trong danh sách tab) hoặc nút chia ở từng hàng tab. Bấm tab đang ở ô phải để hoán đổi hai ô.
+- Workspace: thư mục dữ liệu WebView2 riêng theo tên workspace (`WebviewBuilder::data_directory`), tên chỉ gồm chữ, số, `-`, `_` (tối đa 24 ký tự). Đổi workspace tải lại tab đang mở. Chưa kiểm chứng runtime trên Windows.
 
 ## 0.0.2 — 2026-11-19
 ### Thêm
@@ -21,7 +23,13 @@
 - Chặn quảng cáo (ADR-015, bước chặn mạng): engine `adblock` 0.13, tải EasyList + EasyPrivacy + uBlock Filters/Privacy + ABPVN lúc chạy, cache `.txt` và engine đã serialize trong `app_data/filters`; các lệnh `adblock_status/set/site/update/reload`; mục Cài đặt có bật tắt, số danh sách, số request đã chặn và nút cập nhật. Thay cho danh sách chặn popup cứng trước đây.
 
 - Trang Cài đặt chiếm toàn bộ vùng dưới thanh công cụ, có mục lục bên trái (Chung, Giao diện, Chặn quảng cáo, Quyền riêng tư, Tải xuống, Giới thiệu) và cuộn tới từng nhóm, thay cho thẻ nổi 430 px.
+- Cài đặt: công cụ tìm kiếm (DuckDuckGo, Google, Bing, Brave), hành vi khi khởi động (mở lại tab / trang chủ / trang trống), thư mục tải xuống tùy chọn, phóng to trang 50–200%, chủ đề sáng/tối/theo hệ thống, xóa cookie và dữ liệu khi thoát, tab ngủ sau 5/15/30 phút rảnh.
+- Tra từ điển: panel mở Wiktionary tiếng Anh hoặc tiếng Việt trong tab mới (dịch vụ bên ngoài).
+- Chế độ riêng tư dùng `incognito` cho tab mở sau khi bật (cần WebView2 ≥ 101.0.1210.39).
 ### Sửa
+- CSDL: `migrate()` ghi phiên bản trước khi tạo bảng nên các bảng không bao giờ được tạo; đã đổi thứ tự.
+- Clippy: bỏ `.clone()` thừa, `filter().next_back()` → `rfind`, bỏ `let` thừa khi trả kết quả, sửa doc list trong `navigation.rs`.
+- Bộ chặn: `load()` bỏ cache engine khi có `.txt` mới hơn, nên danh sách người dùng tự đặt vào thư mục có hiệu lực ở lần mở trình duyệt sau mà không cần bấm "Tải lại".
 - Bảng nổi (dấu trang, lịch sử, cài đặt…) bị cắt vì chỉ cao 96 px: mở bảng thì nới webview toolbar phủ cửa sổ và ẩn webview nội dung, đóng thì trả lại bố cục; bảng không còn bị giới hạn chiều cao.
 - Cài đặt chuyển từ style inline sang lớp CSS dùng chung; thêm thông báo trạng thái rỗng, nút xóa nguy hiểm và chẩn đoán dạng bảng.
 - Tab mới (＋ hoặc Ctrl+T) được kích hoạt ngay; con trỏ vào ô địa chỉ.

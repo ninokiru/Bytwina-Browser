@@ -17,6 +17,10 @@ export interface BrowserStatePayload {
   tabs: TabInfo[];
   activeTab: number | null;
   private: boolean;
+  /** Thanh công cụ đang là cột trái thay vì dải ngang. */
+  vertical: boolean;
+  /** Tab đang hiển thị ở ô phải khi chia màn hình. */
+  splitTab: number | null;
 }
 
 // Toàn bộ IPC của trình duyệt đi qua một lệnh duy nhất, có kiểm soát (ADR-002).

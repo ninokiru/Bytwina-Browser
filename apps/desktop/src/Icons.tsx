@@ -199,6 +199,14 @@ export const MoreIcon = (p: Props) => (
   </Icon>
 );
 
+/// Chia màn hình: khung trang với vách giữa.
+export const SplitIcon = (p: Props) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="M12 4v16" />
+  </Icon>
+);
+
 // Bộ icon cho mục lục trang Cài đặt (mục nào cũng có icon như Cốc Cốc/Chrome).
 export const UserIcon = (p: Props) => (
   <Icon {...p}>

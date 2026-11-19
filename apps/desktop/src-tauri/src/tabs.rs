@@ -34,4 +34,8 @@ pub struct StatePayload {
     pub active_tab: Option<u32>,
     /// M4: cửa sổ đang ở chế độ riêng tư (không ghi lịch sử).
     pub private: bool,
+    /// Toolbar đang là cột trái (tab dọc).
+    pub vertical: bool,
+    /// Tab ở ô phải khi chia màn hình.
+    pub split_tab: Option<u32>,
 }

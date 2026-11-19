@@ -245,6 +245,66 @@ pub async fn browser_command(
             browser::set_panel_open(&app, &state, arg("on")? == "1");
             Ok(Value::Null)
         }
+        // ===== Bố cục tab, chia màn hình, workspace =====
+        "tab_layout" => {
+            let vertical = arg("layout")? == "vertical";
+            with_db(&app, |db| {
+                db.set_setting(
+                    "tabLayout",
+                    if vertical { "vertical" } else { "horizontal" },
+                )?;
+                Ok(())
+            })?;
+            browser::set_vertical(vertical);
+            // Thanh công cụ đổi từ dải ngang sang cột trái: bỏ ghi nhớ hình học
+            // rồi bố trí lại cả toolbar lẫn webview nội dung.
+            browser::relayout(&app, &state);
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "split_set" => {
+            let raw = arg("id")?;
+            let id = if raw.is_empty() {
+                None
+            } else {
+                Some(raw.parse::<u32>().map_err(|_| "id không hợp lệ")?)
+            };
+            state.set_split(id)?;
+            // focus_tab hiện/tạo webview ô phải rồi xếp lại hai ô.
+            if let Some(active) = state.active_id() {
+                browser::focus_tab(&app, &state, active);
+            }
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "workspace_set" => {
+            let name = arg("name")?;
+            let name = name.trim().to_string();
+            if !browser::valid_workspace_name(&name) {
+                return Err("tên workspace chỉ gồm chữ, số, '-' hoặc '_' (tối đa 24 ký tự)".into());
+            }
+            let previous = workspace_name(&app);
+            with_db(&app, |db| {
+                db.set_setting("workspace", &name)?;
+                Ok(())
+            })?;
+            if previous != name {
+                // `data_directory` chỉ có tác dụng lúc tạo webview: đóng hết
+                // rồi mở lại tab đang hoạt động để nạp profile mới.
+                let active = state.active_id();
+                for id in state.tab_ids() {
+                    browser::close_webview(&app, id);
+                    state.mark_sleeping(id);
+                }
+                let _ = state.set_split(None);
+                if let Some(id) = active {
+                    browser::focus_tab(&app, &state, id);
+                }
+                browser::emit_state(&app, &state);
+            }
+            Ok(Value::Null)
+        }
+        "workspace_get" => with_db(&app, |db| db.get_setting("workspace")),
         // ===== M15: xóa dữ liệu theo tên miền =====
         "site_clear_data" => with_db(&app, |db| db.clear_history_for_host(&arg("host")?)),
         // ===== M10: danh sách đọc =====
@@ -329,6 +389,14 @@ pub async fn browser_command(
         }
         other => Err(format!("lệnh không biết: {other}")),
     }
+}
+
+/// Tên workspace đang lưu (rỗng: hồ sơ mặc định).
+fn workspace_name(app: &AppHandle) -> String {
+    app.try_state::<crate::db::DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting("workspace").ok().flatten())
+        .unwrap_or_default()
 }
 
 /// Ghi một cài đặt đơn giản, bỏ qua lỗi khi CSDL không khả dụng.

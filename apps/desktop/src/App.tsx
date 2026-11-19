@@ -20,6 +20,7 @@ import {
   PlusIcon,
   ReloadIcon,
   SettingsIcon,
+  SplitIcon,
   StarIcon,
   StopIcon,
   TagIcon,
@@ -35,7 +36,13 @@ interface Bookmark {
 // Toolbar là webview tin cậy duy nhất được phép gọi IPC (capabilities/default.json).
 export default function App() {
   useLang();
-  const [state, setState] = useState<BrowserStatePayload>({ tabs: [], activeTab: null, private: false });
+  const [state, setState] = useState<BrowserStatePayload>({
+    tabs: [],
+    activeTab: null,
+    private: false,
+    vertical: false,
+    splitTab: null,
+  });
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<PanelKind | null>(null);
@@ -227,7 +234,7 @@ export default function App() {
   }
 
   return (
-    <div className={`chrome${blurred ? " blurred" : ""}`}>
+    <div className={`chrome${blurred ? " blurred" : ""}${state.vertical ? " vertical" : ""}`}>
       <header className="tabbar">
         <div className={`brand${state.private ? " private" : ""}`} title="Bytwina Browser">
           <img src="/brand-mark.png" alt="" />
@@ -428,6 +435,17 @@ export default function App() {
         </label>
 
         <div className="nav-group">
+          <button
+            className={`icon-btn${state.splitTab != null ? " active" : ""}`}
+            title={state.splitTab != null ? t("bar.splitOff") : t("bar.split")}
+            onClick={() => {
+              // Chưa chia: mở danh sách tab để chọn ô phải. Đang chia: tắt.
+              if (state.splitTab != null) void cmd("split_set", { id: "" });
+              else toggle("tabs");
+            }}
+          >
+            <SplitIcon />
+          </button>
           <button
             className="icon-btn"
             title={t("bar.home")}
