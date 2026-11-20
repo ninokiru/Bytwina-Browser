@@ -44,11 +44,14 @@ jobs:
             $conf = "apps/desktop/src-tauri/tauri.conf.json"
             $json = Get-Content $conf -Raw | ConvertFrom-Json
             $json.plugins.updater.pubkey = $env:PUBKEY
+            # Chỉ khi có khoá ký mới sinh .sig; tauri-cli coi có pubkey mà thiếu privkey là lỗi.
+            $json.bundle.createUpdaterArtifacts = $true
             $json | ConvertTo-Json -Depth 20 | Set-Content $conf -Encoding utf8
             Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY=$env:PRIVKEY"
             Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$env:PRIVKEY_PASSWORD"
             echo "UPDATER_SIGNED=1" >> $env:GITHUB_ENV
           } else {
+            # Không có khoá: tắt sinh artifact cập nhật (xem CI run 44739064539, lỗi "public key found but no private key").
             echo "::warning::Thiếu TAURI_UPDATER_PUBKEY/TAURI_SIGNING_PRIVATE_KEY: bản này sẽ không ký, người dùng không tự cập nhật được."
             echo "UPDATER_SIGNED=0" >> $env:GITHUB_ENV
           }

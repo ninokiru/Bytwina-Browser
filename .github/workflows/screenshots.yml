@@ -1,0 +1,58 @@
+name: Screenshots
+
+# Chụp ảnh giao diện thật từ preview.html (dựng bằng Vite, chụp bằng Edge có sẵn
+# trên runner Windows) để docs/screenshots/ là ảnh thật chứ không phải mockup.
+# Chạy khi giao diện đổi; có thể chạy tay. Không chặn CI: lỗi ở đây chỉ là thiếu ảnh.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/src/**"
+      - "apps/desktop/public/**"
+      - "scripts/capture-screens.mjs"
+      - ".github/workflows/screenshots.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          if (Test-Path package-lock.json) { npm ci } else { npm install }
+      # Công cụ chụp để riêng: không thêm vào dependency của ứng dụng. Vite đã
+      # được build riêng bên dưới nên script import được bản trong node_modules.
+      - name: Install capture tooling
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force scripts | Out-Null
+          Push-Location scripts
+          npm init -y --silent | Out-Null
+          npm install --no-audit --no-fund puppeteer-core vite | Out-Null
+          Pop-Location
+      - name: Capture
+        shell: pwsh
+        run: node scripts/capture-screens.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/screenshots
+          if-no-files-found: error
+      - name: Commit changed screenshots
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if (git diff --cached --quiet) { Write-Output "Ảnh không đổi."; exit 0 }
+          git commit -m "docs: cập nhật ảnh chụp giao diện"
+          git push
