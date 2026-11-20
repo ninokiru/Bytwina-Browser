@@ -24,14 +24,6 @@ interface QuickLink {
   color: string;
 }
 
-// Công cụ tìm kiếm dùng chung mã khóa với Cài đặt (navigation::engine_prefix).
-const ENGINES = [
-  { id: "duckduckgo", label: "DuckDuckGo", color: "#de5833" },
-  { id: "google", label: "Google", color: "#4285f4" },
-  { id: "bing", label: "Bing", color: "#008373" },
-  { id: "brave", label: "Brave", color: "#fb542b" },
-] as const;
-
 interface Props {
   privateMode: boolean;
   onNavigate: (input: string) => void;
@@ -44,17 +36,8 @@ interface Props {
 export default function NewTab({ privateMode, onNavigate, onOpenSettings }: Props) {
   useLang();
   const [query, setQuery] = useState("");
-  const [engine, setEngine] = useState("duckduckgo");
   const [links, setLinks] = useState<QuickLink[]>([]);
   const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    void cmd("settings_get", { key: "searchEngine" })
-      .then((v) => {
-        if (typeof v === "string" && ENGINES.some((e) => e.id === v)) setEngine(v);
-      })
-      .catch(() => undefined);
-  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -90,12 +73,6 @@ export default function NewTab({ privateMode, onNavigate, onOpenSettings }: Prop
     if (q) onNavigate(q);
   };
 
-  const pickEngine = (id: string) => {
-    setEngine(id);
-    // Lưu ngay để lần tìm kế tiếp ở thanh địa chỉ dùng đúng công cụ.
-    void cmd("settings_set", { key: "searchEngine", value: id }).catch(() => undefined);
-  };
-
   return (
     <main className="newtab-page">
       <div className="newtab-inner">
@@ -128,23 +105,6 @@ export default function NewTab({ privateMode, onNavigate, onOpenSettings }: Prop
             {t("newtab.search")}
           </button>
         </form>
-
-        <div className="ntp-engines" role="radiogroup" aria-label={t("newtab.engine")}>
-          {ENGINES.map((en) => (
-            <button
-              key={en.id}
-              type="button"
-              role="radio"
-              aria-checked={engine === en.id}
-              className={`ntp-engine${engine === en.id ? " on" : ""}`}
-              onClick={() => pickEngine(en.id)}
-              title={en.label}
-            >
-              <span className="ntp-engine-dot" style={{ background: en.color }} />
-              {en.label}
-            </button>
-          ))}
-        </div>
 
         {links.length > 0 && (
           <section className="ntp-links">

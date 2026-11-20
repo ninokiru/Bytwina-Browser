@@ -29,7 +29,7 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
     - [x] Mục Cài đặt: bật/tắt, số danh sách đang dùng, số request đã chặn, nút cập nhật
     - [ ] Nối `WebResourceRequested` (đang làm — code COM webview2-com 0.39)
     - [ ] M4b: ẩn phần tử (cosmetic) + scriptlet, bộ đếm theo tab, nút khiên trên ô địa chỉ
-  - [ ] Quản lý quyền site (WebView2 permission handler, chưa khảo sát)
+  - [x] Quản lý quyền site (WebView2 permission handler, chưa kiểm chứng runtime)
   - [x] Điều hướng link trong trang theo chính sách HTTPS-first (ADR-003, ADR-011)
 - [~] M5 — Tính năng nâng cao
   - [x] Ghim tab (tab ghim nằm đầu thanh tab)
@@ -38,7 +38,7 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
   - [x] Chia màn hình: hai webview cạnh nhau, đổi ô phải bằng danh sách tab
   - [ ] Reader mode (cần chèn script vào trang; chưa quyết định)
   - [ ] PDF: phụ thuộc WebView2, chưa kiểm tra
-  - [ ] Trang tab mới có giao diện riêng
+  - [x] Trang tab mới có giao diện riêng
 - [~] M6 — Hiệu năng
   - [x] Giảm việc ở đường nóng: label cache, `created_labels()` thay `snapshot()` trong layout/ẩn tab/zoom, layout bỏ sự kiện trùng, vòng 30s không gửi trạng thái thừa (ADR-016)
   - [x] Micro-probe trong Rust (`-- --ignored`) + workflow `benchmarks.yml` in số vào Summary
@@ -49,8 +49,9 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
 
 
 ## M10–M15: trạng thái đề xuất
-- M10 còn lại, M11, M12, M13, M14, M15: đã viết ADR đề xuất (xem docs/DECISIONS.md, ADR-004 đến ADR-009). Chưa có code.
-- Lý do: M11 và M14 cần hạ tầng hoặc quyết định chưa có; M12 và M13 là thay đổi kiến trúc cần ADR được chấp nhận trước; M15 có phần cần API chưa kiểm chứng và một phần mâu thuẫn nguyên tắc bảo mật.
+- M10 còn lại, M12, M13, M14, M15: đã viết ADR đề xuất (xem docs/DECISIONS.md, ADR-004 đến ADR-009).
+- M11: đã làm kho mật khẩu cục bộ (Argon2id + AES-256-GCM, xem docs/SECURITY.md); chưa có tự động điền/bắt mật khẩu, chưa kiểm chứng runtime trên Windows.
+- M12 và M13 là thay đổi kiến trúc cần ADR được chấp nhận trước; M15 có phần cần API chưa kiểm chứng và một phần mâu thuẫn nguyên tắc bảo mật.
 
 ## Cập nhật: M14 đã bỏ; M15 (bảo mật) đã làm phần cục bộ
 - M14: đã bỏ theo quyết định của chủ dự án.

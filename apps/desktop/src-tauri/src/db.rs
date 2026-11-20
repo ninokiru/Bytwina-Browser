@@ -150,6 +150,18 @@ const TABLES_M3_M10: &str = "
         added_at INTEGER NOT NULL
     );";
 
+/// Kho mật khẩu (M11): chỉ tiêu đề/URL/tên đăng nhập là chữ rõ để tìm kiếm;
+/// mật khẩu và ghi chú nằm trong `secret` đã mã hóa AES-256-GCM.
+const TABLES_M11: &str = "
+    CREATE TABLE IF NOT EXISTS password_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL DEFAULT '',
+        username TEXT NOT NULL DEFAULT '',
+        secret BLOB NOT NULL,
+        updated_at INTEGER NOT NULL
+    );";
+
 /// Thêm cột nếu chưa có (SQLite không có `ADD COLUMN IF NOT EXISTS`).
 fn add_column(conn: &Connection, table: &str, column: &str, decl: &str) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -187,6 +199,12 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         add_column(conn, "session_tabs", "group_name", "TEXT")?;
         conn.execute_batch(TABLES_M3_M10)?;
         conn.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
+    }
+    if version < 3 {
+        // v3: kho mật khẩu mã hóa (M11). Bảng dùng IF NOT EXISTS nên DB đã có
+        // bảng này (mở lại nhiều lần) vẫn an toàn.
+        conn.execute_batch(TABLES_M11)?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (3)", [])?;
     }
     Ok(())
 }
@@ -310,6 +328,14 @@ impl Db {
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
         Ok(self.settings_cache().get(key).cloned())
+    }
+
+    pub fn remove_setting(&self, key: &str) -> Result<(), String> {
+        self.conn()
+            .execute("DELETE FROM settings WHERE key = ?1", params![key])
+            .map_err(|e| e.to_string())?;
+        self.settings_cache().remove(key);
+        Ok(())
     }
 
     /// Ghi lại danh sách tab hiện hành (session restore).
@@ -676,6 +702,116 @@ impl Db {
     }
 }
 
+/// Một mục trong kho mật khẩu (M11). `secret` không bao giờ trả ra ngoài
+/// danh sách; chỉ lệnh `password_reveal` mới giải mã khi kho đang mở.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordEntry {
+    pub id: i64,
+    pub title: String,
+    pub url: String,
+    pub username: String,
+    pub updated_at: i64,
+}
+
+impl Db {
+    pub fn add_password(
+        &self,
+        title: &str,
+        url: &str,
+        username: &str,
+        secret: &[u8],
+    ) -> Result<i64, String> {
+        let c = self.conn();
+        c.execute(
+            "INSERT INTO password_entries (title, url, username, secret, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![title, url, username, secret, now()],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(c.last_insert_rowid())
+    }
+
+    pub fn update_password(
+        &self,
+        id: i64,
+        title: &str,
+        url: &str,
+        username: &str,
+        secret: &[u8],
+    ) -> Result<(), String> {
+        let changed = self
+            .conn()
+            .execute(
+                "UPDATE password_entries
+                 SET title = ?2, url = ?3, username = ?4, secret = ?5, updated_at = ?6
+                 WHERE id = ?1",
+                params![id, title, url, username, secret, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        if changed == 0 {
+            return Err("không tìm thấy mục cần sửa".into());
+        }
+        Ok(())
+    }
+
+    pub fn remove_password(&self, id: i64) -> Result<(), String> {
+        self.conn()
+            .execute("DELETE FROM password_entries WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_passwords(&self) -> Result<Vec<PasswordEntry>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare(
+                "SELECT id, title, url, username, updated_at
+                 FROM password_entries ORDER BY title COLLATE NOCASE ASC, id ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(PasswordEntry {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    url: r.get(2)?,
+                    username: r.get(3)?,
+                    updated_at: r.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn password_secret(&self, id: i64) -> Result<Vec<u8>, String> {
+        use rusqlite::OptionalExtension;
+        self.conn()
+            .query_row(
+                "SELECT secret FROM password_entries WHERE id = ?1",
+                params![id],
+                |r| r.get::<_, Vec<u8>>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "không tìm thấy mục".to_string())
+    }
+
+    pub fn count_passwords(&self) -> Result<i64, String> {
+        self.conn()
+            .query_row("SELECT COUNT(*) FROM password_entries", [], |r| r.get(0))
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn clear_passwords(&self) -> Result<(), String> {
+        self.conn()
+            .execute("DELETE FROM password_entries", [])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod security_tests {
     use super::*;
@@ -692,6 +828,34 @@ mod security_tests {
         assert_eq!(db.clear_history_for_host("example.com").unwrap(), 1);
         assert!(db.clear_history_for_host("exa mple.com").is_err());
         assert!(db.clear_history_for_host("").is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn password_entries_crud_and_reset_keeps_vault_keys() {
+        let dir = std::env::temp_dir().join(format!("bytwina-test-pw-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db = open(dir.clone()).expect("mở CSDL test");
+        let id = db
+            .add_password("Gmail", "https://mail.google.com", "a@b.c", b"sealed")
+            .unwrap();
+        let list = db.list_passwords().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].username, "a@b.c");
+        assert_eq!(db.password_secret(id).unwrap(), b"sealed");
+        db.update_password(id, "Gmail mới", "https://mail.google.com", "x@y.z", b"sealed2")
+            .unwrap();
+        assert_eq!(db.password_secret(id).unwrap(), b"sealed2");
+        assert_eq!(db.count_passwords().unwrap(), 1);
+        // Salt/check nằm trong bảng settings và không bị xóa khi đổi cài đặt khác.
+        db.set_setting("vaultSalt", "salt").unwrap();
+        db.set_setting("vaultCheck", "check").unwrap();
+        db.set_setting("homeUrl", "https://x.test/").unwrap();
+        assert_eq!(db.get_setting("vaultSalt").unwrap().as_deref(), Some("salt"));
+        assert_eq!(db.get_setting("vaultCheck").unwrap().as_deref(), Some("check"));
+        db.remove_password(id).unwrap();
+        assert!(db.list_passwords().unwrap().is_empty());
+        db.clear_passwords().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }
 }

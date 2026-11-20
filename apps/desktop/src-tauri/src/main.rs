@@ -13,6 +13,8 @@ mod db;
 mod diagnostics;
 mod filters;
 mod navigation;
+mod passwords;
+mod permissions;
 mod tabs;
 mod terms;
 
@@ -24,6 +26,8 @@ fn main() {
     tauri::Builder::default()
         .manage(BrowserState::new())
         .manage(PopupQueue::default())
+        // M11: khóa kho mật khẩu chỉ nằm trong bộ nhớ phiên chạy.
+        .manage(passwords::PasswordVault::default())
         // MacosLauncher bắt buộc trong chữ ký nhưng bị bỏ qua trên Windows.
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -91,6 +95,17 @@ fn main() {
                     }
                 });
             }
+            // M12: quyền trang web. Luật đã lưu được nạp vào bộ nhớ để callback
+            // PermissionRequested (chạy trên luồng UI) không phải đọc đĩa.
+            let perms = permissions::PermissionsHandle(std::sync::Arc::new(
+                permissions::Permissions::default(),
+            ));
+            if let Some(db) = app.state::<DbState>().0.clone() {
+                if let Ok(Some(json)) = db.get_setting(permissions::SETTING_KEY) {
+                    perms.0.load(&json);
+                }
+            }
+            app.manage(perms);
             // Điều khoản: chưa chấp nhận thì thanh công cụ phủ cửa sổ và không mở tab.
             let accepted = terms::is_accepted(app.handle());
             browser::set_toolbar_full(!accepted);

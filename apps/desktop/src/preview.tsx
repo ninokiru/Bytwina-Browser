@@ -92,6 +92,13 @@ const reading = [
   { id: 1, title: "Thiết kế giao diện trình duyệt", url: "https://example.com/design", addedAt: 1 },
 ];
 
+// `?vault=1` mở sẵn kho mật khẩu mẫu để xem giao diện khi phát triển.
+const vaultDemo = params.get("vault") === "1";
+const vaultEntries = [
+  { id: 1, title: "Gmail", url: "https://mail.google.com", username: "duong@example.com", updatedAt: 1 },
+  { id: 2, title: "GitHub", url: "https://github.com", username: "ninokiru", updatedAt: 2 },
+];
+
 const downloads = [
   { id: 1, url: "https://example.com/setup.exe", path: "C:\\Users\\duong\\Downloads\\bytwina-setup.exe", success: true, finishedAt: 1 },
   { id: 2, url: "https://example.com/archive.zip", path: "C:\\Users\\duong\\Downloads\\archive.zip", success: false, finishedAt: 2 },
@@ -128,6 +135,20 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
     dir: "C:\\Users\\duong\\AppData\\Roaming\\dev.bytwina.browser\\filters",
   }),
   adblock_update: () => ({ downloaded: 5 }),
+  password_status: () =>
+    vaultDemo
+      ? { configured: true, unlocked: true, count: vaultEntries.length, autoLock: 0 }
+      : { configured: false, unlocked: false, count: 0, autoLock: 0 },
+  password_list: () => (vaultDemo ? vaultEntries : []),
+  password_reveal: () => ({ password: "mat-khau-mau-123", note: "" }),
+  password_setup: () => ({ ok: true }),
+  password_unlock: () => ({ ok: true }),
+  password_lock: () => null,
+  password_autolock: () => null,
+  password_add: () => ({ id: 3 }),
+  password_update: () => null,
+  password_remove: () => null,
+  password_wipe: () => null,
 };
 
 (globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {

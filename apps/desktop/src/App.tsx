@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
+import PermissionPrompt, { type PermissionPrompt as SitePrompt } from "./PermissionPrompt";
 import NewTab from "./NewTab";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
@@ -47,6 +48,9 @@ export default function App() {
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<PanelKind | null>(null);
+  // Hàng đợi lời hỏi quyền: mỗi lời đang chờ giữ một deferral phía WebView2,
+  // nên không được phép mất nó — trả lời lần lượt, cái sau hiện sau cái trước.
+  const [prompts, setPrompts] = useState<SitePrompt[]>([]);
   // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
   const [termsOk, setTermsOk] = useState<boolean | null>(null);
   const [home, setHome] = useState(DEFAULT_HOME);
@@ -127,6 +131,17 @@ export default function App() {
       if (e.payload === "newtab") void cmd("new_tab");
       else setPanel(e.payload as PanelKind);
     });
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  // WebView2 xin quyền (camera, micro, vị trí, thông báo, clipboard): Rust chỉ gửi
+  // thông báo, quyết định là của người dùng ở đây.
+  useEffect(() => {
+    const un = listen<SitePrompt>("browser://permission", (e) =>
+      setPrompts((list) => (list.some((p) => p.id === e.payload.id) ? list : [...list, e.payload])),
+    );
     return () => {
       un.then((f) => f());
     };
@@ -508,6 +523,13 @@ export default function App() {
             onHomeChange={setHome}
           />
         </div>
+      )}
+
+      {prompts[0] && (
+        <PermissionPrompt
+          prompt={prompts[0]}
+          onDone={() => setPrompts((list) => list.slice(1))}
+        />
       )}
     </div>
   );

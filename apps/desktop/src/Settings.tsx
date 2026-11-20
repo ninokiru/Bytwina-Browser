@@ -3,6 +3,7 @@ import type { ComponentType, ReactNode } from "react";
 import { cmd } from "./tabs";
 import { getLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
+import PasswordVault from "./PasswordVault";
 import {
   AlertIcon,
   BoltIcon,
@@ -38,7 +39,31 @@ interface AdblockStatus {
   dir: string;
 }
 
+interface SitePermission {
+  origin: string;
+  kind: string;
+  allowed: boolean;
+}
+
+// Nhãn quyền theo kind; backend trả cùng bộ tên với bảng hỏi.
+const PERM_KIND_KEYS: Record<string, Key> = {
+  camera: "perm.kind.camera",
+  microphone: "perm.kind.microphone",
+  geolocation: "perm.kind.geolocation",
+  notifications: "perm.kind.notifications",
+  clipboard: "perm.kind.clipboard",
+};
+
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200];
+
+/// Danh sách công cụ tìm kiếm như Chrome: chọn một, lưu ngay, không còn bộ chọn
+/// rời trên trang tab mới.
+const ENGINES: { id: string; label: string; desc: Key }[] = [
+  { id: "duckduckgo", label: "DuckDuckGo", desc: "settings.engineDuckDesc" },
+  { id: "google", label: "Google", desc: "settings.engineGoogleDesc" },
+  { id: "bing", label: "Bing", desc: "settings.engineBingDesc" },
+  { id: "brave", label: "Brave Search", desc: "settings.engineBraveDesc" },
+];
 
 // Mỗi mục đều được backend đọc từ CSDL (settings_get/settings_set) và có tác dụng thật.
 export default function Settings({
@@ -66,6 +91,7 @@ export default function Settings({
   const [message, setMessage] = useState("");
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [ab, setAb] = useState<AdblockStatus | null>(null);
+  const [perms, setPerms] = useState<SitePermission[]>([]);
   const [abBusy, setAbBusy] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
   // null: chưa kiểm tra được (plugin lỗi hoặc nền tảng không hỗ trợ).
@@ -76,6 +102,15 @@ export default function Settings({
     cmd("adblock_status")
       .then((s) => setAb(s as AdblockStatus))
       .catch(() => setAb(null));
+
+  const loadPerms = () =>
+    cmd("permission_list")
+      .then((l) => setPerms(((l as SitePermission[]) ?? [])))
+      .catch(() => setPerms([]));
+
+  const forgetPerm = (origin: string) => {
+    void cmd("permission_forget", { origin }).then(loadPerms).catch(() => undefined);
+  };
 
   // Đọc lại toàn bộ giá trị đang lưu — dùng lúc mở trang và sau khi đặt lại.
   const loadAll = () => {
@@ -107,6 +142,7 @@ export default function Settings({
       if (ws) setWorkspace(ws);
     });
     void loadAdblock();
+    void loadPerms();
     // Mục "Bạn và Bytwina" hiện thông tin ngay, không cần bấm nút lấy chẩn đoán.
     void loadDiagnostics();
     void cmd("autostart_get")
@@ -219,8 +255,7 @@ export default function Settings({
     void cmd("open_default_apps").catch((e) => setMessage(String(e)));
   };
 
-  const resetSettings = () => {
-    setResetArmed(false);
+  const resetSettings = () => {    setResetArmed(false);
     void cmd("settings_reset")
       .then(() => {
         applyTheme("system");
@@ -229,6 +264,16 @@ export default function Settings({
       })
       .catch((e) => setMessage(String(e)));
   };
+
+  // Gom theo origin vì backend xóa luật theo trang, không theo từng quyền.
+  const permOrigins: [string, SitePermission[]][] = Object.entries(
+    perms.reduce<Record<string, SitePermission[]>>((acc, p) => {
+      const list = acc[p.origin] ?? [];
+      list.push(p);
+      acc[p.origin] = list;
+      return acc;
+    }, {}),
+  );
 
   return (
     <div className="settings-page">
@@ -328,21 +373,27 @@ export default function Settings({
           </Section>
 
           <Section id="settings-search" title={t("settings.search")}>
-            <label className="settings-row">
-              {t("settings.searchEngine")}
-              <select
-                value={engine}
-                onChange={(e) => {
-                  setEngine(e.target.value);
-                  save("searchEngine", e.target.value);
-                }}
-              >
-                <option value="duckduckgo">{t("settings.engineDuck")}</option>
-                <option value="google">{t("settings.engineGoogle")}</option>
-                <option value="bing">{t("settings.engineBing")}</option>
-                <option value="brave">{t("settings.engineBrave")}</option>
-              </select>
-            </label>
+            <p className="settings-label">{t("settings.searchEngine")}</p>
+            <div className="choice-list" role="radiogroup" aria-label={t("settings.searchEngine")}>
+              {ENGINES.map((en) => (
+                <label key={en.id} className={`choice${engine === en.id ? " on" : ""}`}>
+                  <input
+                    type="radio"
+                    name="searchEngine"
+                    value={en.id}
+                    checked={engine === en.id}
+                    onChange={() => {
+                      setEngine(en.id);
+                      save("searchEngine", en.id);
+                    }}
+                  />
+                  <span className="choice-text">
+                    <b>{en.label}</b>
+                    <small>{t(en.desc)}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
             <label className="settings-stack">
               {t("settings.homepage")}
               <input
@@ -405,6 +456,34 @@ export default function Settings({
               <p className="hint ok">
                 <CheckCircleIcon /> {message}
               </p>
+            )}
+          </Section>
+
+          <Section id="settings-permissions" title={t("settings.permissions")}>
+            <p className="hint">{t("settings.permissionsHint")}</p>
+            {permOrigins.length === 0 ? (
+              <p className="hint">{t("settings.permissionsEmpty")}</p>
+            ) : (
+              <ul className="permission-list">
+                {permOrigins.map(([origin, items]) => (
+                  <li key={origin}>
+                    <span className="permission-origin">{origin}</span>
+                    <span className="permission-kinds">
+                      {items
+                        .map(
+                          (p) =>
+                            `${t(PERM_KIND_KEYS[p.kind] ?? "perm.title")} ${
+                              p.allowed ? t("perm.allow") : t("perm.block")
+                            }`,
+                        )
+                        .join(", ")}
+                    </span>
+                    <button type="button" className="btn" onClick={() => forgetPerm(origin)}>
+                      {t("settings.permissionsRemove")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </Section>
 
@@ -474,9 +553,7 @@ export default function Settings({
           </Section>
 
           <Section id="settings-passwords" title={t("settings.passwords")}>
-            <p className="settings-soon">
-              <AlertIcon /> {t("settings.passwordsNote")}
-            </p>
+            <PasswordVault />
           </Section>
 
           <Section id="settings-system" title={t("settings.system")}>
@@ -541,6 +618,7 @@ const SECTIONS: { id: string; label: Key; icon: ComponentType; group: number }[]
   { id: "settings-search", label: "settings.search", icon: SearchIcon, group: 0 },
   { id: "settings-startup", label: "settings.startup", icon: PowerIcon, group: 0 },
   { id: "settings-privacy", label: "settings.privacy", icon: LockIcon, group: 1 },
+  { id: "settings-permissions", label: "settings.permissions", icon: KeyIcon, group: 1 },
   { id: "settings-adblock", label: "settings.adblock", icon: ShieldIcon, group: 1 },
   { id: "settings-performance", label: "settings.performance", icon: BoltIcon, group: 1 },
   { id: "settings-downloads", label: "settings.downloads", icon: DownloadIcon, group: 1 },

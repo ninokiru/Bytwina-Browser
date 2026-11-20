@@ -424,8 +424,199 @@ pub async fn browser_command(
             browser::emit_state(&app, &state);
             Ok(Value::Null)
         }
+        // ===== M12: quyền trang web =====
+        "permission_list" => {
+            let handle = app.state::<crate::permissions::PermissionsHandle>();
+            to_json(handle.0.list())
+        }
+        "permission_respond" => {
+            let id = arg("id")?.parse::<u64>().map_err(|_| "id không hợp lệ")?;
+            let allowed = arg("allow")? == "1";
+            // Trả lời WebView2 trước: trang đang chờ deferral, không nên chờ ghi đĩa.
+            answer_permission(&app, id, allowed)?;
+            if arg("remember").unwrap_or_default() == "1" {
+                persist_rule(&app, &arg("origin")?, &arg("kind")?, allowed)?;
+            }
+            Ok(Value::Null)
+        }
+        "permission_set" => {
+            let allowed = arg("allow")? == "1";
+            persist_rule(&app, &arg("origin")?, &arg("kind")?, allowed)
+        }
+        "permission_forget" => {
+            let origin = checked_origin(&arg("origin")?)?;
+            let json = {
+                let handle = app.state::<crate::permissions::PermissionsHandle>();
+                handle.0.forget(&origin)
+            };
+            persist_setting(&app, crate::permissions::SETTING_KEY, &json);
+            Ok(Value::Null)
+        }
+        // ===== M11: kho mật khẩu mã hóa =====
+        "password_status" => {
+            let db = db_handle(&app)?;
+            let configured = db.get_setting("vaultSalt").ok().flatten().is_some()
+                && db.get_setting("vaultCheck").ok().flatten().is_some();
+            let vault = app.state::<crate::passwords::PasswordVault>();
+            let unlocked = vault.key(vault_timeout(&db))?.is_some();
+            Ok(serde_json::json!({
+                "configured": configured,
+                "unlocked": unlocked,
+                "count": db.count_passwords().unwrap_or(0),
+                "autoLock": vault_timeout(&db),
+            }))
+        }
+        "password_setup" => {
+            let master = arg("master")?;
+            validate_master(&master)?;
+            let db = db_handle(&app)?;
+            if db.get_setting("vaultSalt")?.is_some() {
+                return Err("kho mật khẩu đã được thiết lập".into());
+            }
+            let salt = crate::passwords::new_salt();
+            let key = crate::passwords::derive_key(&master, &salt)?;
+            let check = crate::passwords::check_blob(&key)?;
+            db.set_setting("vaultSalt", &crate::passwords::encode(&salt))?;
+            db.set_setting("vaultCheck", &crate::passwords::encode(&check))?;
+            app.state::<crate::passwords::PasswordVault>().unlock(key);
+            Ok(serde_json::json!({ "ok": true }))
+        }
+        "password_unlock" => {
+            let master = arg("master")?;
+            let db = db_handle(&app)?;
+            let salt = db
+                .get_setting("vaultSalt")?
+                .ok_or_else(|| "kho mật khẩu chưa được thiết lập".to_string())?;
+            let check = db
+                .get_setting("vaultCheck")?
+                .ok_or_else(|| "kho mật khẩu chưa được thiết lập".to_string())?;
+            let key = crate::passwords::derive_key(
+                &master,
+                &crate::passwords::decode(&salt)?,
+            )?;
+            crate::passwords::verify_check(&key, &crate::passwords::decode(&check)?)?;
+            app.state::<crate::passwords::PasswordVault>().unlock(key);
+            Ok(serde_json::json!({ "ok": true }))
+        }
+        "password_lock" => {
+            app.state::<crate::passwords::PasswordVault>().lock();
+            Ok(Value::Null)
+        }
+        "password_autolock" => {
+            let minutes: u64 = arg("minutes")?.parse().map_err(|_| "số phút không hợp lệ")?;
+            if minutes > 1440 {
+                return Err("thời gian tự khóa tối đa 1440 phút".into());
+            }
+            with_db(&app, |db| {
+                db.set_setting("vaultAutoLock", &minutes.to_string())?;
+                Ok(Value::Null)
+            })
+        }
+        "password_list" => {
+            let (_key, db) = unlocked_key(&app)?;
+            to_json(db.list_passwords()?)
+        }
+        "password_add" => {
+            let (key, db) = unlocked_key(&app)?;
+            let field = |k: &str| optional_arg(&args, k);
+            let blob = secret_blob(&key, &field("password"), &field("note"))?;
+            let id = db.add_password(
+                &field("title"),
+                &field("url"),
+                &field("username"),
+                &blob,
+            )?;
+            Ok(serde_json::json!({ "id": id }))
+        }
+        "password_update" => {
+            let (key, db) = unlocked_key(&app)?;
+            let id = arg("id")?.parse::<i64>().map_err(|_| "id không hợp lệ")?;
+            let field = |k: &str| optional_arg(&args, k);
+            let blob = secret_blob(&key, &field("password"), &field("note"))?;
+            db.update_password(id, &field("title"), &field("url"), &field("username"), &blob)?;
+            Ok(Value::Null)
+        }
+        "password_remove" => {
+            let (_key, db) = unlocked_key(&app)?;
+            let id = arg("id")?.parse::<i64>().map_err(|_| "id không hợp lệ")?;
+            db.remove_password(id)?;
+            Ok(Value::Null)
+        }
+        "password_reveal" => {
+            let (key, db) = unlocked_key(&app)?;
+            let id = arg("id")?.parse::<i64>().map_err(|_| "id không hợp lệ")?;
+            let plain = crate::passwords::open(&key, &db.password_secret(id)?)?;
+            let value: Value = serde_json::from_slice(&plain)
+                .map_err(|_| "dữ liệu mật khẩu đã lưu bị hỏng".to_string())?;
+            Ok(value)
+        }
+        // Xóa kho không cần mật khẩu chủ: người dùng quên mật khẩu vẫn phải thoát
+        // được khỏi trạng thái không dùng được. Thao tác này không làm lộ dữ liệu.
+        "password_wipe" => {
+            let db = db_handle(&app)?;
+            db.clear_passwords()?;
+            db.remove_setting("vaultSalt")?;
+            db.remove_setting("vaultCheck")?;
+            db.remove_setting("vaultAutoLock")?;
+            app.state::<crate::passwords::PasswordVault>().lock();
+            Ok(Value::Null)
+        }
         other => Err(format!("lệnh không biết: {other}")),
     }
+}
+
+/// Lấy Db đã mở; lỗi rõ ràng khi CSDL không khả dụng.
+fn db_handle(app: &AppHandle) -> Result<crate::db::Db, String> {
+    app.try_state::<crate::db::DbState>()
+        .and_then(|s| s.0.clone())
+        .ok_or_else(|| "lưu trữ chưa khả dụng".to_string())
+}
+
+/// Số phút tự khóa kho mật khẩu; 0 là không tự khóa.
+fn vault_timeout(db: &crate::db::Db) -> u64 {
+    db.get_setting("vaultAutoLock")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0)
+}
+
+/// Khóa đang mở + Db, dùng cho mọi lệnh thao tác trên mục mật khẩu.
+fn unlocked_key(app: &AppHandle) -> Result<([u8; 32], crate::db::Db), String> {
+    let db = db_handle(app)?;
+    let vault = app.state::<crate::passwords::PasswordVault>();
+    let key = vault
+        .key(vault_timeout(&db))?
+        .ok_or_else(|| "kho mật khẩu đang khóa".to_string())?;
+    Ok((key, db))
+}
+
+fn optional_arg(args: &Option<Value>, key: &str) -> String {
+    args.as_ref()
+        .and_then(|a| a.get(key))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn validate_master(master: &str) -> Result<(), String> {
+    let len = master.chars().count();
+    if len < 8 {
+        return Err("mật khẩu chủ phải có ít nhất 8 ký tự".into());
+    }
+    if len > 256 {
+        return Err("mật khẩu chủ quá dài".into());
+    }
+    Ok(())
+}
+
+/// Đóng gói mật khẩu + ghi chú thành JSON rồi mã hóa bằng khóa chủ.
+fn secret_blob(key: &[u8; 32], password: &str, note: &str) -> Result<Vec<u8>, String> {
+    if password.is_empty() {
+        return Err("mật khẩu không được để trống".into());
+    }
+    let value = serde_json::json!({ "password": password, "note": note });
+    crate::passwords::seal(key, value.to_string().as_bytes())
 }
 
 /// Giá trị ghi khi người dùng bấm "Đặt lại cài đặt".
@@ -444,6 +635,7 @@ const DEFAULT_SETTINGS: &[(&str, &str)] = &[
     ("tabLayout", "horizontal"),
     ("adblockEnabled", "1"),
     ("adblockDisabledSites", ""),
+    ("vaultAutoLock", "0"),
 ];
 
 /// Mở trang "Ứng dụng mặc định" của Windows, cách Chrome/Edge dùng thay vì tự ghi
@@ -462,6 +654,57 @@ fn open_default_apps_page() -> Result<Value, String> {
 #[cfg(not(target_os = "windows"))]
 fn open_default_apps_page() -> Result<Value, String> {
     Err("chỉ Windows mới có trang ứng dụng mặc định để mở".into())
+}
+
+/// Nhảy về luồng UI của tab để đặt trạng thái quyền và hoàn tất deferral.
+#[cfg(target_os = "windows")]
+fn answer_permission(app: &AppHandle, id: u64, allowed: bool) -> Result<(), String> {
+    let handle = app.state::<crate::permissions::PermissionsHandle>();
+    crate::permissions::webview2::respond(
+        app,
+        handle.inner(),
+        id,
+        crate::permissions::webview2::state_of(allowed),
+    )
+}
+
+/// Nền tảng khác chưa có điểm nối COM: lời hỏi sẽ không bao giờ tới frontend,
+/// nên hàm này chỉ tồn tại để bộ lệnh IPC dùng chung một đường.
+#[cfg(not(target_os = "windows"))]
+fn answer_permission(_app: &AppHandle, _id: u64, _allowed: bool) -> Result<(), String> {
+    Ok(())
+}
+
+/// Ghi lựa chọn vào bảng nhớ trong bộ nhớ rồi xuống CSDL.
+fn persist_rule(
+    app: &AppHandle,
+    origin: &str,
+    kind: &str,
+    allowed: bool,
+) -> Result<Value, String> {
+    let origin = checked_origin(origin)?;
+    let key = crate::permissions::Kind::from_key(kind)
+        .ok_or("loại quyền không biết")?
+        .key();
+    let json = {
+        let handle = app.state::<crate::permissions::PermissionsHandle>();
+        handle.0.decide(&origin, key, allowed)
+    };
+    persist_setting(app, crate::permissions::SETTING_KEY, &json);
+    Ok(Value::Null)
+}
+
+/// Origin đến từ frontend nhưng vẫn phải kiểm tra: đây là khóa trong bảng quyền
+/// của người dùng, không được là chuỗi bất kỳ (đường dẫn, query, userinfo).
+fn checked_origin(origin: &str) -> Result<String, String> {
+    let rest = origin
+        .strip_prefix("https://")
+        .or_else(|| origin.strip_prefix("http://"))
+        .ok_or("origin phải bắt đầu bằng http:// hoặc https://")?;
+    if rest.is_empty() || rest.contains('/') || rest.contains('?') || rest.contains('#') {
+        return Err("origin không hợp lệ".into());
+    }
+    Ok(origin.to_string())
 }
 
 /// Tên workspace đang lưu (rỗng: hồ sơ mặc định).

@@ -250,6 +250,20 @@ export const TranslateIcon = (p: Props) => (
   </Icon>
 );
 
+export const EyeIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M3.5 12S7 6.5 12 6.5 20.5 12 20.5 12 17 17.5 12 17.5 3.5 12 3.5 12Z" />
+    <circle cx="12" cy="12" r="2.8" />
+  </Icon>
+);
+
+export const CopyIcon = (p: Props) => (
+  <Icon {...p}>
+    <rect x="9" y="9" width="11" height="11" rx="2.5" />
+    <path d="M15 9V6.5A2.5 2.5 0 0 0 12.5 4H6.5A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H9" />
+  </Icon>
+);
+
 export const KeyIcon = (p: Props) => (
   <Icon {...p}>
     <circle cx="8" cy="12" r="3.5" />

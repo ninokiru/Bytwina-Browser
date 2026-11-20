@@ -1,10 +1,13 @@
 # Nhật ký thay đổi
 
-## Chưa phát hành
+## 0.0.4 — 2026-11-20
 ### Thêm
-- Trang tab mới: logo, lời chào theo giờ, ô tìm kiếm lớn bo tròn, bộ chọn công cụ tìm kiếm (DuckDuckGo, Google, Bing, Brave) lưu ngay vào cài đặt, lưới quick link lấy từ dấu trang rồi bù bằng lịch sử, gợi ý tìm kiếm khi chưa có dữ liệu, dòng ghi chú riêng tư. Trang nằm trong webview toolbar nên không cần thay đổi Rust.
+- Kho mật khẩu cục bộ (M11): mật khẩu chủ suy khóa Argon2id (19 MiB, 2 vòng, salt 16 byte), từng mục mã hóa AES-256-GCM; thêm/sửa/xóa/tìm, hiện và sao chép mật khẩu, tự khóa sau 1–60 phút hoặc khóa tay, xóa toàn bộ kho khi quên mật khẩu chủ. Không lưu mật khẩu chủ; khóa chỉ nằm trong RAM phiên chạy. Chưa tự động điền hoặc bắt mật khẩu từ trang web.
+- Cài đặt: mục "Quyền trang web" riêng, liệt kê quyền đã lưu theo trang và cho xóa từng trang.
+- Trang tab mới: logo, lời chào theo giờ, ô tìm kiếm lớn bo tròn, lưới quick link lấy từ dấu trang rồi bù bằng lịch sử, gợi ý tìm kiếm khi chưa có dữ liệu, dòng ghi chú riêng tư. Trang nằm trong webview toolbar nên không cần thay đổi Rust.
 - Thanh địa chỉ: pill cố định 34 px, hover đổi nền, focus bằng vòng accent — không còn co giãn chiều cao khi bấm vào.
 ### Thay đổi
+- Công cụ tìm kiếm chuyển hẳn vào Cài đặt dưới dạng danh sách radio kèm mô tả như Chrome; trang tab mới không còn bộ chọn engine.
 - Tab dọc: tab đang chọn có vạch accent 3 px bên trái; nút ghim chỉ hiện khi rê tab để tab đang chọn không bị hai nút chiếm chỗ.
 - Menu ⋮ thu về 320 px như menu trình duyệt; bảng danh sách giữ 430 px.
 - Ô địa chỉ để trống khi ở tab mới thay vì hiện `about:blank`.

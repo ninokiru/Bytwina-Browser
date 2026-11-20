@@ -1,6 +1,6 @@
 [package]
 name = "bytwina-browser"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 
 [build-dependencies]
@@ -24,6 +24,11 @@ adblock = { version = "0.13", default-features = false, features = [
 # Tải danh sách lọc lúc chạy. Thuần Rust, blocking (chạy trong luồng nền),
 # mặc định đã có rustls + gzip.
 ureq = "3"
+# M11: kho mật khẩu. Argon2id suy khóa từ mật khẩu chủ, AES-256-GCM mã hóa
+# từng mục; base64 chỉ dùng để lưu salt/check dạng chữ trong bảng settings.
+argon2 = "0.5"
+aes-gcm = "0.10"
+base64 = "0.22"
 # Bộ gom rác cấp phát thay thế, chỉ bật khi đo hiệu năng (docs/PERFORMANCE.md).
 # Không bật mặc định: chưa có số đo trên máy đích và phần lớn RAM thuộc tiến trình WebView2.
 mimalloc = { version = "0.1", default-features = false, optional = true }
