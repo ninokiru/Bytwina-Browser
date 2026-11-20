@@ -640,7 +640,8 @@ function MenuItem({
   label: string;
   kind?: PanelKind;
   shortcut?: string;
-  onOpen: (kind: PanelKind) => void;
+  // Hàng mở bảng thì có kind + onOpen; hàng hành động (thu phóng, thoát) chỉ có onClick.
+  onOpen?: (kind: PanelKind) => void;
   onClick?: () => void;
 }) {
   return (
@@ -648,7 +649,10 @@ function MenuItem({
       type="button"
       className="menu-row"
       data-panel={kind}
-      onClick={() => (onClick ? onClick() : kind && onOpen(kind))}
+      onClick={() => {
+        if (onClick) onClick();
+        else if (kind) onOpen?.(kind);
+      }}
     >
       {icon}
       <span className="menu-label">{label}</span>
