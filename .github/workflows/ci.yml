@@ -24,7 +24,23 @@ jobs:
           # Dùng npm ci khi đã có lockfile; chưa có thì npm install (xem docs/ROADMAP.md).
           if (Test-Path package-lock.json) { npm ci } else { npm install }
       - name: Type check
-        run: npm run typecheck
+        shell: pwsh
+        run: |
+          # tsc in ra stdout nhưng trang run công khai không hiện chi tiết.
+          # Đẩy từng dòng "error TS..." thành annotation + Summary để đọc được mà
+          # không cần đăng nhập.
+          $out = npm run typecheck 2>&1 | Tee-Object -FilePath tsc.txt
+          $code = $LASTEXITCODE
+          $hits = @($out | Select-String -Pattern 'error TS\d+' | Select-Object -First 20)
+          if ($hits.Count -eq 0) {
+            Write-Output "::error::Type check thất bại, không bắt được dòng TS nào; xem Summary."
+          }
+          foreach ($h in $hits) { Write-Output "::error::$($h.Line.Trim())" }
+          "### Type check" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          "``````" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          (Get-Content tsc.txt -Tail 60) | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          "``````" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          exit $code
       - name: Build
         run: npm run build
       - uses: actions/upload-artifact@v4
