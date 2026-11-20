@@ -851,6 +851,18 @@ pub fn on_page_load<R: tauri::Runtime>(
                     let _ = db.record_history(&title, &url);
                 }));
             }
+            // CHẨN ĐOÁN TẠM: Electron ném SyntaxError khi querySelectorAll('')
+            // (Giải pháp selector rỗng). Xem kết quả trong GitHub Summary.
+            if let Some(wv) = app.get_webview(label) {
+                let probe = concat!(
+                    "(() => { try { document.querySelectorAll(''); return 'no-throw'; }",
+                    " catch (e) { return 'threw:' + e.name; } })()"
+                );
+                let _ = wv.eval_with_callback(probe, |r| {
+                    log::info!("EMPTY_SELECTOR_PROBE {r}");
+                    println!("SUMMARY:empty_selector={r}");
+                });
+            }
         }
     }
     emit_state(app, &state);

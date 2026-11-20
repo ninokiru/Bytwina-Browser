@@ -132,7 +132,22 @@ jobs:
             tail -c 40000 test.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          # Dòng bắt đầu bằng SUMMARY: là chẩn đoán cần đọc từ trang run công khai
+          # (log của step phải đăng nhập); đưa vào Summary để xem không cần tài khoản.
+          grep '^SUMMARY:' test.txt >> "$GITHUB_STEP_SUMMARY" || true
           exit "$status"
+      # CHẨN ĐOÁN TẠM: chạy ứng dụng thật vài giây để lấy log thăm dò từ webview.
+      # Xóa cùng lúc với probe trong browser.rs.
+      - name: Probe
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = Get-ChildItem target/debug/bytwina-browser.exe | Select-Object -First 1
+          $p = Start-Process -FilePath $exe.FullName -PassThru -RedirectStandardOutput probe.out -RedirectStandardError probe.err
+          Start-Sleep -Seconds 25
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          Get-Content probe.out, probe.err -ErrorAction SilentlyContinue | Select-String 'SUMMARY:|PROBE|empty_selector' |
+            ForEach-Object { $_.Line } | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
       # Định dạng chạy cuối: trước đây nó đứng đầu nên chỉ một lỗi xuống dòng
       # cũng làm Clippy/Check/Tests bị bỏ qua, không thấy lỗi biên dịch thật.
       - name: Format

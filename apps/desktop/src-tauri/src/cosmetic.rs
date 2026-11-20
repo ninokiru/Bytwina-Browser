@@ -84,7 +84,8 @@ mod tests {
 
     /// Chạy khi truy tìm lý do luật chung không ra selector: in ra engine đã
     /// nhận/trả về những gì. Bỏ qua ở lần chạy thường; chạy bằng
-    /// `cargo test -- --ignored --nocapture`.
+    /// `cargo test -- --ignored --nocapture`. Dòng thăm dò bắt đầu bằng
+    /// SUMMARY: để ci.yml đưa vào Summary (đọc được từ trang run công khai).
     #[test]
     #[ignore]
     fn debug_dump_generic_rules() {
@@ -101,8 +102,16 @@ mod tests {
                 ["sponsor", "spon"],
                 &all.exceptions,
             );
-            println!("[{label}] hide={:?} by_class={:?}", all.hide_selectors, by_class);
+            println!("SUMMARY:[{label}] hide={:?} by_class={:?}", all.hide_selectors, by_class);
         }
+        // Bảng hash của adblock phụ thuộc features: dò key rỗng — engine có
+        // trả selector "" cho class "" không.
+        let e = engine_with(true, ".advert\n");
+        println!(
+            "SUMMARY:empty_class={:?} empty_id={:?}",
+            e.hidden_class_id_selectors([""], [""], &Default::default()),
+            e.url_cosmetic_resources("https://any.test/").hide_selectors,
+        );
     }
 
     #[test]
