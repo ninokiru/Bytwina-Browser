@@ -10,6 +10,7 @@ use tauri::{LogicalPosition, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
 mod browser;
 mod backup;
 mod commands;
+mod cosmetic;
 mod db;
 mod diagnostics;
 mod filters;

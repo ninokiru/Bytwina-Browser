@@ -594,6 +594,14 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
             {
                 crate::filters::webview2::attach(&wv, handle);
             }
+            // M4b: lọc thẩm mỹ gắn cùng chỗ, nghe NavigationCompleted của cùng webview.
+            #[cfg(target_os = "windows")]
+            if let Some(handle) = app
+                .try_state::<crate::filters::BlockerHandle>()
+                .map(|blocker| blocker.inner().clone())
+            {
+                crate::cosmetic::webview2::attach(&wv, app.clone(), handle);
+            }
             // M12: quyền trang web — gắn cùng chỗ với bộ chặn, trước navigation đầu tiên.
             #[cfg(target_os = "windows")]
             if let Some(handle) = app
@@ -732,6 +740,8 @@ pub fn close_webview(app: &AppHandle, id: u32) {
         // Huỷ đăng ký chặn trước khi đóng để handler giải phóng cùng tab.
         #[cfg(target_os = "windows")]
         crate::filters::webview2::detach(&wv);
+        #[cfg(target_os = "windows")]
+        crate::cosmetic::webview2::detach(&wv);
         #[cfg(target_os = "windows")]
         if let Some(handle) = app
             .try_state::<crate::permissions::PermissionsHandle>()

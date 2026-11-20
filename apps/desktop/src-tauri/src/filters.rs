@@ -249,6 +249,15 @@ impl Blocker {
         blocked
     }
 
+    /// Bản sao con trỏ engine đang dùng, cho bộ lọc thẩm mỹ chạy ở luồng nền:
+    /// nó không được giữ khóa `RwLock` khi đang tra hàng nghìn selector.
+    pub fn snapshot_engine(&self) -> Option<Arc<Engine>> {
+        match self.engine.read() {
+            Ok(guard) => guard.clone(),
+            Err(e) => e.into_inner().clone(),
+        }
+    }
+
     fn is_site_disabled_of(&self, url: &str) -> bool {
         host_of(url).is_some_and(|h| self.is_site_disabled(&h))
     }
