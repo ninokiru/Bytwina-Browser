@@ -72,8 +72,9 @@ el.textContent = {literal};\
 }
 
 thread_local! {
-    static REGISTRATIONS: RefCell<HashMap<String, (ICoreWebView2NavigationCompletedEventHandler, i64)>> =
-        RefCell::new(HashMap::new());
+    static REGISTRATIONS: RefCell<
+        HashMap<String, (ICoreWebView2NavigationCompletedEventHandler, i64)>,
+    > = RefCell::new(HashMap::new());
 }
 
 pub fn attach(webview: &Webview<tauri::Wry>, app: AppHandle, handle: BlockerHandle) {
@@ -150,6 +151,13 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
             move |status: windows::core::Result<()>, json: String| {
                 let json = if status.is_ok() { json } else { String::new() };
                 let (classes, ids) = parse_lists(&json);
+                // Giới hạn của COLLECT_SCRIPT: trang nhiều phần tử hơn MAX_TOKENS
+                // thì danh sách trả về bị cắt, và ta không biết đã cắt ở đâu.
+                if classes.len() >= MAX_TOKENS || ids.len() >= MAX_TOKENS {
+                    log::debug!(
+                        "[{label_bg}] trang vượt quá {MAX_TOKENS} class/id, bỏ sót phần sau"
+                    );
+                }
                 let blocker = blocker.clone();
                 let app_bg = app_bg.clone();
                 let label_bg = label_bg.clone();

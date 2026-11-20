@@ -18,16 +18,6 @@ use adblock::engine::Engine;
 #[cfg(target_os = "windows")]
 pub mod webview2;
 
-/// Những gì frontend cần biết về một lượt lọc thẩm mỹ.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CosmeticResult {
-    /// Số quy tắc đã áp; 0 nghĩa là trang sạch hoặc engine chưa nạp.
-    pub hidden: usize,
-    /// Có $generichide trên trang này hay không (chỉ để hiển thị/đo).
-    pub generichide: bool,
-}
-
 /// CSS chèn vào trang. Rỗng nếu không có gì để ẩn.
 pub fn stylesheet(engine: &Engine, url: &str, classes: &[String], ids: &[String]) -> String {
     let resources = engine.url_cosmetic_resources(url);
@@ -59,7 +49,8 @@ fn exceptions(resources: &adblock::cosmetic_filter_cache::UrlSpecificResources) 
     resources.exceptions.clone()
 }
 
-/// Đếm số quy tắc để báo cho giao diện.
+/// Số quy tắc thực sự nằm trong CSS, tính bằng cách đếm khối `display:none`.
+/// Dùng cho con số của UI khiên và cho chính các test bên dưới.
 pub fn count(selectors_css: &str) -> usize {
     if selectors_css.is_empty() {
         return 0;
