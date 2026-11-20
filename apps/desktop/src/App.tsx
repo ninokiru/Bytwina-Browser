@@ -78,12 +78,7 @@ export default function App() {
         if (typeof v === "string" && v) setHome(v);
       })
       .catch(() => undefined);
-    void cmd("settings_get", { key: "zoom" })
-      .then((v) => {
-        const percent = Number(v);
-        if (Number.isFinite(percent) && percent > 0) setZoom(percent);
-      })
-      .catch(() => undefined);
+    loadZoom();
   }, []);
 
   const active: TabInfo | undefined = state.tabs.find((tb) => tb.id === state.activeTab);
@@ -243,7 +238,18 @@ export default function App() {
   const toggle = (kind: PanelKind) => {
     // Mở bảng theo cách thường: không giữ trang con sâu mà phím tắt/menu đã chọn.
     setSettingsPage("");
+    // Hàng thu phóng phải đúng số đang chạy: người dùng có thể đổi ở Cài đặt.
+    if (kind === "menu") loadZoom();
     setPanel((cur) => (cur === kind ? null : kind));
+  };
+
+  const loadZoom = () => {
+    void cmd("settings_get", { key: "zoom" })
+      .then((v) => {
+        const percent = Number(v);
+        if (Number.isFinite(percent) && percent > 0) setZoom(percent);
+      })
+      .catch(() => undefined);
   };
 
   const newTab = () => {

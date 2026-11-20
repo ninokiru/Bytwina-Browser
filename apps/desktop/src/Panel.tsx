@@ -491,7 +491,9 @@ export default function Panel({
                 type="button"
                 className="menu-zoom-btn"
                 aria-label={t("menu.zoomOut")}
-                onClick={() => menu?.onZoom(stepZoom(menu.zoom, -1))}
+                onClick={() => {
+                  if (menu) menu.onZoom(stepZoom(menu.zoom, -1));
+                }}
               >
                 −
               </button>
@@ -500,7 +502,9 @@ export default function Panel({
                 type="button"
                 className="menu-zoom-btn"
                 aria-label={t("menu.zoomIn")}
-                onClick={() => menu?.onZoom(stepZoom(menu.zoom, 1))}
+                onClick={() => {
+                  if (menu) menu.onZoom(stepZoom(menu.zoom, 1));
+                }}
               >
                 +
               </button>
