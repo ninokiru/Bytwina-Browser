@@ -156,7 +156,7 @@ impl Permissions {
             .flat_map(|(origin, by_kind)| {
                 by_kind.iter().map(move |(kind, allowed)| SitePermission {
                     origin: origin.clone(),
-                    kind: *kind,
+                    kind,
                     allowed: *allowed,
                 })
             })
