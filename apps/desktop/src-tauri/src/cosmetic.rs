@@ -64,10 +64,14 @@ mod tests {
     use adblock::lists::ParseOptions;
     use adblock::{Engine, FilterSet};
 
-    fn engine(rules: &str) -> Engine {
-        let mut set = FilterSet::new(false);
+    fn engine_with(debug: bool, rules: &str) -> Engine {
+        let mut set = FilterSet::new(debug);
         set.add_filter_list(rules.to_string(), ParseOptions::default());
         Engine::new_with_filter_set(set)
+    }
+
+    fn engine(rules: &str) -> Engine {
+        engine_with(false, rules)
     }
 
     #[test]
@@ -76,6 +80,29 @@ mod tests {
         let css = stylesheet(&e, "https://news.example/article", &[], &[]);
         assert!(css.contains(".promo"), "{css}");
         assert_eq!(count(&css), 1);
+    }
+
+    /// Chạy khi truy tìm lý do luật chung không ra selector: in ra engine đã
+    /// nhận/trả về những gì. Bỏ qua ở lần chạy thường; chạy bằng
+    /// `cargo test -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn debug_dump_generic_rules() {
+        for (label, rules) in [
+            ("plain", ".advert\n#sponsor\n"),
+            ("short", ".ad\n#spon\n"),
+            ("with_host", "any.test##.advert\n"),
+            ("class_list", ".advert\n.ad-banner\n"),
+        ] {
+            let e = engine_with(true, rules);
+            let all = e.url_cosmetic_resources("https://any.test/");
+            let by_class = e.hidden_class_id_selectors(
+                &["advert", "ad-banner", "ad"],
+                &["sponsor", "spon"],
+                &all.exceptions,
+            );
+            println!("[{label}] hide={:?} by_class={:?}", all.hide_selectors, by_class);
+        }
     }
 
     #[test]
