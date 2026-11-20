@@ -112,6 +112,19 @@ mod tests {
             e.hidden_class_id_selectors([""], [""], &Default::default()),
             e.url_cosmetic_resources("https://any.test/").hide_selectors,
         );
+        // Bảng key rỗng không traverse được (0 là sentinel null): nếu class ""
+        // không có, key thật CŨNG không tìm thấy. Thử chuỗi 1 ký tự a..z để
+        // xác nhận tìm kiếm nói chung hỏng.
+        let keys: Vec<&str> = "abcdefghijklmnopqrstuvwxyz".split("").skip(1).collect();
+        println!(
+            "SUMMARY:single_letters={:?}",
+            e.hidden_class_id_selectors(keys.clone(), keys, &Default::default())
+        );
+        let all = engine_with(true, ".a\n#a\n");
+        println!(
+            "SUMMARY:rule_a={:?}",
+            all.hidden_class_id_selectors(["a"], ["a"], &Default::default())
+        );
     }
 
     #[test]
