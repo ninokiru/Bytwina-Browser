@@ -97,8 +97,8 @@ mod tests {
             let e = engine_with(true, rules);
             let all = e.url_cosmetic_resources("https://any.test/");
             let by_class = e.hidden_class_id_selectors(
-                &["advert", "ad-banner", "ad"],
-                &["sponsor", "spon"],
+                ["advert", "ad-banner", "ad"],
+                ["sponsor", "spon"],
                 &all.exceptions,
             );
             println!("[{label}] hide={:?} by_class={:?}", all.hide_selectors, by_class);
