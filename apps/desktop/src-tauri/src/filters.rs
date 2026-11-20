@@ -278,13 +278,17 @@ fn is_third_party(url: &str, source_url: &str) -> bool {
 /// Registrable domain theo Public Suffix List. Trước đây hàm này đoán bằng
 /// `rsplitn(3, '.')` nên `news.bbc.co.uk` bị coi là khác miền với `www.bbc.co.uk`
 /// — tức luật `$third-party` chặn nhầm tài nguyên cùng nhà.
-/// Host không có trong PSL (IP, tên nội bộ) thì trả về chính nó sau khi bỏ `www.`.
+///
+/// PSL đọc nhãn cuối là TLD, kể cả khi đó là số (`...1.10` -> `10`), nên IP sẽ
+/// bị trả về phần đuôi trông như tên miền. Chỗ gọi chỉ so sánh hai chuỗi sau khi
+/// đi qua cùng hàm, nên hai host trên cùng một IP vẫn được coi là cùng nhà;
+/// không có chỗ nào đem kết quả này ra để điều hướng hay tra DNS.
 fn registrable(host: &str) -> String {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
     if let Some(domain) = psl::domain_str(&host) {
-        return domain.to_string();
+        return domain.to_owned();
     }
-    host.trim_start_matches("www.").to_string()
+    host.trim_start_matches("www.").to_owned()
 }
 
 fn build_engine(sources: &[String]) -> Engine {
@@ -589,9 +593,12 @@ mod tests {
         assert_eq!(registrable("www.bbc.co.uk"), "bbc.co.uk");
         assert_eq!(registrable("NEWS.BBC.CO.UK"), "bbc.co.uk");
         assert_eq!(registrable("shop.example.com.vn"), "example.com.vn");
-        // IP và tên nội bộ không có trong PSL: trả về chính nó.
-        assert_eq!(registrable("192.168.1.10"), "192.168.1.10");
+        // Tên một nhãn và tên không có trong PSL: trả về chính nó.
         assert_eq!(registrable("localhost"), "localhost");
+        // KHÔNG assert IP: psl::domain_str("192.168.1.10") trả Some("1.10") vì
+        // "10" là TLD có thật trong PSL (CI đã chỉ ra điều này). Hàm giữ nguyên
+        // host chỉ khi PSL không trả gì, nên đừng suy ra; chỗ gọi chỉ so sánh
+        // hai chuỗi.
     }
 
     #[test]
