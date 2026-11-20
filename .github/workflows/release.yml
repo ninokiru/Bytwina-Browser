@@ -1,11 +1,19 @@
 name: Release
 
-# Chỉ chạy khi bạn tự đẩy tag phiên bản (ví dụ v0.0.2).
+# Hai cách chạy:
+# 1. Đẩy tag phiên bản (ví dụ v0.0.4) — giữ nguyên cách cũ.
+# 2. Bấm "Run workflow" trên tab Actions, nhập phiên bản (ví dụ v0.0.4).
 # Release được tạo và PHÁT HÀNH NGAY; step "Verify assets" in danh sách tệp đã tải lên.
 on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Phiên bản phát hành, dạng vX.Y.Z (ví dụ v0.0.4). Tag sẽ được tạo tại nhánh mặc định."
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,6 +23,18 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve version
+        shell: pwsh
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ($env:EVENT -eq "workflow_dispatch") { $tag = $env:INPUT_VERSION } else { $tag = $env:REF_NAME }
+          $tag = $tag.Trim()
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Phiên bản không hợp lệ: '$tag' (cần dạng vX.Y.Z)" }
+          echo "TAG=$tag" >> $env:GITHUB_ENV
+          echo "Phát hành $tag"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -80,15 +100,15 @@ jobs:
             $sigFile = "$($f.FullName).sig"
             if (-not (Test-Path $sigFile)) { throw "Thiếu $sigFile: bản build không sinh chữ ký cập nhật." }
             $sig = (Get-Content $sigFile -Raw).Trim()
-            $version = $env:GITHUB_REF_NAME.TrimStart("v")
+            $version = $env:TAG.TrimStart("v")
             $manifest = @{
               version = $version
-              notes = "Bytwina Browser $env:GITHUB_REF_NAME"
+              notes = "Bytwina Browser $env:TAG"
               pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
               platforms = @{
                 "windows-x86_64" = @{
                   signature = $sig
-                  url = "https://github.com/${{ github.repository }}/releases/download/$env:GITHUB_REF_NAME/$name"
+                  url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/$name"
                 }
               }
             }
@@ -105,16 +125,16 @@ jobs:
         run: |
           $files = @($env:INSTALLER, "SHA256SUMS.txt")
           if ($env:UPLOAD_UPDATER -eq "1") { $files += "latest.json" }
-          gh release create "${{ github.ref_name }}" --title "Bytwina Browser ${{ github.ref_name }}" --generate-notes --latest @files
+          gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --generate-notes --latest @files
       - name: Verify assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name'
+          gh release view "$env:TAG" --json assets --jq '.assets[].name'
           if ($env:UPLOAD_UPDATER -eq "1") {
-            gh release download "${{ github.ref_name }}" --pattern latest.json --dir verify
+            gh release download "$env:TAG" --pattern latest.json --dir verify
             $j = Get-Content verify/latest.json -Raw | ConvertFrom-Json
-            if ($j.version -ne $env:GITHUB_REF_NAME.TrimStart("v")) { throw "latest.json sai phiên bản: $($j.version)" }
+            if ($j.version -ne $env:TAG.TrimStart("v")) { throw "latest.json sai phiên bản: $($j.version)" }
             Write-Output "latest.json OK: $($j.version), $($j.platforms.'windows-x86_64'.url)"
           }
