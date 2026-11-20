@@ -50,7 +50,7 @@ fn exceptions(resources: &adblock::cosmetic_filter_cache::UrlSpecificResources) 
 }
 
 /// Số quy tắc thực sự nằm trong CSS, tính bằng cách đếm khối `display:none`.
-/// Dùng cho con số của UI khiên và cho chính các test bên dưới.
+/// Có tác dụng ngoài test: nơi gọi dùng nó để ghi log số phần tử đã ẩn.
 pub fn count(selectors_css: &str) -> usize {
     if selectors_css.is_empty() {
         return 0;

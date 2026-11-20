@@ -175,6 +175,10 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
                     if css.is_empty() {
                         return;
                     }
+                    log::debug!(
+                        "[{label_bg}] ẩn {} quy tắc thẩm mỹ",
+                        crate::cosmetic::count(&css)
+                    );
                     inject(&app_bg, &label_bg, &css);
                 }));
                 Ok(())
