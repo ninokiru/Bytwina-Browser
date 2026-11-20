@@ -275,16 +275,16 @@ fn is_third_party(url: &str, source_url: &str) -> bool {
     registrable(&page) != registrable(&target)
 }
 
+/// Registrable domain theo Public Suffix List. Trước đây hàm này đoán bằng
+/// `rsplitn(3, '.')` nên `news.bbc.co.uk` bị coi là khác miền với `www.bbc.co.uk`
+/// — tức luật `$third-party` chặn nhầm tài nguyên cùng nhà.
+/// Host không có trong PSL (IP, tên nội bộ) thì trả về chính nó sau khi bỏ `www.`.
 fn registrable(host: &str) -> String {
-    host.trim_start_matches("www.")
-        .to_ascii_lowercase()
-        .rsplitn(3, '.')
-        .take(2)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>()
-        .join(".")
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if let Some(domain) = psl::domain_str(&host) {
+        return domain.to_string();
+    }
+    host.trim_start_matches("www.").to_string()
 }
 
 fn build_engine(sources: &[String]) -> Engine {
@@ -580,6 +580,29 @@ mod tests {
             ),
             "engine cũ trong cache đã bị thay"
         );
+    }
+
+    #[test]
+    fn psl_registrable_domain_handles_multi_part_suffixes() {
+        // Đều là bbc.co.uk: không được coi là bên thứ ba.
+        assert_eq!(registrable("news.bbc.co.uk"), "bbc.co.uk");
+        assert_eq!(registrable("www.bbc.co.uk"), "bbc.co.uk");
+        assert_eq!(registrable("NEWS.BBC.CO.UK"), "bbc.co.uk");
+        assert_eq!(registrable("shop.example.com.vn"), "example.com.vn");
+        // IP và tên nội bộ không có trong PSL: trả về chính nó.
+        assert_eq!(registrable("192.168.1.10"), "192.168.1.10");
+        assert_eq!(registrable("localhost"), "localhost");
+    }
+
+    #[test]
+    fn same_org_across_multi_part_suffix_is_not_third_party() {
+        let b = blocker_with("||doubleclick.net^$script,third-party\n");
+        // Trước khi dùng PSL, hai host này khác "registrable" nên bị chặn nhầm.
+        assert!(!b.should_block(
+            "https://www.bbc.co.uk/static/app.js",
+            "https://news.bbc.co.uk/",
+            "script"
+        ));
     }
 
     /// Số đo tốc độ quyết định chặn. Bỏ qua khi test thường; chạy bằng:
