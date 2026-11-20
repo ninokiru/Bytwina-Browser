@@ -38,6 +38,9 @@ mimalloc = { version = "0.1", default-features = false, optional = true }
 # M12: "khởi động cùng Windows". Chỉ dùng phía Rust (ManagerExt::autolaunch) nên
 # không cần thêm quyền trong capabilities — capability chỉ gate lời gọi từ JS.
 tauri-plugin-autostart = "2"
+# M14: tự cập nhật từ GitHub Releases. Đọc latest.json + verify chữ ký minisign;
+# khoá công khai do CI chèn vào tauri.conf.json từ secret.
+tauri-plugin-updater = "2"
 # Public Suffix List: xác định đúng registrable domain cho luật third-party của
 # bộ chặn. `adblock` có resolver riêng nhưng hàm so sánh bên ta thì không, nên
 # `co.uk`/`com.vn` từng bị đoán sai. Đã có sẵn trong Cargo.lock qua chuỗi phụ

@@ -15,6 +15,15 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ninokiru/Bytwina-Browser/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
   }
 }

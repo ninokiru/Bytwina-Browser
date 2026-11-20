@@ -5,8 +5,8 @@ import { t, useLang, type Key } from "./i18n";
 import Settings from "./Settings";
 import {
   AlertIcon,
+  BackupIcon,
   BookIcon,
-  BookTextIcon,
   BookmarkPlusIcon,
   CheckCircleIcon,
   ClockIcon,
@@ -79,6 +79,8 @@ export interface MenuActions {
   onVertical: (vertical: boolean) => void;
   onOpenSettings: (page: string) => void;
   onExit: () => void;
+  /** Hỏi GitHub có bản mới không; resolve thông báo để hiện trong menu. */
+  onCheckUpdate: () => Promise<string>;
 }
 
 // Bậc thu phóng như Chrome; ngoài danh sách thì giữ nguyên.
@@ -109,6 +111,7 @@ export default function Panel({
 }) {
   useLang();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [tabList, setTabList] = useState<TabInfo[]>([]);
@@ -516,6 +519,19 @@ export default function Panel({
             label={t("title.settings")}
             onOpen={onOpen}
             kind="settings"
+          />
+          <MenuItem
+            icon={<BackupIcon />}
+            label={updateStatus ?? t("menu.checkUpdate")}
+            onClick={() => {
+              // Hàng đổi chữ thành kết quả: menu đóng sau khi người dùng bấm lần nữa
+              // cũng không mất kết quả, vì lần bấm sau luôn hỏi lại.
+              setUpdateStatus(t("menu.checkingUpdate"));
+              void menu
+                ?.onCheckUpdate()
+                .then(setUpdateStatus)
+                .catch(() => setUpdateStatus(t("menu.updateFailed")));
+            }}
           />
           <MenuItem
             icon={<PowerIcon />}

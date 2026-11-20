@@ -19,6 +19,7 @@ mod passwords;
 mod permissions;
 mod tabs;
 mod terms;
+mod update;
 
 use browser::BrowserState;
 use db::DbState;
@@ -35,6 +36,10 @@ fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        // M14: plugin tự cập nhật. Không cấp quyền updater:* cho webview nào:
+        // chỉ Rust gọi, nên trang web không thể kích hoạt tải/cài.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(update::PendingUpdate::default())
         .invoke_handler(tauri::generate_handler![commands::browser_command])
         .on_page_load(|webview, payload| {
             let app = webview.app_handle().clone();

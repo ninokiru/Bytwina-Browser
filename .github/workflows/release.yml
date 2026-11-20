@@ -29,13 +29,37 @@ jobs:
         shell: pwsh
         run: |
           if (Test-Path package-lock.json) { npm ci } else { npm install }
+      # M14: bản cài tự cập nhật được khi có khoá ký. Khoá công khai là dữ liệu
+      # không bí mật, nhưng chèn từ secret để repo không bị khoá cứng vào một
+      # máy: đổi máy ký chỉ cần đổi secret. Không có secret thì build thường,
+      # tauri.conf.json giữ pubkey rỗng và app bỏ qua bước tự cập nhật.
+      - name: Signing key
+        shell: pwsh
+        env:
+          PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+          PRIVKEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PRIVKEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ($env:PUBKEY -and $env:PRIVKEY) {
+            $conf = "apps/desktop/src-tauri/tauri.conf.json"
+            $json = Get-Content $conf -Raw | ConvertFrom-Json
+            $json.plugins.updater.pubkey = $env:PUBKEY
+            $json | ConvertTo-Json -Depth 20 | Set-Content $conf -Encoding utf8
+            Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY=$env:PRIVKEY"
+            Add-Content $env:GITHUB_ENV "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$env:PRIVKEY_PASSWORD"
+            echo "UPDATER_SIGNED=1" >> $env:GITHUB_ENV
+          } else {
+            echo "::warning::Thiếu TAURI_UPDATER_PUBKEY/TAURI_SIGNING_PRIVATE_KEY: bản này sẽ không ký, người dùng không tự cập nhật được."
+            echo "UPDATER_SIGNED=0" >> $env:GITHUB_ENV
+          }
       - name: Build installer (NSIS)
         working-directory: apps/desktop
         run: npx tauri build --bundles nsis --target x86_64-pc-windows-msvc
-      - name: Checksums
+      - name: Checksums and updater manifest
         shell: pwsh
         run: |
-          $f = Get-ChildItem -Recurse -Filter *-setup.exe apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis | Select-Object -First 1
+          $root = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          $f = Get-ChildItem -Recurse -Filter *-setup.exe $root | Select-Object -First 1
           if (-not $f) { throw "NSIS installer not found" }
           # gh thay dấu cách bằng dấu chấm khi đặt tên asset. Đặt tên lại ngay ở đây
           # để dòng hash trỏ đúng file người dùng tải về, không phá `sha256sum -c`.
@@ -45,14 +69,49 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()
           "$hash  $name" | Out-File -Encoding ascii SHA256SUMS.txt
           echo "INSTALLER=$asset" >> $env:GITHUB_ENV
+          echo "ASSET_NAME=$name" >> $env:GITHUB_ENV
+
+          # latest.json = chỗ tauri-plugin-updater đọc. Bắt buộc có chữ ký
+          # minisign (tệp .sig do tauri build sinh ra khi có khoá).
+          if ($env:UPDATER_SIGNED -eq "1") {
+            $sigFile = "$($f.FullName).sig"
+            if (-not (Test-Path $sigFile)) { throw "Thiếu $sigFile: bản build không sinh chữ ký cập nhật." }
+            $sig = (Get-Content $sigFile -Raw).Trim()
+            $version = $env:GITHUB_REF_NAME.TrimStart("v")
+            $manifest = @{
+              version = $version
+              notes = "Bytwina Browser $env:GITHUB_REF_NAME"
+              pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+              platforms = @{
+                "windows-x86_64" = @{
+                  signature = $sig
+                  url = "https://github.com/${{ github.repository }}/releases/download/$env:GITHUB_REF_NAME/$name"
+                }
+              }
+            }
+            # nén tối thiểu: client chỉ cần JSON hợp lệ
+            $manifest | ConvertTo-Json -Depth 10 -Compress | Set-Content latest.json -Encoding utf8
+            Add-Content $env:GITHUB_ENV "UPLOAD_UPDATER=1"
+          } else {
+            Add-Content $env:GITHUB_ENV "UPLOAD_UPDATER=0"
+          }
       - name: Create release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" --title "Bytwina Browser ${{ github.ref_name }}" --generate-notes --latest "$env:INSTALLER" SHA256SUMS.txt
+          $files = @($env:INSTALLER, "SHA256SUMS.txt")
+          if ($env:UPLOAD_UPDATER -eq "1") { $files += "latest.json" }
+          gh release create "${{ github.ref_name }}" --title "Bytwina Browser ${{ github.ref_name }}" --generate-notes --latest @files
       - name: Verify assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name'
+        run: |
+          gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name'
+          if ($env:UPLOAD_UPDATER -eq "1") {
+            gh release download "${{ github.ref_name }}" --pattern latest.json --dir verify
+            $j = Get-Content verify/latest.json -Raw | ConvertFrom-Json
+            if ($j.version -ne $env:GITHUB_REF_NAME.TrimStart("v")) { throw "latest.json sai phiên bản: $($j.version)" }
+            Write-Output "latest.json OK: $($j.version), $($j.platforms.'windows-x86_64'.url)"
+          }

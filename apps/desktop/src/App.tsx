@@ -628,6 +628,20 @@ export default function App() {
                 ),
               onOpenSettings: openSettingsPage,
               onExit: () => void cmd("exit").catch(() => undefined),
+              onCheckUpdate: async () => {
+                const info = (await cmd("update_check")) as {
+                  version: string;
+                  current: string;
+                } | null;
+                if (!info) return t("menu.updateLatest");
+                const ok = window.confirm(
+                  t("menu.updateFound")
+                    .replace("{v}", info.version)
+                    .replace("{c}", info.current),
+                );
+                if (ok) await cmd("update_install");
+                return t("menu.updateInstalling");
+              },
             }}
           />
         </div>

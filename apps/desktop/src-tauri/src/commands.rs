@@ -446,6 +446,16 @@ pub async fn browser_command(
             Ok(Value::Null)
         }
         "open_default_apps" => open_default_apps_page(),
+        // M14: tự cập nhật. Plugin chỉ được gọi từ đây (Rust), không cấp quyền
+        // updater:* cho webview nào, nên trang web không tự tải/cài được.
+        "update_check" => {
+            let info = crate::update::check(app.clone()).await;
+            Ok(serde_json::to_value(info).unwrap_or(Value::Null))
+        }
+        "update_install" => {
+            crate::update::install(app.clone()).await?;
+            Ok(Value::Bool(true))
+        }
         "settings_reset" => {
             with_db(&app, |db| {
                 for (key, value) in DEFAULT_SETTINGS {
