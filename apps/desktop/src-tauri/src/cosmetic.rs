@@ -70,6 +70,23 @@ mod tests {
         Engine::new_with_filter_set(set)
     }
 
+    /// Như production thật (filters::build_engine): `new_with_filter_set` bật
+    /// tối ưu của NetworkRulesBuilder, còn đường cache engine của Blocker thì
+    /// dùng `serialize`/`deserialize`. Hai đường này có thể xử lý cosmetic khác
+    /// nhau, nên test cuối phải đi đúng đường production.
+    fn production_engine(rules: &str) -> Engine {
+        let dir = std::env::temp_dir().join(format!(
+            "bytwina-cosmetic-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("test.txt"), rules);
+        let blocker = crate::filters::Blocker::new(dir);
+        blocker.load().expect("nạp danh sách thất bại");
+        blocker.snapshot_engine().expect("engine chưa nạp")
+    }
+
     fn engine(rules: &str) -> Engine {
         engine_with(false, rules)
     }
@@ -125,11 +142,26 @@ mod tests {
             "SUMMARY:rule_a={:?}",
             all.hidden_class_id_selectors(["a"], ["a"], &Default::default())
         );
+        // Đường production (Blocker::load, có thể qua cache serialize): luật
+        // chung còn sống không? So với debug=false để thấy chênh lệch.
+        for debug in [true, false] {
+            let e = engine_with(debug, ".advert\n");
+            println!(
+                "SUMMARY:opt_{debug}={:?}",
+                e.hidden_class_id_selectors(["advert"], [""], &Default::default())
+            );
+        }
+        let p = production_engine(".advert\n");
+        println!(
+            "SUMMARY:production={:?}",
+            p.hidden_class_id_selectors(["advert"], [""], &Default::default())
+        );
     }
 
     #[test]
     fn generic_rules_need_page_classes_and_ids() {
-        let e = engine(".advert\n#sponsor\n");
+        // Đi đúng đường production: Blocker.load() có thể đi qua cache/serialize.
+        let e = production_engine(".advert\n#sponsor\n");
         // Chưa đưa class/id thì chưa ẩn được gì: đó là giới hạn của bộ lọc chung.
         assert!(stylesheet(&e, "https://any.test/", &[], &[]).is_empty());
         let css = stylesheet(
