@@ -270,6 +270,11 @@ pub async fn browser_command(
             app.exit(0);
             Ok(Value::Null)
         }
+        // Menu ⋮: thoát bình thường (không đụng gì tới điều khoản).
+        "exit" => {
+            app.exit(0);
+            Ok(Value::Null)
+        }
         // Bảng nổi (dấu trang, lịch sử, cài đặt…): nới webview toolbar khi mở.
         "panel_open" => {
             browser::set_panel_open(&app, &state, arg("on")? == "1");

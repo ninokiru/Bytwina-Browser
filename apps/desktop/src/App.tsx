@@ -51,6 +51,9 @@ export default function App() {
   // Hàng đợi lời hỏi quyền: mỗi lời đang chờ giữ một deferral phía WebView2,
   // nên không được phép mất nó — trả lời lần lượt, cái sau hiện sau cái trước.
   const [prompts, setPrompts] = useState<SitePrompt[]>([]);
+  // Menu ⋮ cần hai giá trị này: hàng thu phóng và trang con cần mở.
+  const [zoom, setZoom] = useState(100);
+  const [settingsPage, setSettingsPage] = useState("");
   // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
   const [termsOk, setTermsOk] = useState<boolean | null>(null);
   const [home, setHome] = useState(DEFAULT_HOME);
@@ -73,6 +76,12 @@ export default function App() {
     void cmd("settings_get", { key: "homeUrl" })
       .then((v) => {
         if (typeof v === "string" && v) setHome(v);
+      })
+      .catch(() => undefined);
+    void cmd("settings_get", { key: "zoom" })
+      .then((v) => {
+        const percent = Number(v);
+        if (Number.isFinite(percent) && percent > 0) setZoom(percent);
       })
       .catch(() => undefined);
   }, []);
@@ -170,11 +179,7 @@ export default function App() {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === "t") {
         e.preventDefault();
-        void cmd("new_tab").then(() => {
-          setInput("");
-          setEditing(true);
-          (document.getElementById("address") as HTMLInputElement | null)?.focus();
-        });
+        newTab();
       } else if (mod && e.key.toLowerCase() === "l") {
         e.preventDefault();
         setEditing(true);
@@ -182,6 +187,27 @@ export default function App() {
       } else if (mod && e.key.toLowerCase() === "r") {
         e.preventDefault();
         void cmd("reload");
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        void cmd("private_set", { on: state.private ? "0" : "1" });
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        setPanel("bookmarks");
+      } else if (mod && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setPanel("downloads");
+      } else if (mod && e.key.toLowerCase() === "h") {
+        e.preventDefault();
+        setPanel("history");
+      } else if (mod && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        bookmarkCurrent();
+      } else if (mod && e.shiftKey && e.code === "Delete") {
+        e.preventDefault();
+        openSettingsPage("settings-privacy");
+      } else if (mod && e.key.toLowerCase() === "q") {
+        e.preventDefault();
+        void cmd("exit").catch(() => undefined);
       } else if (e.altKey && e.key === "ArrowLeft") {
         void cmd("back");
       } else if (e.altKey && e.key === "ArrowRight") {
@@ -214,7 +240,37 @@ export default function App() {
     void cmd("navigate", { id: String(active.id), input }).catch(() => undefined);
   };
 
-  const toggle = (kind: PanelKind) => setPanel((cur) => (cur === kind ? null : kind));
+  const toggle = (kind: PanelKind) => {
+    // Mở bảng theo cách thường: không giữ trang con sâu mà phím tắt/menu đã chọn.
+    setSettingsPage("");
+    setPanel((cur) => (cur === kind ? null : kind));
+  };
+
+  const newTab = () => {
+    void cmd("new_tab").then(() => {
+      setInput("");
+      setEditing(true);
+      (document.getElementById("address") as HTMLInputElement | null)?.focus();
+    });
+  };
+
+  const bookmarkCurrent = () => {
+    // bookmark_add là UPSERT theo URL: đã có dấu trang thì không ghi đè.
+    if (!active || starred) return;
+    void cmd("bookmark_add", { title: active.title || active.url, url: active.url, folder: "" })
+      .then(() => setStarred(true))
+      .catch(() => setStarred(false));
+  };
+
+  const applyZoom = (percent: number) => {
+    setZoom(percent);
+    void cmd("zoom_set", { percent: String(percent) }).catch(() => undefined);
+  };
+
+  const openSettingsPage = (page: string) => {
+    setSettingsPage(page);
+    setPanel("settings");
+  };
 
   if (termsOk === null) return null;
   if (termsOk === false) {
@@ -417,17 +473,7 @@ export default function App() {
             type="button"
             className={`omni-chip${starred ? " on" : ""}`}
             title={t("bar.bookmark")}
-            onClick={() => {
-              // bookmark_add là UPSERT theo URL: bấm lại sẽ ghi đè tiêu đề/folder cũ.
-              if (!active || starred) return;
-              void cmd("bookmark_add", {
-                title: active.title || active.url,
-                url: active.url,
-                folder: "",
-              })
-                .then(() => setStarred(true))
-                .catch(() => setStarred(false));
-            }}
+            onClick={bookmarkCurrent}
           >
             <StarIcon />
           </button>
@@ -514,13 +560,32 @@ export default function App() {
           <Panel
             kind={panel}
             onClose={() => setPanel(null)}
-            onOpen={(kind) => setPanel(kind)}
+            onOpen={(kind) => {
+              setSettingsPage("");
+              setPanel(kind);
+            }}
             onNavigate={(url) => {
               setPanel(null);
               if (active) void cmd("navigate", { id: String(active.id), input: url });
             }}
             privateMode={state.private}
             onHomeChange={setHome}
+            menu={{
+              url: active?.url ?? "",
+              title: active?.title ?? "",
+              zoom,
+              vertical: state.vertical,
+              settingsPage,
+              onNewTab: newTab,
+              onBookmark: bookmarkCurrent,
+              onZoom: applyZoom,
+              onVertical: (vertical) =>
+                void cmd("tab_layout", { layout: vertical ? "vertical" : "horizontal" }).catch(
+                  () => undefined,
+                ),
+              onOpenSettings: openSettingsPage,
+              onExit: () => void cmd("exit").catch(() => undefined),
+            }}
           />
         </div>
       )}

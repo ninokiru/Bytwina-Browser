@@ -71,10 +71,13 @@ export default function Settings({
   privateMode,
   onHomeChange,
   onClose,
+  initialPage,
 }: {
   privateMode: boolean;
   onHomeChange: (url: string) => void;
   onClose: () => void;
+  /// Menu ⋮ và tổ hợp phím mở thẳng một trang cụ thể (ví dụ Quyền riêng tư).
+  initialPage?: string;
 }) {
   useLang();
   const [lang, setLangState] = useState<Lang>(getLang());
@@ -96,7 +99,7 @@ export default function Settings({
   const [perms, setPerms] = useState<SitePermission[]>([]);
   const [abBusy, setAbBusy] = useState(false);
   // Master–detail như Cốc Cốc/Chrome: mục lục chọn MỘT trang để hiện, không cuộn cả loạt.
-  const [page, setPage] = useState<string>(SECTIONS[0].id);
+  const [page, setPage] = useState<string>(initialPage ?? SECTIONS[0].id);
   const [query, setQuery] = useState("");
   // null: chưa kiểm tra được (plugin lỗi hoặc nền tảng không hỗ trợ).
   const [autostart, setAutostart] = useState<boolean | null>(null);
@@ -157,6 +160,13 @@ export default function Settings({
   useEffect(() => {
     loadAll();
   }, []);
+
+  // Đang ở trang Cài đặt mà bấm Ctrl+Shift+Del: đổi trang con theo yêu cầu mới.
+  useEffect(() => {
+    if (!initialPage) return;
+    setPage(initialPage);
+    setQuery("");
+  }, [initialPage]);
 
   const save = (key: string, value: string) => {
     void cmd("settings_set", { key, value }).catch(() => undefined);

@@ -610,6 +610,97 @@ button:disabled {
   background: var(--border);
 }
 
+/* Nhãn phím tắt đẩy sang phải, như menu Cốc Cốc. */
+.menu-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-key {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* Hàng hồ sơ: Bytwina chưa có tài khoản nên hàng này không bấm được. */
+.menu-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+}
+
+.menu-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.menu-avatar svg {
+  width: 16px;
+  height: 16px;
+}
+
+.menu-profile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+}
+
+.menu-profile-text small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Hàng thu phóng trong menu: nhãn trái, điều khiển phải. */
+.menu-zoom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.menu-zoom-ctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menu-zoom-btn {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.menu-zoom-btn:hover {
+  background: var(--surface-2);
+}
+
+.menu-zoom-value {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Thanh điều hướng ---------- */
 
 .nav-group {

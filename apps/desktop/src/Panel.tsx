@@ -7,18 +7,24 @@ import {
   AlertIcon,
   BookIcon,
   BookTextIcon,
+  BookmarkPlusIcon,
   CheckCircleIcon,
   ClockIcon,
   CloseIcon,
   DownloadIcon,
   GlassesIcon,
   GridIcon,
+  KeyIcon,
   MoreIcon,
+  PaletteIcon,
+  PlusIcon,
+  PowerIcon,
   SearchIcon,
   SettingsIcon,
   SplitIcon,
   StarIcon,
   TrashIcon,
+  UserIcon,
 } from "./Icons";
 
 interface Bookmark {
@@ -59,6 +65,31 @@ interface DownloadItem {
   finishedAt: number;
 }
 
+/// Những gì menu ⋮ cần từ App: dữ liệu trang đang mở + hành động thật.
+/// Để riêng một object vì menu ngày càng có hàng không phải "mở bảng".
+export interface MenuActions {
+  url: string;
+  title: string;
+  zoom: number;
+  vertical: boolean;
+  settingsPage: string;
+  onNewTab: () => void;
+  onBookmark: (url: string, title: string) => void;
+  onZoom: (percent: number) => void;
+  onVertical: (vertical: boolean) => void;
+  onOpenSettings: (page: string) => void;
+  onExit: () => void;
+}
+
+// Bậc thu phóng như Chrome; ngoài danh sách thì giữ nguyên.
+const ZOOMS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
+
+function stepZoom(current: number, dir: 1 | -1): number {
+  // Phóng to: bậc nhỏ nhất lớn hơn. Thu nhỏ: bậc LỚN NHẤT nhỏ hơn, nên đảo thứ tự.
+  const ordered = [...ZOOMS].sort((a, b) => (dir === 1 ? a - b : b - a));
+  return ordered.find((z) => (dir === 1 ? z > current : z < current)) ?? current;
+}
+
 export default function Panel({
   kind,
   onClose,
@@ -66,6 +97,7 @@ export default function Panel({
   onOpen,
   privateMode,
   onHomeChange,
+  menu,
 }: {
   kind: PanelKind;
   onClose: () => void;
@@ -73,6 +105,7 @@ export default function Panel({
   onOpen: (kind: PanelKind) => void;
   privateMode: boolean;
   onHomeChange: (url: string) => void;
+  menu?: MenuActions;
 }) {
   useLang();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -365,23 +398,12 @@ export default function Panel({
     case "menu":
       body = (
         <div className="menu-list">
-          <MenuItem icon={<StarIcon />} label={t("title.bookmarks")} onOpen={onOpen} kind="bookmarks" />
-          <MenuItem icon={<ClockIcon />} label={t("title.history")} onOpen={onOpen} kind="history" />
-          <MenuItem icon={<GridIcon />} label={t("title.tabs")} onOpen={onOpen} kind="tabs" />
-          <MenuItem icon={<BookIcon />} label={t("title.reading")} onOpen={onOpen} kind="reading" />
           <MenuItem
-            icon={<DownloadIcon />}
-            label={t("title.downloads")}
-            onOpen={onOpen}
-            kind="downloads"
+            icon={<PlusIcon />}
+            label={t("menu.newTab")}
+            shortcut="Ctrl+T"
+            onClick={() => menu?.onNewTab()}
           />
-          <MenuItem
-            icon={<BookTextIcon />}
-            label={t("title.dictionary")}
-            onOpen={onOpen}
-            kind="dictionary"
-          />
-          <div className="menu-sep" />
           <button
             type="button"
             className={`menu-row${privateMode ? " on" : ""}`}
@@ -390,9 +412,113 @@ export default function Panel({
               onClose();
             }}
           >
-            <GlassesIcon /> {t("bar.privateToggle")}
+            <GlassesIcon />
+            <span className="menu-label">{t("bar.privateToggle")}</span>
+            <kbd className="menu-key">Ctrl+Shift+N</kbd>
           </button>
-          <MenuItem icon={<SettingsIcon />} label={t("title.settings")} onOpen={onOpen} kind="settings" />
+          <div className="menu-sep" />
+          {/* Bytwina chưa có tài khoản: hàng này nói đúng sự thật, không giả "đã đăng nhập". */}
+          <div className="menu-profile">
+            <span className="menu-avatar">
+              <UserIcon />
+            </span>
+            <span className="menu-profile-text">
+              <strong>{t("menu.guestProfile")}</strong>
+              <small>{t("menu.noAccounts")}</small>
+            </span>
+          </div>
+          <div className="menu-sep" />
+          <MenuItem
+            icon={<KeyIcon />}
+            label={t("menu.passwords")}
+            onClick={() => menu?.onOpenSettings("settings-passwords")}
+          />
+          <MenuItem
+            icon={<ClockIcon />}
+            label={t("title.history")}
+            shortcut="Ctrl+H"
+            onOpen={onOpen}
+            kind="history"
+          />
+          <MenuItem
+            icon={<DownloadIcon />}
+            label={t("title.downloads")}
+            shortcut="Ctrl+J"
+            onOpen={onOpen}
+            kind="downloads"
+          />
+          <MenuItem
+            icon={<StarIcon />}
+            label={t("title.bookmarks")}
+            shortcut="Ctrl+Shift+O"
+            onOpen={onOpen}
+            kind="bookmarks"
+          />
+          <MenuItem
+            icon={<BookmarkPlusIcon />}
+            label={t("menu.bookmarkThis")}
+            shortcut="Ctrl+D"
+            onClick={() => {
+              if (menu) menu.onBookmark(menu.url, menu.title);
+            }}
+          />
+          <MenuItem icon={<BookIcon />} label={t("title.reading")} onOpen={onOpen} kind="reading" />
+          <MenuItem icon={<GridIcon />} label={t("title.tabs")} onOpen={onOpen} kind="tabs" />
+          <MenuItem
+            icon={<BookTextIcon />}
+            label={t("title.dictionary")}
+            onOpen={onOpen}
+            kind="dictionary"
+          />
+          <MenuItem
+            icon={<PaletteIcon />}
+            label={menu?.vertical ? t("menu.horizontalTabs") : t("menu.verticalTabs")}
+            onClick={() => {
+              if (menu) menu.onVertical(!menu.vertical);
+            }}
+          />
+          <MenuItem
+            icon={<TrashIcon />}
+            label={t("menu.clearData")}
+            shortcut="Ctrl+Shift+Del"
+            onClick={() => menu?.onOpenSettings("settings-privacy")}
+          />
+          <div className="menu-sep" />
+          <div className="menu-zoom">
+            <span className="menu-label">{t("menu.zoom")}</span>
+            <span className="menu-zoom-ctl">
+              <button
+                type="button"
+                className="menu-zoom-btn"
+                aria-label={t("menu.zoomOut")}
+                onClick={() => menu?.onZoom(stepZoom(menu.zoom, -1))}
+              >
+                −
+              </button>
+              <span className="menu-zoom-value">{menu?.zoom ?? 100}%</span>
+              <button
+                type="button"
+                className="menu-zoom-btn"
+                aria-label={t("menu.zoomIn")}
+                onClick={() => menu?.onZoom(stepZoom(menu.zoom, 1))}
+              >
+                +
+              </button>
+            </span>
+          </div>
+          <div className="menu-sep" />
+          <MenuItem
+            icon={<SettingsIcon />}
+            label={t("title.settings")}
+            onOpen={onOpen}
+            kind="settings"
+          />
+          <MenuItem
+            icon={<PowerIcon />}
+            label={t("menu.exit")}
+            shortcut="Ctrl+Q"
+            onClick={() => menu?.onExit()}
+          />
         </div>
       );
       break;
@@ -405,7 +531,14 @@ export default function Panel({
   // Cài đặt chiếm toàn vùng dưới thanh công cụ thay vì thẻ nổi 430px:
   // nó có mục lục riêng theo bố cục chrome://settings.
   if (kind === "settings") {
-    return <Settings privateMode={privateMode} onHomeChange={onHomeChange} onClose={onClose} />;
+    return (
+      <Settings
+        privateMode={privateMode}
+        onHomeChange={onHomeChange}
+        onClose={onClose}
+        initialPage={menu?.settingsPage || undefined}
+      />
+    );
   }
 
   return (
@@ -495,21 +628,27 @@ function MenuItem({
   icon,
   label,
   kind,
+  shortcut,
   onOpen,
+  onClick,
 }: {
   icon: ReactNode;
   label: string;
-  kind: PanelKind;
+  kind?: PanelKind;
+  shortcut?: string;
   onOpen: (kind: PanelKind) => void;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       className="menu-row"
       data-panel={kind}
-      onClick={() => onOpen(kind)}
+      onClick={() => (onClick ? onClick() : kind && onOpen(kind))}
     >
-      {icon} {label}
+      {icon}
+      <span className="menu-label">{label}</span>
+      {shortcut ? <kbd className="menu-key">{shortcut}</kbd> : null}
     </button>
   );
 }
