@@ -270,3 +270,10 @@ export const KeyIcon = (p: Props) => (
     <path d="M11.5 12H20M17 12v3.5M20 12v2.5" />
   </Icon>
 );
+
+// Mũi tên vào mục con, như hàng "đã đăng nhập" trong menu Cốc Cốc.
+export const ChevronRightIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M9 6l6 6-6 6" />
+  </Icon>
+);

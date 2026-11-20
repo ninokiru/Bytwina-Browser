@@ -47,6 +47,8 @@ const vi = {
   "settings.you": "Bạn và Bytwina",
   "settings.youHint": "Thông tin đọc từ ứng dụng đang chạy, không gửi đi đâu.",
   "settings.search": "Tìm kiếm và địa chỉ",
+  "settings.searchPlaceholder": "Tìm kiếm trong Cài đặt",
+  "settings.searchEmpty": "Không có mục cài đặt nào khớp.",
   "settings.performance": "Hiệu suất",
   "settings.performanceHint":
     "Tab ngủ đóng webview của tab ít dùng để giải phóng RAM; mở lại thì trang nạp lại.",
@@ -288,6 +290,8 @@ const en: Record<Key, string> = {
   "settings.you": "You and Bytwina",
   "settings.youHint": "Read from the running app; nothing is sent anywhere.",
   "settings.search": "Search and address bar",
+  "settings.searchPlaceholder": "Search settings",
+  "settings.searchEmpty": "No setting matches.",
   "settings.performance": "Performance",
   "settings.performanceHint":
     "Sleeping tabs close their webview to free RAM; reopening reloads the page.",

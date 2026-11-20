@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, createContext, useContext, useEffect, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import { cmd } from "./tabs";
 import { getLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
@@ -8,6 +8,7 @@ import {
   AlertIcon,
   BoltIcon,
   CheckCircleIcon,
+  ChevronRightIcon,
   CloseIcon,
   DownloadIcon,
   GridIcon,
@@ -94,7 +95,9 @@ export default function Settings({
   const [ab, setAb] = useState<AdblockStatus | null>(null);
   const [perms, setPerms] = useState<SitePermission[]>([]);
   const [abBusy, setAbBusy] = useState(false);
-  const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
+  // Master–detail như Cốc Cốc/Chrome: mục lục chọn MỘT trang để hiện, không cuộn cả loạt.
+  const [page, setPage] = useState<string>(SECTIONS[0].id);
+  const [query, setQuery] = useState("");
   // null: chưa kiểm tra được (plugin lỗi hoặc nền tảng không hỗ trợ).
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [resetArmed, setResetArmed] = useState(false);
@@ -153,28 +156,6 @@ export default function Settings({
 
   useEffect(() => {
     loadAll();
-  }, []);
-
-  // Tô sáng mục lục theo phần đang xem (cách của chrome://settings).
-  useEffect(() => {
-    const seen = new Set<string>();
-    const obs = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) seen.add(e.target.id);
-          else seen.delete(e.target.id);
-        }
-        // Cuộn nhanh có thể khiến không mục nào giao cắt vùng theo dõi: giữ nguyên mục cũ.
-        const top = SECTIONS.find((s) => seen.has(s.id));
-        if (top) setActiveSection(top.id);
-      },
-      { rootMargin: "0px 0px -55% 0px" },
-    );
-    for (const s of SECTIONS) {
-      const el = document.getElementById(s.id);
-      if (el) obs.observe(el);
-    }
-    return () => obs.disconnect();
   }, []);
 
   const save = (key: string, value: string) => {
@@ -286,6 +267,12 @@ export default function Settings({
     }, {}),
   );
 
+  // Kết quả tìm kiếm: khớp nhãn đã dịch hoặc từ khóa không dấu của mục.
+  const q = fold(query.trim());
+  const matches = q
+    ? SECTIONS.filter((s) => fold(t(s.label)).includes(q) || fold(s.keywords).includes(q))
+    : [];
+
   return (
     <div className="settings-page">
       <aside className="settings-nav">
@@ -298,8 +285,11 @@ export default function Settings({
             {i > 0 && SECTIONS[i - 1].group !== s.group && <div className="settings-nav-sep" />}
             <button
               type="button"
-              className={`settings-nav-item${activeSection === s.id ? " active" : ""}`}
-              onClick={() => jump(s.id)}
+              className={`settings-nav-item${page === s.id ? " active" : ""}`}
+              onClick={() => {
+                setPage(s.id);
+                setQuery("");
+              }}
             >
               <s.icon />
               <span>{t(s.label)}</span>
@@ -314,6 +304,38 @@ export default function Settings({
       </aside>
       <main className="settings-main">
         <div className="settings">
+          <label className="settings-search">
+            <SearchIcon />
+            <input
+              placeholder={t("settings.searchPlaceholder")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          {query.trim() !== "" && (
+            <div className="settings-results">
+              {matches.length === 0 ? (
+                <p className="hint">{t("settings.searchEmpty")}</p>
+              ) : (
+                matches.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="settings-result"
+                    onClick={() => {
+                      setPage(s.id);
+                      setQuery("");
+                    }}
+                  >
+                    <s.icon />
+                    <span>{t(s.label)}</span>
+                    <ChevronRightIcon />
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+          <PageCtx.Provider value={{ page, searching: query.trim() !== "" }}>
           <Section id="settings-you" title={t("settings.you")}>
             <dl className="diag">
               <dt>{t("settings.version")}</dt>
@@ -615,6 +637,7 @@ export default function Settings({
               </p>
             )}
           </Section>
+          </PageCtx.Provider>
         </div>
       </main>
     </div>
@@ -622,6 +645,10 @@ export default function Settings({
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  // Master–detail: Section không được chọn không render gì cả, nên trang chỉ dài
+  // bằng đúng mục đang xem như Cốc Cốc/Chrome.
+  const { page, searching } = useContext(PageCtx);
+  if (searching || page !== id) return null;
   return (
     <section id={id} className="settings-section">
       <h2 className="settings-title">{title}</h2>
@@ -630,24 +657,38 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-/// Mục lục trái của trang Cài đặt: mỗi mục có icon, thuộc một nhóm phân cách,
-/// và thứ tự phải khớp thứ tự các thẻ trong ô nội dung (bôi theo cuộn dùng nó).
-const SECTIONS: { id: string; label: Key; icon: ComponentType; group: number }[] = [
-  { id: "settings-you", label: "settings.you", icon: UserIcon, group: 0 },
-  { id: "settings-appearance", label: "settings.appearance", icon: PaletteIcon, group: 0 },
-  { id: "settings-layout", label: "settings.layout", icon: GridIcon, group: 0 },
-  { id: "settings-search", label: "settings.search", icon: SearchIcon, group: 0 },
-  { id: "settings-startup", label: "settings.startup", icon: PowerIcon, group: 0 },
-  { id: "settings-privacy", label: "settings.privacy", icon: LockIcon, group: 1 },
-  { id: "settings-permissions", label: "settings.permissions", icon: KeyIcon, group: 1 },
-  { id: "settings-adblock", label: "settings.adblock", icon: ShieldIcon, group: 1 },
-  { id: "settings-performance", label: "settings.performance", icon: BoltIcon, group: 1 },
-  { id: "settings-downloads", label: "settings.downloads", icon: DownloadIcon, group: 1 },
-  { id: "settings-languages", label: "settings.languages", icon: TranslateIcon, group: 1 },
-  { id: "settings-passwords", label: "settings.passwords", icon: KeyIcon, group: 2 },
-  { id: "settings-system", label: "settings.system", icon: SettingsIcon, group: 2 },
-];
+// Trang đang mở + có đang tìm kiếm không. Đưa qua context để 13 khối JSX con
+// không phải nhận thêm prop nào.
+const PageCtx = createContext<{ page: string; searching: boolean }>({
+  page: "",
+  searching: false,
+});
 
-function jump(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+/// Mục lục trái của trang Cài đặt: mỗi mục có icon, thuộc một nhóm phân cách,
+/// và thứ tự phải khớp thứ tự các thẻ trong ô nội dung.
+/// `keywords` là từ khóa tìm kiếm, viết không dấu vì ô tìm kiếm bỏ dấu trước khi so.
+const SECTIONS: { id: string; label: Key; icon: ComponentType; group: number; keywords: string }[] =
+  [
+    { id: "settings-you", label: "settings.you", icon: UserIcon, group: 0, keywords: "phien ban version webview du tru chan doan toan" },
+    { id: "settings-appearance", label: "settings.appearance", icon: PaletteIcon, group: 0, keywords: "mau sang toi dark theme phong to zoom" },
+    { id: "settings-layout", label: "settings.layout", icon: GridIcon, group: 0, keywords: "tab doc ngang layout vertical chia man hinh" },
+    { id: "settings-search", label: "settings.search", icon: SearchIcon, group: 0, keywords: "cong cu tim kiem engine google duckduckgo trang chu homepage" },
+    { id: "settings-startup", label: "settings.startup", icon: PowerIcon, group: 0, keywords: "khoi dong phien truoc restore" },
+    { id: "settings-privacy", label: "settings.privacy", icon: LockIcon, group: 1, keywords: "rieng tu an danh cookie xoa lich su download data" },
+    { id: "settings-permissions", label: "settings.permissions", icon: KeyIcon, group: 1, keywords: "quyen camera micro thong bao vi tri clipboard site" },
+    { id: "settings-adblock", label: "settings.adblock", icon: ShieldIcon, group: 1, keywords: "chan quang cao tracker easylist abpvn" },
+    { id: "settings-performance", label: "settings.performance", icon: BoltIcon, group: 1, keywords: "hieu suat ram tab ngu sleep memory" },
+    { id: "settings-downloads", label: "settings.downloads", icon: DownloadIcon, group: 1, keywords: "tai file thu muc downloads" },
+    { id: "settings-languages", label: "settings.languages", icon: TranslateIcon, group: 1, keywords: "ngon ngu tieng viet english language" },
+    { id: "settings-passwords", label: "settings.passwords", icon: KeyIcon, group: 2, keywords: "mat khau tu dong dien vault autofill" },
+    { id: "settings-system", label: "settings.system", icon: SettingsIcon, group: 2, keywords: "trinh duyet mac dinh khoi dong cung windows dat lai reset" },
+  ];
+
+/// Bỏ dấu tiếng Việt để gõ "mat khau" vẫn khớp "mật khẩu".
+function fold(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/đ/g, "d")
+    .toLowerCase();
 }
