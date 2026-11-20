@@ -763,6 +763,17 @@ button:disabled {
   color: var(--brand);
 }
 
+/* Khiên: trạng thái tắt phải nhìn ra được, không chỉ đổi màu icon. */
+.omni-chip.shield.off {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+
+.omni-chip.shield:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .omni-chip {
   display: grid;
   place-items: center;

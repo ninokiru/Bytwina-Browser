@@ -97,6 +97,8 @@ const vi = {
   "settings.backupRestart":
     "Khôi phục chỉ chạy khi mở lại ứng dụng, vì SQLite không an toàn nếu bị thay tệp đang mở. Hãy đóng và mở Bytwina để áp dụng.",
   "settings.backupDone": "Đã tạo bản lưu.",
+  "shield.enabledHere": "Đang chặn quảng cáo trên trang này — bấm để tắt",
+  "shield.disabledHere": "Đã tắt chặn quảng cáo trên trang này — bấm để bật lại",
   "settings.autostart": "Khởi động Bytwina khi đăng nhập Windows",
   "settings.autostartHint":
     "Bật sẽ thêm ứng dụng vào danh sách tự chạy của tài khoản này (kho Run trong registry).",
@@ -365,6 +367,8 @@ const en: Record<Key, string> = {
   "settings.backupRestart":
     "Restore only runs on the next launch: replacing an open SQLite file is not safe. Close and reopen Bytwina to apply it.",
   "settings.backupDone": "Backup created.",
+  "shield.enabledHere": "Ads are blocked on this page — click to turn off",
+  "shield.disabledHere": "Ad blocking is off for this page — click to turn back on",
   "settings.autostart": "Start Bytwina when I sign in to Windows",
   "settings.autostartHint":
     "Turning this on adds the app to this account's run list (the registry Run key).",

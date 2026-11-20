@@ -242,7 +242,7 @@ export default function App() {
   // Khiên theo tab đang mở. Bộ đếm là TỔNG của cả phiên (backend chưa phân tách
   // theo tab) — giao diện nói đúng như vậy thay vì giả vờ là số của riêng trang.
   useEffect(() => {
-    const host = hostOf(active?.url);
+    const host = hostOf(active?.url ?? "");
     if (!host) {
       setShieldOff(false);
       return;
@@ -256,7 +256,7 @@ export default function App() {
   }, [active?.id, active?.url]);
 
   const toggleShield = () => {
-    const host = hostOf(active?.url);
+    const host = hostOf(active?.url ?? "");
     if (!host) return;
     const next = !shieldOff;
     setShieldOff(next);
@@ -525,7 +525,7 @@ export default function App() {
             type="button"
             className={`omni-chip shield${shieldOff ? " off" : ""}`}
             title={shieldOff ? t("shield.disabledHere") : t("shield.enabledHere")}
-            disabled={!hostOf(active?.url)}
+            disabled={!hostOf(active?.url ?? "")}
             onClick={toggleShield}
           >
             <ShieldIcon />
