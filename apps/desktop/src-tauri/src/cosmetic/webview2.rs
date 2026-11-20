@@ -3,11 +3,11 @@
 //! Luồng một lượt tải trang:
 //! 1. `NavigationCompleted` bắn trên luồng UI -> hỏi trang "cho tao biết class và
 //!    id đang có" bằng `ExecuteScript`. JS chạy trong trang CHỈ trả về hai danh
-//!    sách chuỗi; không bridge IPC, không API của ứng dụng (ADR-002 vẫn đúng).
-//! 2. Trả lời về -> tra engine ở luồng nền (đừng giữ luồng UI) -> nhảy lại luồng UI
-//!    để chèn `<style>` bằng `ExecuteScript`.
+//!    sách chuỗi; không bridge IPC, không API của ứng dụng (ADR-002 giữ nguyên).
+//! 2. Trả lời về -> tra engine ở luồng nền (hàng nghìn selector không được giữ
+//!    luồng UI) -> nhảy lại luồng UI chèn `<style>` bằng `ExecuteScript`.
 //! 3. SPA đổi nội dung không điều hướng: CSS nằm trong `<style id>` nên mỗi lần
-//!    nạp lại chỉ là ghi đè textContent; ta cũng nạp lại sau mọi navigation.
+//!    áp dụng chỉ là ghi đè textContent, và ta nạp lại sau mọi navigation.
 //!
 //! Vì sao không dùng `AddScriptToExecuteOnDocumentCreated`: hook đó chạy TRƯỚC khi
 //! DOM tồn tại nên đọc class/id không ra gì, và nó sống vĩnh viễn theo webview —
@@ -25,9 +25,9 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2_2,
 };
 use webview2_com::{
-    EventClosure, ExecuteScriptCompletedHandler, NavigationCompletedEventHandler, take_pwstr,
+    EventClosure, ExecuteScriptCompletedHandler, NavigationCompletedEventHandler,
 };
-use windows::core::{BOOL, HRESULT, Interface, PWSTR};
+use windows::core::{BOOL, HSTRING, Interface};
 
 use crate::filters::BlockerHandle;
 
@@ -35,8 +35,8 @@ use crate::filters::BlockerHandle;
 /// thà ẩn thiếu còn hơn kéo chậm trang có hàng nghìn phần tử.
 const MAX_TOKENS: usize = 4000;
 
-/// Chạy trong trang. Kết quả là JSON `[["class..."],["id..."]]`, do đó chuỗi
-/// duy nhất ứng dụng nhận lại là hai danh sách token.
+/// Chạy trong trang. Kết quả là JSON `[["class..."],["id..."]]`; đó là toàn bộ
+/// dữ liệu từ web đi ngược về phía ứng dụng.
 const COLLECT_SCRIPT: &str = concat!(
     "(() => {",
     "const MAX = ",
@@ -56,7 +56,7 @@ const COLLECT_SCRIPT: &str = concat!(
     "})()"
 );
 
-/// CSS được nhúng dưới dạng chuỗi JS an toàn (JSON-escape), ghi đè `<style>` cũ.
+/// CSS nhúng dưới dạng chuỗi JS an toàn (JSON-escape), ghi đè `<style>` cũ.
 fn apply_script(css: &str) -> String {
     let literal = serde_json::to_string(css).unwrap_or_else(|_| "\"\"".into());
     format!(
@@ -90,27 +90,25 @@ pub fn attach(webview: &Webview<tauri::Wry>, app: AppHandle, handle: BlockerHand
             log::error!("[{label}] ICoreWebView2_2 không khả dụng, bỏ lọc thẩm mỹ");
             return;
         };
-        // Tab ngủ rồi mở lại / attach lặp: một navigation chỉ được tính một lần.
+        // Tab ngủ rồi mở lại / attach lặp: một navigation chỉ tính một lần.
         if let Some((_, old_token)) = REGISTRATIONS.with(|r| r.borrow_mut().remove(&label)) {
             let _ = unsafe { core2.remove_NavigationCompleted(old_token) };
         }
 
-        let closure: EventClosure<Option<ICoreWebView2>, Option<ICoreWebView2NavigationCompletedEventArgs>> =
-            Box::new(move |_sender, args| {
-                // Chỉ tính khi điều hướng thành công; trang lỗi thì không có gì để ẩn.
-                let ok = args
-                    .as_ref()
-                    .and_then(|a| {
-                        let mut b = BOOL::default();
-                        a.get_IsSuccess(&mut b).ok()?;
-                        Some(b.as_bool())
-                    })
-                    .unwrap_or(true);
-                if ok {
-                    collect_and_apply(&app, &label, &handle);
-                }
-                Ok(())
-            });
+        let closure: EventClosure<
+            Option<ICoreWebView2>,
+            Option<ICoreWebView2NavigationCompletedEventArgs>,
+        > = Box::new(move |_sender, args| {
+            // Chỉ tính khi điều hướng thành công; trang lỗi thì không có gì để ẩn.
+            let mut ok = BOOL::default();
+            if let Some(args) = args.as_ref() {
+                let _ = unsafe { args.IsSuccess(&mut ok) };
+            }
+            if ok.as_bool() {
+                collect_and_apply(&app, &label, &handle);
+            }
+            Ok(())
+        });
 
         let handler = NavigationCompletedEventHandler::create(closure);
         let mut token: i64 = 0;
@@ -152,23 +150,21 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
         };
         let app_done = app_cb.clone();
         let label_done = label_cb.clone();
-        let step = ExecuteScriptCompletedHandler::create(Box::new(
-            move |error: HRESULT, result: PWSTR| {
-                let json = if error.is_ok() {
-                    unsafe { take_pwstr(result) }
-                } else {
-                    String::new()
-                };
+        // completed_callback nhận FnOnce (một lần gọi), khác EventClosure là FnMut.
+        let step: ExecuteScriptCompletedHandler = ExecuteScriptCompletedHandler::create(Box::new(
+            move |status: windows::core::Result<()>, json: String| {
+                let json = if status.is_ok() { json } else { String::new() };
                 let (classes, ids) = parse_lists(&json);
                 let blocker = blocker.clone();
                 let app_bg = app_done.clone();
                 let label_bg = label_done.clone();
-                tauri::async_runtime::spawn_blocking(move || {
-                    let Some(engine) = blocker.snapshot_engine() else {
+                // Tra engine + ghép CSS: việc nặng, không được giữ luồng UI.
+                drop(tauri::async_runtime::spawn_blocking(move || {
+                    let Some(engine) = blocker.0.snapshot_engine() else {
                         return;
                     };
                     let url = page_url(&app_bg, &label_bg);
-                    // about:blank chỉ là chỗ trống lúc tạo tab lười: không có gì để ẩn.
+                    // about:blank chỉ là chỗ trống lúc tạo tab lười.
                     if url.is_empty() || url == crate::navigation::NEW_TAB_URL {
                         return;
                     }
@@ -177,15 +173,15 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
                         return;
                     }
                     inject(&app_bg, &label_bg, &css);
-                });
+                }));
                 Ok(())
             },
         ));
-        let _ = unsafe { core.ExecuteScript(COLLECT_SCRIPT.into(), &step) };
+        let _ = unsafe { core.ExecuteScript(&HSTRING::from(COLLECT_SCRIPT), &step) };
     });
 }
 
-/// Chèn CSS. Phải quay về luồng UI vì ExecuteScript là API của webview.
+/// Chèn CSS. Phải quay về luồng UI vì ExecuteScript thuộc về webview.
 fn inject(app: &AppHandle, label: &str, css: &str) {
     let Some(webview) = app.get_webview(label) else {
         return;
@@ -195,14 +191,18 @@ fn inject(app: &AppHandle, label: &str, css: &str) {
         let Ok(core) = (unsafe { pv.controller().CoreWebView2() }) else {
             return;
         };
-        let ignore: ICoreWebView2ExecuteScriptCompletedHandler =
-            ExecuteScriptCompletedHandler::create(Box::new(|_, _| Ok(())));
-        let _ = unsafe { core.ExecuteScript(script.as_str().into(), &ignore) };
+        let ignore = ExecuteScriptCompletedHandler::create(Box::new(|_, _| Ok(())));
+        let _ = unsafe {
+            core.ExecuteScript(
+                &HSTRING::from(script.as_str()),
+                &ignore as &ICoreWebView2ExecuteScriptCompletedHandler,
+            )
+        };
     });
 }
 
 /// `[["a","b"],["c"]]` -> (classes, ids). JSON hỏng hoặc sai hình dạng: coi như
-/// trang không đóng góp gì, đừng tin dữ liệu từ trang.
+/// trang không đóng góp gì — không tin dữ liệu đến từ web.
 fn parse_lists(json: &str) -> (Vec<String>, Vec<String>) {
     let Ok(parsed) = serde_json::from_str::<[Vec<String>; 2]>(json) else {
         return (Vec::new(), Vec::new());
@@ -225,7 +225,7 @@ mod tests {
     fn apply_script_escapes_css_as_a_json_string() {
         let script = apply_script(".a{content:\"]\"}");
         assert!(script.contains("__bytwina_cosmetic__"), "{script}");
-        assert!(script.contains(r#"\":\""#), "phải escape dấu nháy: {script}");
+        assert!(script.contains(r#"\"" ), "phải escape dấu nháy: {script}");
         assert!(!script.contains("tauri"), "không được lộ API ứng dụng: {script}");
     }
 

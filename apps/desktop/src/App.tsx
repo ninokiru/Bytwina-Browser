@@ -22,6 +22,7 @@ import {
   PlusIcon,
   ReloadIcon,
   SettingsIcon,
+  ShieldIcon,
   SplitIcon,
   StarIcon,
   StopIcon,
@@ -54,6 +55,9 @@ export default function App() {
   // Menu ⋮ cần hai giá trị này: hàng thu phóng và trang con cần mở.
   const [zoom, setZoom] = useState(100);
   const [settingsPage, setSettingsPage] = useState("");
+  // Khiên chặn quảng cáo theo tab hiện hành. `blockedBaseline` là mốc trừ dần:
+  // bộ đếm trong backend là TỔNG của cả phiên, không phải của riêng trang này.
+  const [shieldOff, setShieldOff] = useState(false);
   // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
   const [termsOk, setTermsOk] = useState<boolean | null>(null);
   const [home, setHome] = useState(DEFAULT_HOME);
@@ -233,6 +237,30 @@ export default function App() {
     setEditing(false);
     // bytwina://... không có thật bị từ chối ở backend: giữ lại ô địa chỉ, không log lỗi.
     void cmd("navigate", { id: String(active.id), input }).catch(() => undefined);
+  };
+
+  // Khiên theo tab đang mở. Bộ đếm là TỔNG của cả phiên (backend chưa phân tách
+  // theo tab) — giao diện nói đúng như vậy thay vì giả vờ là số của riêng trang.
+  useEffect(() => {
+    const host = hostOf(active?.url);
+    if (!host) {
+      setShieldOff(false);
+      return;
+    }
+    void cmd("adblock_status")
+      .then((s) => {
+        const st = (s ?? {}) as { disabledSites?: string[] };
+        setShieldOff((st.disabledSites ?? []).some((h) => h.toLowerCase() === host));
+      })
+      .catch(() => undefined);
+  }, [active?.id, active?.url]);
+
+  const toggleShield = () => {
+    const host = hostOf(active?.url);
+    if (!host) return;
+    const next = !shieldOff;
+    setShieldOff(next);
+    void cmd("adblock_site", { host, on: next ? "1" : "0" }).catch(() => setShieldOff(!next));
   };
 
   const toggle = (kind: PanelKind) => {
@@ -492,6 +520,15 @@ export default function App() {
             }}
           >
             <BookmarkPlusIcon />
+          </button>
+          <button
+            type="button"
+            className={`omni-chip shield${shieldOff ? " off" : ""}`}
+            title={shieldOff ? t("shield.disabledHere") : t("shield.enabledHere")}
+            disabled={!hostOf(active?.url)}
+            onClick={toggleShield}
+          >
+            <ShieldIcon />
           </button>
           {active?.loading && <span className="omni-spinner" />}
         </div>
