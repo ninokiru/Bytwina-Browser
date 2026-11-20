@@ -1,27 +1,45 @@
 # Nhật ký thay đổi
 
-## 0.0.4 — 2026-11-20
+Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Thêm · Thay đổi · Gỡ bỏ · Sửa · Bảo mật.
+
+## 0.0.4 — 2026-11-20 (so với 0.0.3)
+
 ### Thêm
-- Kho mật khẩu cục bộ (M11): mật khẩu chủ suy khóa Argon2id (19 MiB, 2 vòng, salt 16 byte), từng mục mã hóa AES-256-GCM; thêm/sửa/xóa/tìm, hiện và sao chép mật khẩu, tự khóa sau 1–60 phút hoặc khóa tay, xóa toàn bộ kho khi quên mật khẩu chủ. Không lưu mật khẩu chủ; khóa chỉ nằm trong RAM phiên chạy. Chưa tự động điền hoặc bắt mật khẩu từ trang web.
-- Cài đặt: mục "Quyền trang web" riêng, liệt kê quyền đã lưu theo trang và cho xóa từng trang.
-- Sao lưu và khôi phục CSDL (M13): `VACUUM INTO` ra tệp SQLite gọn trong `app_data/backups/` (không cần bật feature `backup` của rusqlite), có danh sách bản lưu kèm kích thước/thời gian, xóa từng bản, và khôi phục deferred — marker được `db::open` áp dụng trước khi mở kết nối, kèm bản an toàn của CSDL cũ trong `pre-restore-<stamp>/`. Lý do không hoán đổi lúc đang chạy: SQLite không định nghĩa hành vi thay tệp khi connection còn mở.
-- Cài đặt: xóa lịch sử và danh sách tải xuống theo khoảng thời gian (1 giờ / 24 giờ / 7 ngày / toàn bộ) như chrome://settings/clearBrowserData. Chỉ "toàn bộ" mới quên danh sách tab của phiên, để trang vừa xóa không tự mở lại.
-- Cài đặt là master–detail như Cốc Cốc/Chrome: mục lục chọn một trang để hiện (không còn một trang cuộn dài + nhảy neo), thêm ô "Tìm kiếm trong Cài đặt" lọc theo nhãn đã dịch hoặc từ khóa, bỏ dấu tiếng Việt nên gõ "mat khau" vẫn khớp "mật khẩu".
-- Menu ⋮ theo mẫu Cốc Cốc: nhãn phím tắt cột phải (Ctrl+T, Ctrl+H, Ctrl+J, Ctrl+D, Ctrl+Shift+O, Ctrl+Shift+N, Ctrl+Shift+Del, Ctrl+Q), hàng thu phóng − 100% +, hàng hồ sơ ("Hồ sơ khách" — nói thẳng chưa có tài khoản thay vì giả đã đăng nhập), hàng chuyển tab dọc/ngang và thoát. Các hàng đều gọi lệnh có thật; chưa có hàng "Tiện ích mở rộng" hay "In trang" vì backend chưa có.
-- Trang tab mới: logo, lời chào theo giờ, ô tìm kiếm lớn bo tròn, lưới quick link lấy từ dấu trang rồi bù bằng lịch sử, gợi ý tìm kiếm khi chưa có dữ liệu, dòng ghi chú riêng tư. Trang nằm trong webview toolbar nên không cần thay đổi Rust.
-- Thanh địa chỉ: pill cố định 34 px, hover đổi nền, focus bằng vòng accent — không còn co giãn chiều cao khi bấm vào.
+- **Kho mật khẩu mã hóa** (M11): mật khẩu chủ suy khóa bằng Argon2id, từng mục mã hóa AES-256-GCM. Thêm, sửa, xóa, tìm; hiện và sao chép mật khẩu; tự khóa sau 1–60 phút hoặc khóa tay; xóa toàn bộ kho khi quên mật khẩu chủ. Mật khẩu chủ không được lưu; khóa chỉ nằm trong RAM. Chưa tự điền mật khẩu vào form.
+- **Quyền trang web** (M12): camera, micro, vị trí, thông báo… được hỏi từng lần, có thể nhớ theo origin. Cài đặt liệt kê quyền đã lưu và cho xóa theo từng trang.
+- **Sao lưu và khôi phục CSDL** (M13): tạo bản sao bằng `VACUUM INTO` trong thư mục `backups`, xem danh sách kèm kích thước và thời gian, xóa từng bản. Khôi phục được áp dụng ở lần khởi động kế tiếp, trước khi mở CSDL; CSDL cũ được giữ trong thư mục `pre-restore-<thời gian>`.
+- **Lọc thẩm mỹ** (M4b): ẩn phần tử quảng cáo bằng CSS sau khi trang tải xong.
+- **Tự cập nhật** (M14): kiểm tra và cài bản mới từ GitHub Releases; chỉ cài bản có chữ ký khớp khóa công khai. Mục menu ⋮ "Cập nhật Bytwina".
+- **Hệ thống** trong Cài đặt: khởi động cùng Windows; mở trang "Ứng dụng mặc định" của Windows; đặt lại cài đặt về mặc định.
+- **Xóa dữ liệu theo khoảng thời gian**: lịch sử và tải xuống, theo 1 giờ / 24 giờ / 7 ngày / toàn bộ.
+- **Trang tab mới** mới: lời chào, ô tìm kiếm lớn, lưới liên kết nhanh lấy từ dấu trang rồi đến lịch sử.
+- **Menu ⋮** kiểu Cốc Cốc: cột phím tắt, hàng thu phóng, hàng hồ sơ (chưa có tài khoản), chuyển tab dọc/ngang, thoát.
+- **Tìm trong Cài đặt**: lọc theo nhãn hoặc từ khóa, không cần dấu tiếng Việt.
+
 ### Thay đổi
-- Công cụ tìm kiếm chuyển hẳn vào Cài đặt dưới dạng danh sách radio kèm mô tả như Chrome; trang tab mới không còn bộ chọn engine.
-- Tab dọc: tab đang chọn có vạch accent 3 px bên trái; nút ghim chỉ hiện khi rê tab để tab đang chọn không bị hai nút chiếm chỗ.
-- Menu ⋮ thu về 320 px như menu trình duyệt; bảng danh sách giữ 430 px.
-- Ô địa chỉ để trống khi ở tab mới thay vì hiện `about:blank`.
-- Tôn trọng thiết lập giảm chuyển động của Windows (`prefers-reduced-motion`).
+- **Cài đặt** chuyển sang bố cục hai cột: mục lục bên trái, nội dung bên phải.
+- **Thanh địa chỉ** là pill cố định cao 34 px, không co giãn khi bấm vào.
+- **Tab dọc** tinh chỉnh: vạch accent cho tab đang chọn; nút ghim chỉ hiện khi rê chuột.
+- **Ô địa chỉ** để trống ở tab mới thay vì hiện `about:blank`.
+- **Giao diện** tôn trọng thiết lập giảm chuyển động của Windows.
+- **Phụ thuộc**: nâng `rusqlite` từ 0.32 lên 0.43 để xử lý RUSTSEC-2026-0459.
+- **CI**: lỗi TypeScript hiện thành annotation và đưa 60 dòng cuối vào Summary, giống các bước Rust.
+
+### Gỡ bỏ
+- **Bộ chọn công cụ tìm kiếm** trên trang tab mới. Cấu hình công cụ tìm kiếm chuyển hẳn vào Cài đặt.
 
 ### Sửa
-- An toàn IPC: `browser_command` trước đây chỉ dựa vào `capabilities/default.json`, nhưng Tauri bỏ qua kiểm tra ACL với lệnh tùy biến khi origin gọi là cục bộ và dự án không có app manifest — nghĩa là trang chạy ở origin của chính app sẽ gọi được mọi lệnh, gồm kho mật khẩu. Lệnh nay chặn theo nhãn webview gọi tới (chỉ `toolbar`), và liên kết tới `*.tauri.localhost` / `ipc.localhost` bị từ chối ở cả ô địa chỉ lẫn `page_navigation_allowed`.
-- Riêng tư: vòng lưu phiên 30 giây vẫn ghi URL + tiêu đề của trang riêng tư vào bảng `session_tabs` (chỉ lịch sử được chặn). `persist_session` nay bỏ ghi khi đang ở chế độ riêng tư.
-- Quyền trang web: `detach` lấy danh sách lời hỏi đang treo *bên trong* lời nhảy về luồng UI; lấy ở ngoài rồi mới nhảy có thể làm mất dấu args + deferral nếu lời nhảy không chạy được.
-- CI: step Type check in mỗi dòng `error TS…` thành annotation và 60 dòng cuối vào Summary, như các bước Rust đã làm.
+- **Bảo mật IPC**: lệnh `browser_command` chỉ chấp nhận gọi từ webview thanh công cụ (`toolbar`), kiểm tra ở phía Rust. Trước đó, do ACL không áp dụng với lệnh tùy biến ở origin cục bộ, trang chạy ở origin của chính app có thể gọi được mọi lệnh, kể cả kho mật khẩu.
+- **Chế độ riêng tư** không còn ghi phiên tab (URL và tiêu đề) vào CSDL qua vòng lưu tự động 30 giây.
+- **Quyền trang web**: không làm mất lời hỏi đang chờ khi trả lời hoặc hủy.
+- **Lọc thẩm mỹ**: sửa kiểu gọi API `webview2-com` cho `ExecuteScript` và `NavigationCompleted`.
+- **Chặn quảng cáo theo tên miền**: xác định registrable domain theo Public Suffix List, thay cho cách đoán cũ (sai với `co.uk`, `com.vn`).
+- **Biên dịch trên CI**: sửa lỗi quyền trang web không biên dịch được và các cảnh báo clippy.
+- **Khiên chặn** và trạng thái tắt hiển thị đúng khi trang không có tên miền.
+- **Thu phóng**: hàng thu phóng không còn bị lỗi kiểu khi kiểm tra TypeScript.
+- **Biểu tượng Panel**: khôi phục import bị thiếu.
+- **Build release** không còn lỗi khi chưa có khóa ký cập nhật: tắt sinh artifact cập nhật nếu không có khóa; chỉ bật khi có cả khóa công khai và khóa bí mật.
+- **Bố cục tab dọc**: vùng nội dung và webview thanh công cụ tính theo chế độ dọc/ngang. Chưa kiểm chứng trên Windows.
 
 ## 0.0.3 — 2026-11-19
 ### Thêm
@@ -44,11 +62,11 @@
 - Giao diện theo token Chrome (ADR-014): dải tab `#D3E3FD`, tab đang chọn trắng bo hai góc trên 10 px, vách ngăn giữa tab, thanh tiến độ khi đang tải, omnibox pill nở thành ô chữ nhật có viền xanh `#0B57D0` khi gõ; chia lại hai hàng 40 + 56 px.
 - Menu `⋮` kiểu Chrome gom lịch sử, danh sách đọc, tải xuống, từ điển, chế độ riêng tư, cài đặt; sao đánh dấu và nút thêm vào danh sách đọc chuyển vào trong ô địa chỉ.
 - Chặn quảng cáo (ADR-015, bước chặn mạng): engine `adblock` 0.13, tải EasyList + EasyPrivacy + uBlock Filters/Privacy + ABPVN lúc chạy, cache `.txt` và engine đã serialize trong `app_data/filters`; các lệnh `adblock_status/set/site/update/reload`; mục Cài đặt có bật tắt, số danh sách, số request đã chặn và nút cập nhật. Thay cho danh sách chặn popup cứng trước đây.
-
 - Trang Cài đặt chiếm toàn bộ vùng dưới thanh công cụ, có mục lục bên trái (Chung, Giao diện, Chặn quảng cáo, Quyền riêng tư, Tải xuống, Giới thiệu) và cuộn tới từng nhóm, thay cho thẻ nổi 430 px.
 - Cài đặt: công cụ tìm kiếm (DuckDuckGo, Google, Bing, Brave), hành vi khi khởi động (mở lại tab / trang chủ / trang trống), thư mục tải xuống tùy chọn, phóng to trang 50–200%, chủ đề sáng/tối/theo hệ thống, xóa cookie và dữ liệu khi thoát, tab ngủ sau 5/15/30 phút rảnh.
 - Tra từ điển: panel mở Wiktionary tiếng Anh hoặc tiếng Việt trong tab mới (dịch vụ bên ngoài).
 - Chế độ riêng tư dùng `incognito` cho tab mở sau khi bật (cần WebView2 ≥ 101.0.1210.39).
+
 ### Sửa
 - CSDL: `migrate()` ghi phiên bản trước khi tạo bảng nên các bảng không bao giờ được tạo; đã đổi thứ tự.
 - Clippy: bỏ `.clone()` thừa, `filter().next_back()` → `rfind`, bỏ `let` thừa khi trả kết quả, sửa doc list trong `navigation.rs`.
@@ -76,6 +94,8 @@
 ### Biết trước (chưa sửa)
 - Trang http không mã hóa bị chặn (ADR-011).
 - Chế độ riêng tư chưa tách dữ liệu hồ sơ trên đĩa (WebView2 dùng chung user data folder).
-- Tab dọc, reader mode, cập nhật tự động, ký số: chưa có.
-- Chặn quảng cáo bản 0.0.2 mới ở mức network (chặn request); chưa lọc thẩm mỹ — chưa ẩn phần tử theo luật `##`, chưa scriptlet, chưa `:has()`.
+- Reader mode và ký số: chưa có.
+- Chặn quảng cáo mới ở mức network và lọc thẩm mỹ cơ bản; chưa có scriptlet, chưa `:has()`, luật chung (không kèm tên miền) chưa khớp đầy đủ.
 - Danh sách lọc tải lúc chạy: mở trình duyệt lần đầu (hoặc khi mất mạng) thì engine còn trống, bộ đếm hiện 0 cho tới khi cập nhật xong.
+- Tab dọc, chia màn hình, workspace: logic đã có nhưng chưa kiểm chứng đầy đủ trên Windows.
+- Bản 0.0.4 chưa được kiểm chứng biên dịch và chạy thử trên Windows trong phiên làm việc này; xem kết quả CI.
