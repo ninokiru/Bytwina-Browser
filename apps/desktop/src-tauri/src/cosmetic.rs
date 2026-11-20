@@ -11,7 +11,6 @@
 //! mô tả JSON, việc match DOM phải viết tay trong JS — để riêng, không làm nửa vời.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use adblock::engine::Engine;
 
@@ -64,6 +63,7 @@ mod tests {
     use super::*;
     use adblock::lists::ParseOptions;
     use adblock::{Engine, FilterSet};
+    use std::sync::Arc;
 
     fn engine_with(debug: bool, rules: &str) -> Engine {
         let mut set = FilterSet::new(debug);
