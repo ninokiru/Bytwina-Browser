@@ -196,12 +196,39 @@ pub async fn browser_command(
             browser::emit_state(&app, &state);
             Ok(Value::Null)
         }
-        "clear_data" => with_db(&app, |db| {
-            db.clear_history()?;
-            db.clear_downloads()?;
-            db.clear_session()?;
-            Ok(())
-        }),
+        "clear_data" => {
+            // chrome://settings/clearBrowserData: người dùng chọn khoảng thời gian.
+            // Mặc định "all" để mọi lời gọi cũ không kèm range giữ nguyên hành vi.
+            let range = arg("range").unwrap_or_else(|_| "all".to_string());
+            let cutoff = match range.as_str() {
+                "hour" => Some(now_secs() - 3_600),
+                "day" => Some(now_secs() - 86_400),
+                "week" => Some(now_secs() - 7 * 86_400),
+                "all" => None,
+                other => return Err(format!("khoảng thời gian không biết: {other}")),
+            };
+            with_db(&app, move |db| {
+                let (history, downloads) = match cutoff {
+                    Some(since) => (
+                        Some(db.clear_history_older_than(since)?),
+                        Some(db.clear_downloads_older_than(since)?),
+                    ),
+                    None => {
+                        db.clear_history()?;
+                        db.clear_downloads()?;
+                        // Quên cả phiên: nếu không, đúng trang vừa xóa sẽ tự mở lại
+                        // ở lần chạy sau.
+                        db.clear_session()?;
+                        (None, None)
+                    }
+                };
+                Ok(serde_json::json!({
+                    "range": range,
+                    "history": history,
+                    "downloads": downloads,
+                }))
+            })
+        }
         // ===== M5: ghim tab và nhóm tab =====
         "pin_tab" => {
             let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
@@ -744,6 +771,14 @@ fn with_db<R: serde::Serialize>(
         .and_then(|s| s.0.clone())
         .ok_or_else(|| "lưu trữ chưa khả dụng".to_string())?;
     to_json(f(&db)?)
+}
+
+/// Mốc hiện tại theo giây từ epoch — cùng đơn vị với cột `visited_at`/`finished_at`.
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 fn to_json<T: serde::Serialize>(v: T) -> Result<Value, String> {

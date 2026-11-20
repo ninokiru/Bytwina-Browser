@@ -92,6 +92,15 @@ const vi = {
   "settings.privateMode": "Chế độ riêng tư (không ghi lịch sử)",
   "settings.clearData": "Xóa dữ liệu duyệt web (lịch sử, tải xuống, phiên)",
   "settings.cleared": "Đã xóa dữ liệu.",
+  "settings.clearRange": "Xóa lịch sử và danh sách tải xuống trong",
+  "settings.clearRangeHour": "1 giờ qua",
+  "settings.clearRangeDay": "24 giờ qua",
+  "settings.clearRangeWeek": "7 ngày qua",
+  "settings.clearRangeAll": "Toàn bộ thời gian",
+  "settings.clearRangeHint":
+    "Dấu trang, mật khẩu đã lưu và workspace không bị ảnh hưởng. Chọn \"toàn bộ thời gian\" còn quên danh sách tab của phiên, để trang vừa xóa không tự mở lại.",
+  "settings.clearedCount": "Đã xóa {n} mục lịch sử.",
+  "settings.clearFailed": "Không xóa được: cơ sở dữ liệu chưa sẵn sàng.",
   "settings.downloads": "Tải xuống",
   "settings.downloadsHint":
     "File lưu vào thư mục Downloads của Windows. File thực thi (.exe, .bat, .ps1…) được đổi tên thành .download.",
@@ -324,6 +333,15 @@ const en: Record<Key, string> = {
   "settings.privateMode": "Private mode (no history)",
   "settings.clearData": "Clear browsing data (history, downloads, session)",
   "settings.cleared": "Browsing data cleared.",
+  "settings.clearRange": "Delete history and download list from",
+  "settings.clearRangeHour": "the last hour",
+  "settings.clearRangeDay": "the last 24 hours",
+  "settings.clearRangeWeek": "the last 7 days",
+  "settings.clearRangeAll": "the beginning of time",
+  "settings.clearRangeHint":
+    "Bookmarks, saved passwords and workspaces are untouched. Choosing \"the beginning of time\" also forgets the session tab list so a deleted page does not reopen itself.",
+  "settings.clearedCount": "Removed {n} history entries.",
+  "settings.clearFailed": "Could not clear data: the database is not available.",
   "settings.downloads": "Downloads",
   "settings.downloadsHint":
     "Files are saved to the Windows Downloads folder. Executable files (.exe, .bat, .ps1…) are renamed with a .download suffix.",

@@ -135,6 +135,17 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
     dir: "C:\\Users\\duong\\AppData\\Roaming\\dev.bytwina.browser\\filters",
   }),
   adblock_update: () => ({ downloaded: 5 }),
+  // Quyền trang web + hệ thống: đủ hình dạng dữ liệu để xem trước trang Cài đặt.
+  permission_list: () => [
+    { origin: "https://news.example.vn", kind: "notifications", allowed: false },
+    { origin: "https://meet.example.com", kind: "camera", allowed: true },
+    { origin: "https://meet.example.com", kind: "microphone", allowed: true },
+  ],
+  permission_forget: () => null,
+  autostart_get: () => false,
+  settings_reset: () => null,
+  clear_data: (args) =>
+    args.range && args.range !== "all" ? { range: args.range, history: 12, downloads: 0 } : null,
   password_status: () =>
     vaultDemo
       ? { configured: true, unlocked: true, count: vaultEntries.length, autoLock: 0 }

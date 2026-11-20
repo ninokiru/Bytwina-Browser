@@ -4,6 +4,7 @@
 ### Thêm
 - Kho mật khẩu cục bộ (M11): mật khẩu chủ suy khóa Argon2id (19 MiB, 2 vòng, salt 16 byte), từng mục mã hóa AES-256-GCM; thêm/sửa/xóa/tìm, hiện và sao chép mật khẩu, tự khóa sau 1–60 phút hoặc khóa tay, xóa toàn bộ kho khi quên mật khẩu chủ. Không lưu mật khẩu chủ; khóa chỉ nằm trong RAM phiên chạy. Chưa tự động điền hoặc bắt mật khẩu từ trang web.
 - Cài đặt: mục "Quyền trang web" riêng, liệt kê quyền đã lưu theo trang và cho xóa từng trang.
+- Cài đặt: xóa lịch sử và danh sách tải xuống theo khoảng thời gian (1 giờ / 24 giờ / 7 ngày / toàn bộ) như chrome://settings/clearBrowserData. Chỉ "toàn bộ" mới quên thêm danh sách tab của phiên, để trang vừa xóa không tự mở lại.
 - Trang tab mới: logo, lời chào theo giờ, ô tìm kiếm lớn bo tròn, lưới quick link lấy từ dấu trang rồi bù bằng lịch sử, gợi ý tìm kiếm khi chưa có dữ liệu, dòng ghi chú riêng tư. Trang nằm trong webview toolbar nên không cần thay đổi Rust.
 - Thanh địa chỉ: pill cố định 34 px, hover đổi nền, focus bằng vòng accent — không còn co giãn chiều cao khi bấm vào.
 ### Thay đổi

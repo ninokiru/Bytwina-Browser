@@ -313,6 +313,21 @@ impl Db {
         Ok(())
     }
 
+    /// Xóa lịch sử truy cập trước mốc `since` (unix giây), trả số bản ghi đã xóa.
+    /// Mốc do người dùng chọn trong Cài đặt: 1 giờ / 24 giờ / 7 ngày.
+    pub fn clear_history_older_than(&self, since: i64) -> Result<usize, String> {
+        self.conn()
+            .execute("DELETE FROM history WHERE visited_at < ?1", params![since])
+            .map_err(|e| e.to_string())
+    }
+
+    /// Như trên cho danh sách tải xuống; cột thời gian của nó là `finished_at`.
+    pub fn clear_downloads_older_than(&self, since: i64) -> Result<usize, String> {
+        self.conn()
+            .execute("DELETE FROM downloads WHERE finished_at < ?1", params![since])
+            .map_err(|e| e.to_string())
+    }
+
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), String> {
         self.conn()
             .execute(
@@ -465,6 +480,31 @@ mod tests {
         // URL khác vẫn tạo bản ghi mới.
         db.record_history("Trang hai", "https://two.test/").unwrap();
         assert_eq!(db.search_history("", 50).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn time_range_clear_keeps_recent_rows() {
+        let db = temp_db("hist-range");
+        let now = now();
+        db.record_history("Cũ", "https://old.test/").unwrap();
+        db.record_history("Mới", "https://new.test/").unwrap();
+        // record_history luôn ghi now(), nên kéo một bản về một ngày trước.
+        db.conn()
+            .execute(
+                "UPDATE history SET visited_at = ?1 WHERE url = ?2",
+                params![now - 86_400, "https://old.test/"],
+            )
+            .unwrap();
+
+        let removed = db.clear_history_older_than(now - 3_600).unwrap();
+        assert_eq!(removed, 1);
+        let left = db.search_history("", 50).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].url, "https://new.test/");
+
+        // Khoảng "toàn bộ" vẫn dùng lệnh xóa trắng, không liên quan mốc này.
+        assert_eq!(db.clear_history_older_than(now + 10).unwrap(), 1);
+        assert!(db.search_history("", 50).unwrap().is_empty());
     }
 
     #[test]

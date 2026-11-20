@@ -87,6 +87,7 @@ export default function Settings({
   const [workspace, setWorkspace] = useState("");
   const [workspaceError, setWorkspaceError] = useState("");
   const [clearOnExit, setClearOnExit] = useState(false);
+  const [clearRange, setClearRange] = useState("all");
   const [sleep, setSleep] = useState("0");
   const [message, setMessage] = useState("");
   const [diag, setDiag] = useState<Diagnostics | null>(null);
@@ -221,7 +222,17 @@ export default function Settings({
   };
 
   const clearData = () => {
-    void cmd("clear_data").then(() => setMessage(t("settings.cleared")));
+    void cmd("clear_data", { range: clearRange })
+      .then((r) => {
+        // Backend trả số bản ghi khi xóa theo khoảng; "all" trả null vì nó xóa trắng.
+        const res = (r ?? {}) as { history?: number | null };
+        setMessage(
+          typeof res.history === "number"
+            ? t("settings.clearedCount").replace("{n}", String(res.history))
+            : t("settings.cleared"),
+        );
+      })
+      .catch(() => setMessage(t("settings.clearFailed")));
   };
 
   const loadDiagnostics = () => {
@@ -449,6 +460,16 @@ export default function Settings({
             <p className="hint">
               {t("settings.cookies")}: {t("settings.cookiesNote")}
             </p>
+            <label className="settings-row">
+              {t("settings.clearRange")}
+              <select value={clearRange} onChange={(e) => setClearRange(e.target.value)}>
+                <option value="hour">{t("settings.clearRangeHour")}</option>
+                <option value="day">{t("settings.clearRangeDay")}</option>
+                <option value="week">{t("settings.clearRangeWeek")}</option>
+                <option value="all">{t("settings.clearRangeAll")}</option>
+              </select>
+            </label>
+            <p className="hint">{t("settings.clearRangeHint")}</p>
             <button type="button" className="btn danger block" onClick={clearData}>
               <TrashIcon /> {t("settings.clearData")}
             </button>
