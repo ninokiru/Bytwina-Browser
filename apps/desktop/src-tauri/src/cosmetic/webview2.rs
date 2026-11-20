@@ -23,9 +23,7 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2, ICoreWebView2NavigationCompletedEventArgs,
     ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2_2,
 };
-use webview2_com::{
-    EventClosure, ExecuteScriptCompletedHandler, NavigationCompletedEventHandler,
-};
+use webview2_com::{EventClosure, ExecuteScriptCompletedHandler, NavigationCompletedEventHandler};
 use windows::core::{BOOL, HSTRING, Interface};
 
 use crate::filters::BlockerHandle;
@@ -81,6 +79,7 @@ thread_local! {
 pub fn attach(webview: &Webview<tauri::Wry>, app: AppHandle, handle: BlockerHandle) {
     let label = webview.label().to_string();
     let _ = webview.with_webview(move |pv| {
+        let label_cloned = label.clone();
         let Ok(core) = (unsafe { pv.controller().CoreWebView2() }) else {
             log::error!("[{label}] không lấy được ICoreWebView2 cho lọc thẩm mỹ");
             return;
@@ -99,12 +98,14 @@ pub fn attach(webview: &Webview<tauri::Wry>, app: AppHandle, handle: BlockerHand
             Option<ICoreWebView2NavigationCompletedEventArgs>,
         > = Box::new(move |_sender, args| {
             // Chỉ tính khi điều hướng thành công; trang lỗi thì không có gì để ẩn.
+            // Handler là FnMut nên `label` phải clone ra ngoài: closure giữ bản
+            // clone, dòng đăng ký bên dưới vẫn dùng được bản gốc.
             let mut ok = BOOL::default();
             if let Some(args) = args.as_ref() {
                 let _ = unsafe { args.IsSuccess(&mut ok) };
             }
             if ok.as_bool() {
-                collect_and_apply(&app, &label, &handle);
+                collect_and_apply(&app, &label_cloned, &handle);
             }
             Ok(())
         });
@@ -112,11 +113,9 @@ pub fn attach(webview: &Webview<tauri::Wry>, app: AppHandle, handle: BlockerHand
         let handler = NavigationCompletedEventHandler::create(closure);
         let mut token: i64 = 0;
         match unsafe { core2.add_NavigationCompleted(&handler, &mut token) } {
-            Ok(()) => {
-                REGISTRATIONS.with(|r| {
-                    r.borrow_mut().insert(label.clone(), (handler, token));
-                });
-            }
+            Ok(()) => REGISTRATIONS.with(|r| {
+                r.borrow_mut().insert(label.clone(), (handler, token));
+            }),
             Err(e) => log::error!("[{label}] đăng ký NavigationCompleted thất bại: {e}"),
         }
     });
@@ -140,24 +139,21 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
     let Some(webview) = app.get_webview(label) else {
         return;
     };
-    let app_cb = app.clone();
-    let label_cb = label.to_string();
+    let app_bg = app.clone();
+    let label_bg = label.to_string();
     let blocker = handle.clone();
     let _ = webview.with_webview(move |pv| {
         let Ok(core) = (unsafe { pv.controller().CoreWebView2() }) else {
             return;
         };
-        let app_done = app_cb.clone();
-        let label_done = label_cb.clone();
-        // completed_callback nhận FnOnce (một lần gọi), khác EventClosure là FnMut.
-        let step: ExecuteScriptCompletedHandler = ExecuteScriptCompletedHandler::create(Box::new(
+        let step = ExecuteScriptCompletedHandler::create(Box::new(
             move |status: windows::core::Result<()>, json: String| {
                 let json = if status.is_ok() { json } else { String::new() };
                 let (classes, ids) = parse_lists(&json);
                 let blocker = blocker.clone();
-                let app_bg = app_done.clone();
-                let label_bg = label_done.clone();
-                // Tra engine + ghép CSS: việc nặng, không được giữ luồng UI.
+                let app_bg = app_bg.clone();
+                let label_bg = label_bg.clone();
+                // Tra engine + ghép CSS: hàng nghìn selector không được giữ luồng UI.
                 drop(tauri::async_runtime::spawn_blocking(move || {
                     let Some(engine) = blocker.0.snapshot_engine() else {
                         return;
@@ -176,6 +172,7 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
                 Ok(())
             },
         ));
+        // create() đã trả về giao diện COM; không cần ghi kiểu tường minh.
         let _ = unsafe { core.ExecuteScript(&HSTRING::from(COLLECT_SCRIPT), &step) };
     });
 }

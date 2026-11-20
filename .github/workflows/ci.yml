@@ -27,19 +27,21 @@ jobs:
         shell: pwsh
         run: |
           # tsc in ra stdout nhưng trang run công khai không hiện chi tiết.
-          # Đẩy từng dòng "error TS..." thành annotation + Summary để đọc được mà
-          # không cần đăng nhập.
           $out = npm run typecheck 2>&1 | Tee-Object -FilePath tsc.txt
           $code = $LASTEXITCODE
-          $hits = @($out | Select-String -Pattern 'error TS\d+' | Select-Object -First 20)
-          # Chuỗi bắt đầu bằng `::` được PowerShell hiểu là tham số định vị, nên
-          # phải ép về một string rồi mới in ra.
-          if ($hits.Count -eq 0) {
-            Write-Output ("::error::Type check that failed without a TS line; xem Summary.")
-          }
-          foreach ($h in $hits) {
-            $line = "::error::" + $h.Line.Trim()
-            Write-Output ([string]$line)
+          if ($code -ne 0) {
+            # Mọi dòng có chữ "error" (TSxxxx, thiếu script, lỗi npm) đều thành
+            # annotation để đọc được mà không cần đăng nhập.
+            $hits = @($out | Select-String -Pattern 'error' | Select-Object -First 20)
+            if ($hits.Count -eq 0) {
+              $hits = @($out | Select-Object -Last 5)
+            }
+            # Chuỗi bắt đầu bằng `::` được PowerShell hiểu là tham số định vị, nên
+            # phải ép về một string rồi mới in ra.
+            foreach ($h in $hits) {
+              $line = "::error::" + $h.ToString().Trim()
+              Write-Output ([string]$line)
+            }
           }
           "### Type check" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           "``````" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
