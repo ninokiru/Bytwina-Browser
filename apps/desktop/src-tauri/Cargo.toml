@@ -29,6 +29,9 @@ ureq = "3"
 argon2 = "0.5"
 aes-gcm = "0.10"
 base64 = "0.22"
+# M13: sao lưu CSDL bằng VACUUM INTO (không cần feature `backup` của rusqlite).
+# Tự xóa bộ nhớ cho khóa chủ đã dẫn xuất và mật khẩu chủ tạm thời.
+zeroize = "1"
 # Bộ gom rác cấp phát thay thế, chỉ bật khi đo hiệu năng (docs/PERFORMANCE.md).
 # Không bật mặc định: chưa có số đo trên máy đích và phần lớn RAM thuộc tiến trình WebView2.
 mimalloc = { version = "0.1", default-features = false, optional = true }

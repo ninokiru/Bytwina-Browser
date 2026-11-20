@@ -17,6 +17,7 @@ use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
+use zeroize::Zeroizing;
 
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
@@ -34,21 +35,31 @@ pub fn new_salt() -> [u8; SALT_LEN] {
     salt
 }
 
-pub fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], String> {
+/// Khóa chủ đã dẫn xuất. Không `Clone`, không `Copy`: `Zeroizing` xóa bộ nhớ lúc
+/// drop, còn mỗi lần sao chép thô sẽ để lại bản khóa sống sờ sờ trên heap — chính
+/// là lỗ hổng mà struct này tồn tại để chặn.
+pub struct SecretKey(Zeroizing<[u8; KEY_LEN]>);
+
+impl SecretKey {
+    pub fn bytes(&self) -> &[u8; KEY_LEN] {
+        &self.0
+    }
+}
+
+pub fn derive_key(password: &str, salt: &[u8]) -> Result<SecretKey, String> {
     let params = Params::new(MEM_KIB, TIME_COST, PARALLELISM, Some(KEY_LEN))
         .map_err(|e| e.to_string())?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut key = [0u8; KEY_LEN];
+    let mut key = Zeroizing::new([0u8; KEY_LEN]);
     argon
-        .hash_password_into(password.as_bytes(), salt, &mut key)
+        .hash_password_into(password.as_bytes(), salt, key.as_mut())
         .map_err(|_| "không băm được mật khẩu chủ".to_string())?;
-    Ok(key)
+    Ok(SecretKey(key))
 }
 
 /// Trả về nonce || bản mã. GCM đã xác thực toàn vẹn nên giải mã sai khóa sẽ lỗi.
-pub fn seal(key: &[u8; KEY_LEN], plain: &[u8]) -> Result<Vec<u8>, String> {
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
+pub fn seal(key: &SecretKey, plain: &[u8]) -> Result<Vec<u8>, String> {
+    let cipher = Aes256Gcm::new_from_slice(key.bytes()).map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
     let mut nonce = [0u8; NONCE_LEN];
     OsRng.fill_bytes(&mut nonce);
     let ct = cipher
@@ -60,23 +71,22 @@ pub fn seal(key: &[u8; KEY_LEN], plain: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-pub fn open(key: &[u8; KEY_LEN], blob: &[u8]) -> Result<Vec<u8>, String> {
+pub fn open(key: &SecretKey, blob: &[u8]) -> Result<Vec<u8>, String> {
     if blob.len() <= NONCE_LEN {
         return Err("dữ liệu mã hóa không hợp lệ".into());
     }
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
+    let cipher = Aes256Gcm::new_from_slice(key.bytes()).map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
     let (nonce, ct) = blob.split_at(NONCE_LEN);
     cipher
         .decrypt(Nonce::from_slice(nonce), ct)
         .map_err(|_| "sai mật khẩu chủ hoặc dữ liệu đã bị hỏng".to_string())
 }
 
-pub fn check_blob(key: &[u8; KEY_LEN]) -> Result<Vec<u8>, String> {
+pub fn check_blob(key: &SecretKey) -> Result<Vec<u8>, String> {
     seal(key, CHECK)
 }
 
-pub fn verify_check(key: &[u8; KEY_LEN], blob: &[u8]) -> Result<(), String> {
+pub fn verify_check(key: &SecretKey, blob: &[u8]) -> Result<(), String> {
     let plain = open(key, blob)?;
     if plain == CHECK {
         Ok(())
@@ -96,7 +106,7 @@ pub fn decode(text: &str) -> Result<Vec<u8>, String> {
 }
 
 struct Unlocked {
-    key: [u8; KEY_LEN],
+    key: SecretKey,
     last: Instant,
 }
 
@@ -108,7 +118,7 @@ pub struct PasswordVault {
 }
 
 impl PasswordVault {
-    pub fn unlock(&self, key: [u8; KEY_LEN]) {
+    pub fn unlock(&self, key: SecretKey) {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(Unlocked {
             key,
@@ -116,26 +126,64 @@ impl PasswordVault {
         });
     }
 
+    /// Trả khóa về None; `SecretKey` drop và `Zeroizing` xóa 32 byte đó.
     pub fn lock(&self) {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         *guard = None;
     }
 
-    /// Trả khóa nếu đang mở và chưa quá hạn; tự khóa khi quá hạn.
-    pub fn key(&self, timeout_minutes: u64) -> Result<Option<[u8; KEY_LEN]>, String> {
+    /// Chạy `f` với khóa đang mở. Khóa KHÔNG được sao chép ra ngoài — đây là lý do
+    /// API là closure thay vì trả `[u8; 32]` như trước.
+    /// Không được gọi lại vào vault bên trong `f`: đang giữ khóa Mutex.
+    pub fn with_key<R>(
+        &self,
+        timeout_minutes: u64,
+        f: impl FnOnce(&SecretKey) -> Result<R, String>,
+    ) -> Result<R, String> {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let Some(state) = guard.as_mut() else {
-            return Ok(None);
+            return Err("kho mật khẩu đang khóa".into());
         };
-        if timeout_minutes > 0 {
-            let limit = Duration::from_secs(timeout_minutes.saturating_mul(60));
-            if state.last.elapsed() >= limit {
-                *guard = None;
-                return Ok(None);
-            }
+        if self.expired(state, timeout_minutes) {
+            *guard = None;
+            return Err("kho mật khẩu đã tự khóa do không thao tác".into());
         }
         state.last = Instant::now();
-        Ok(Some(state.key))
+        f(&state.key)
+    }
+
+    pub fn is_unlocked(&self, timeout_minutes: u64) -> bool {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.as_mut() {
+            None => false,
+            Some(state) => {
+                if self.expired(state, timeout_minutes) {
+                    *guard = None;
+                    false
+                } else {
+                    true
+                }
+            }
+        }
+    }
+
+    /// Khóa theo đồng hồ, không chỉ khi có người gọi: vòng lặp nền của ứng dụng
+    /// gọi mỗi 30 giây để kho không giữ khóa vô hạn khi người dùng bỏ đó.
+    pub fn expire(&self, timeout_minutes: u64) {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(state) = guard.as_mut() {
+            if self.expired(state, timeout_minutes) {
+                *guard = None;
+            }
+        }
+    }
+
+    fn expired(&self, state: &Unlocked, timeout_minutes: u64) -> bool {
+        if timeout_minutes == 0 {
+            return false;
+        }
+        let limit = Duration::from_secs(timeout_minutes.saturating_mul(60));
+        state.last.elapsed() >= limit
     }
 }
 
@@ -165,14 +213,35 @@ mod tests {
     }
 
     #[test]
-    fn vault_locks_after_timeout() {
+    fn vault_locks_when_asked_and_expire_leaves_it_alone_when_disabled() {
         let vault = PasswordVault::default();
-        let key = [7u8; KEY_LEN];
-        vault.unlock(key);
-        assert_eq!(vault.key(0).unwrap(), Some(key));
-        // Không thể chờ 1 phút trong test: đặt hạn 0 là tắt tự khóa, còn khóa tay
-        // phải xóa khóa ngay.
+        vault.unlock(key_of(7));
+        assert!(vault.is_unlocked(0));
+        // timeout 0 = không tự khóa: vòng nền gọi expire(0) phải không được khóa.
+        vault.expire(0);
+        assert!(vault.is_unlocked(0));
         vault.lock();
-        assert_eq!(vault.key(0).unwrap(), None);
+        assert!(!vault.is_unlocked(0));
+        // Khóa rồi thì mọi thao tác cần khóa phải lỗi, không được trả khóa cũ.
+        assert!(vault.with_key(0, |_| Ok(())).is_err());
+        // Không thể chờ hết một phút trong test: đường quá hạn dùng đồng hồ như
+        // nhau, chỉ khác ở chỗ expire() được vòng lặp nền gọi định kỳ.
+    }
+
+    #[test]
+    fn with_key_gives_the_same_key_that_unlocked_the_vault() {
+        let vault = PasswordVault::default();
+        let salt = new_salt();
+        let key = derive_key("mật khẩu chủ đủ dài", &salt).unwrap();
+        let expected = *key.bytes();
+        vault.unlock(key);
+        let got = vault
+            .with_key(0, |k| Ok(*k.bytes()))
+            .expect("kho đang khóa");
+        assert_eq!(got, expected);
+    }
+
+    fn key_of(byte: u8) -> SecretKey {
+        SecretKey(Zeroizing::new([byte; KEY_LEN]))
     }
 }

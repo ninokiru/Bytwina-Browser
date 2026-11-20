@@ -197,6 +197,22 @@ fn main() {
                 std::thread::sleep(std::time::Duration::from_secs(30));
                 browser::persist_session(&autosave_handle, &autosave_state);
                 browser::sleep_idle_tabs(&autosave_handle, &autosave_state);
+                // M11: tự khóa kho theo ĐỒNG HỒ. Trước đây hạn chỉ được xét khi có
+                // lệnh gọi vào vault, nên kho mở rồi bỏ đó giữ khóa trong RAM vô hạn.
+                if let Some(db) = autosave_handle
+                    .try_state::<crate::db::DbState>()
+                    .and_then(|s| s.0.clone())
+                {
+                    let minutes = db
+                        .get_setting("vaultAutoLock")
+                        .ok()
+                        .flatten()
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .unwrap_or(0);
+                    autosave_handle
+                        .state::<passwords::PasswordVault>()
+                        .expire(minutes);
+                }
             });
             Ok(())
         })

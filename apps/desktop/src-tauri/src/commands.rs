@@ -497,7 +497,7 @@ pub async fn browser_command(
             let configured = db.get_setting("vaultSalt").ok().flatten().is_some()
                 && db.get_setting("vaultCheck").ok().flatten().is_some();
             let vault = app.state::<crate::passwords::PasswordVault>();
-            let unlocked = vault.key(vault_timeout(&db))?.is_some();
+            let unlocked = vault.is_unlocked(vault_timeout(&db));
             Ok(serde_json::json!({
                 "configured": configured,
                 "unlocked": unlocked,
@@ -506,14 +506,16 @@ pub async fn browser_command(
             }))
         }
         "password_setup" => {
-            let master = arg("master")?;
-            validate_master(&master)?;
+            // Zeroizing: mật khẩu chủ chỉ là chuỗi tạm, không để nó nằm lại heap
+            // sau khi đã dẫn xuất khóa.
+            let master = zeroize::Zeroizing::new(arg("master")?);
+            validate_master(master.as_str())?;
             let db = db_handle(&app)?;
             if db.get_setting("vaultSalt")?.is_some() {
                 return Err("kho mật khẩu đã được thiết lập".into());
             }
             let salt = crate::passwords::new_salt();
-            let key = crate::passwords::derive_key(&master, &salt)?;
+            let key = crate::passwords::derive_key(master.as_str(), &salt)?;
             let check = crate::passwords::check_blob(&key)?;
             db.set_setting("vaultSalt", &crate::passwords::encode(&salt))?;
             db.set_setting("vaultCheck", &crate::passwords::encode(&check))?;
@@ -521,7 +523,7 @@ pub async fn browser_command(
             Ok(serde_json::json!({ "ok": true }))
         }
         "password_unlock" => {
-            let master = arg("master")?;
+            let master = zeroize::Zeroizing::new(arg("master")?);
             let db = db_handle(&app)?;
             let salt = db
                 .get_setting("vaultSalt")?
@@ -530,7 +532,7 @@ pub async fn browser_command(
                 .get_setting("vaultCheck")?
                 .ok_or_else(|| "kho mật khẩu chưa được thiết lập".to_string())?;
             let key = crate::passwords::derive_key(
-                &master,
+                master.as_str(),
                 &crate::passwords::decode(&salt)?,
             )?;
             crate::passwords::verify_check(&key, &crate::passwords::decode(&check)?)?;
@@ -551,14 +553,10 @@ pub async fn browser_command(
                 Ok(Value::Null)
             })
         }
-        "password_list" => {
-            let (_key, db) = unlocked_key(&app)?;
-            to_json(db.list_passwords()?)
-        }
-        "password_add" => {
-            let (key, db) = unlocked_key(&app)?;
+        "password_list" => with_vault(&app, |_key, db| to_json(db.list_passwords()?)),
+        "password_add" => with_vault(&app, |key, db| {
             let field = |k: &str| optional_arg(&args, k);
-            let blob = secret_blob(&key, &field("password"), &field("note"))?;
+            let blob = secret_blob(key, &field("password"), &field("note"))?;
             let id = db.add_password(
                 &field("title"),
                 &field("url"),
@@ -566,29 +564,28 @@ pub async fn browser_command(
                 &blob,
             )?;
             Ok(serde_json::json!({ "id": id }))
-        }
-        "password_update" => {
-            let (key, db) = unlocked_key(&app)?;
+        }),
+        "password_update" => with_vault(&app, |key, db| {
             let id = arg("id")?.parse::<i64>().map_err(|_| "id không hợp lệ")?;
             let field = |k: &str| optional_arg(&args, k);
-            let blob = secret_blob(&key, &field("password"), &field("note"))?;
+            let blob = secret_blob(key, &field("password"), &field("note"))?;
             db.update_password(id, &field("title"), &field("url"), &field("username"), &blob)?;
             Ok(Value::Null)
-        }
-        "password_remove" => {
-            let (_key, db) = unlocked_key(&app)?;
+        }),
+        // Xóa/sửa mục vẫn phải hỏi khóa: khóa là bằng chứng "kho đang mở", không
+        // phải thứ dùng đến khi ghi.
+        "password_remove" => with_vault(&app, |_key, db| {
             let id = arg("id")?.parse::<i64>().map_err(|_| "id không hợp lệ")?;
             db.remove_password(id)?;
             Ok(Value::Null)
-        }
-        "password_reveal" => {
-            let (key, db) = unlocked_key(&app)?;
+        }),
+        "password_reveal" => with_vault(&app, |key, db| {
             let id = arg("id")?.parse::<i64>().map_err(|_| "id không hợp lệ")?;
-            let plain = crate::passwords::open(&key, &db.password_secret(id)?)?;
+            let plain = crate::passwords::open(key, &db.password_secret(id)?)?;
             let value: Value = serde_json::from_slice(&plain)
                 .map_err(|_| "dữ liệu mật khẩu đã lưu bị hỏng".to_string())?;
             Ok(value)
-        }
+        }),
         // Xóa kho không cần mật khẩu chủ: người dùng quên mật khẩu vẫn phải thoát
         // được khỏi trạng thái không dùng được. Thao tác này không làm lộ dữ liệu.
         "password_wipe" => {
@@ -648,14 +645,18 @@ fn vault_timeout(db: &crate::db::Db) -> u64 {
         .unwrap_or(0)
 }
 
-/// Khóa đang mở + Db, dùng cho mọi lệnh thao tác trên mục mật khẩu.
-fn unlocked_key(app: &AppHandle) -> Result<([u8; 32], crate::db::Db), String> {
+/// Chạy `f` với khóa đang mở + Db. Khóa chỉ sống trong một lần gọi: trước đây
+/// `unlocked_key` trả `[u8; 32]` bản sao, để lại dấu khóa trên heap suốt đời tiến
+/// trình. Không gọi lại vào vault bên trong `f` (đang giữ khóa Mutex).
+fn with_vault<R>(
+    app: &AppHandle,
+    f: impl FnOnce(&crate::passwords::SecretKey, &crate::db::Db) -> Result<R, String>,
+) -> Result<R, String> {
     let db = db_handle(app)?;
-    let vault = app.state::<crate::passwords::PasswordVault>();
-    let key = vault
-        .key(vault_timeout(&db))?
-        .ok_or_else(|| "kho mật khẩu đang khóa".to_string())?;
-    Ok((key, db))
+    let timeout = vault_timeout(&db);
+    app
+        .state::<crate::passwords::PasswordVault>()
+        .with_key(timeout, |key| f(key, &db))
 }
 
 fn optional_arg(args: &Option<Value>, key: &str) -> String {
@@ -678,7 +679,11 @@ fn validate_master(master: &str) -> Result<(), String> {
 }
 
 /// Đóng gói mật khẩu + ghi chú thành JSON rồi mã hóa bằng khóa chủ.
-fn secret_blob(key: &[u8; 32], password: &str, note: &str) -> Result<Vec<u8>, String> {
+fn secret_blob(
+    key: &crate::passwords::SecretKey,
+    password: &str,
+    note: &str,
+) -> Result<Vec<u8>, String> {
     if password.is_empty() {
         return Err("mật khẩu không được để trống".into());
     }
