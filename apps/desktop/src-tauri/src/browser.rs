@@ -953,6 +953,11 @@ pub fn clear_browsing_on_exit(app: &AppHandle, state: &BrowserState) {
 
 /// M2/M6: lưu danh sách tab hiện tại vào DB (phiên). Gọi khi đóng cửa sổ và định kỳ.
 pub fn persist_session(app: &AppHandle, state: &BrowserState) {
+    // Chế độ riêng tư: bảng phiên lưu URL + tiêu đề đang mở, nên phải bỏ ghi.
+    // Trước đây chỉ lịch sử được chặn, còn vòng 30 giây vẫn ghi trang riêng tư.
+    if state.is_private() {
+        return;
+    }
     if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.clone()) {
         let snap = state.snapshot();
         let active_index = snap

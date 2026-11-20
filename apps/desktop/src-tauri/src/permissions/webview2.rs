@@ -85,14 +85,16 @@ pub fn attach(webview: &Webview<tauri::Wry>, app: AppHandle, handle: Permissions
 /// Huỷ đăng ký và từ chối mọi lời hỏi còn treo của tab (đóng tab, hoặc tab ngủ).
 pub fn detach(webview: &Webview<tauri::Wry>, handle: PermissionsHandle) {
     let label = webview.label().to_string();
-    let ids = handle.0.prompts_for(&label);
+    let perms = handle.0.clone();
     let _ = webview.with_webview(move |pv| {
         if let Some((_, token)) = REGISTRATIONS.with(|r| r.borrow_mut().remove(&label)) {
             if let Ok(core) = unsafe { pv.controller().CoreWebView2() } {
                 let _ = unsafe { core.remove_PermissionRequested(token) };
             }
         }
-        for id in ids {
+        // Lấy danh sách id NGAY TRONG closure: nếu lấy ở ngoài rồi mới nhảy về
+        // luồng UI mà lời nhảy không chạy được, args + deferral sẽ mất dấu vĩnh viễn.
+        for id in perms.prompts_for(&label) {
             let entry = PENDING.with(|p| p.borrow_mut().remove(&id));
             if let Some((args, deferral)) = entry {
                 unsafe {

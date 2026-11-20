@@ -64,6 +64,10 @@ pub fn to_url_with(input: &str, engine: &str) -> String {
         let scheme = input[..pos].to_ascii_lowercase();
         // url::Url chỉ cho phép http/https vào webview nội dung.
         if scheme == "http" || scheme == "https" {
+            // Origin của chính ứng dụng: coi như tìm kiếm, không mở trong tab.
+            if is_app_origin_str(input) {
+                return search(input);
+            }
             // HTTPS-first (ADR-003): nâng cấp http lên https, trừ localhost để phát triển.
             return Url::parse(input)
                 .map(|mut u| {
@@ -171,6 +175,20 @@ mod tests {
         assert_eq!(internal_page("bytwina://"), Some(Internal::Unknown));
         assert_eq!(internal_page("https://example.com"), None);
         assert_eq!(internal_page("example.com"), None);
+    }
+
+    /// Origin của chính app mà vào được tab là leo thang đặc quyền: ở đó trang
+    /// bên ngoài được Tauri coi là "cục bộ" và gọi được mọi lệnh IPC.
+    #[test]
+    fn app_origin_never_reaches_a_tab() {
+        let app_page = "https://tauri.localhost/index.html";
+        // Ô địa chỉ: coi như tìm kiếm, không điều hướng.
+        assert_eq!(to_url(app_page), format!("{SEARCH_ENGINE}{}", urlencode(app_page)));
+        assert!(!page_navigation_allowed(&Url::parse(app_page).unwrap()));
+        assert!(!page_navigation_allowed(&Url::parse("http://ipc.localhost/").unwrap()));
+        // Trang thường và cổng phát triển vẫn đi qua.
+        assert!(page_navigation_allowed(&Url::parse("https://news.example/").unwrap()));
+        assert!(page_navigation_allowed(&Url::parse("http://localhost:3000/").unwrap()));
     }
 
     #[test]
@@ -282,8 +300,8 @@ fn is_local(url: &Url) -> bool {
 /// Không ghi URL vào nhật ký khi chặn.
 pub fn page_navigation_allowed(url: &Url) -> bool {
     let allowed = match url.scheme() {
-        "https" => !is_blocked_host(url),
-        "http" => is_local(url) && !is_blocked_host(url),
+        "https" => !is_blocked_host(url) && !is_app_origin(url),
+        "http" => is_local(url) && !is_blocked_host(url) && !is_app_origin(url),
         "about" => url.as_str() == "about:blank",
         _ => false,
     };
@@ -291,6 +309,23 @@ pub fn page_navigation_allowed(url: &Url) -> bool {
         crate::diagnostics::log("info", "điều hướng trong trang bị chặn theo chính sách");
     }
     allowed
+}
+
+/// Origin của chính ứng dụng (asset protocol trên Windows: `*.tauri.localhost`,
+/// `ipc.localhost`). Không bao giờ được nạp vào tab nội dung: ở origin đó, trang
+/// bên ngoài đi vào được sẽ là "trang cục bộ" theo cách Tauri xét ACL và gọi được
+/// mọi lệnh IPC — kể cả kho mật khẩu và spawn tiến trình.
+/// `localhost` trần vẫn được phép vì đó là cổng phát triển (ADR-011).
+fn is_app_origin(url: &Url) -> bool {
+    url.host_str()
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .ends_with(".localhost")
+}
+
+/// Bản dùng cho chuỗi thô (ô địa chỉ chưa chắc parse được thành URL hợp lệ).
+fn is_app_origin_str(input: &str) -> bool {
+    url::Url::parse(input).is_ok_and(|u| is_app_origin(&u))
 }
 
 /// window.open / target=_blank: không tạo cửa sổ riêng, không âm thầm nạp trang

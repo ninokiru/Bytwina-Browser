@@ -16,6 +16,12 @@
 - Ô địa chỉ để trống khi ở tab mới thay vì hiện `about:blank`.
 - Tôn trọng thiết lập giảm chuyển động của Windows (`prefers-reduced-motion`).
 
+### Sửa
+- An toàn IPC: `browser_command` trước đây chỉ dựa vào `capabilities/default.json`, nhưng Tauri bỏ qua kiểm tra ACL với lệnh tùy biến khi origin gọi là cục bộ và dự án không có app manifest — nghĩa là trang chạy ở origin của chính app sẽ gọi được mọi lệnh, gồm kho mật khẩu. Lệnh nay chặn theo nhãn webview gọi tới (chỉ `toolbar`), và liên kết tới `*.tauri.localhost` / `ipc.localhost` bị từ chối ở cả ô địa chỉ lẫn `page_navigation_allowed`.
+- Riêng tư: vòng lưu phiên 30 giây vẫn ghi URL + tiêu đề của trang riêng tư vào bảng `session_tabs` (chỉ lịch sử được chặn). `persist_session` nay bỏ ghi khi đang ở chế độ riêng tư.
+- Quyền trang web: `detach` lấy danh sách lời hỏi đang treo *bên trong* lời nhảy về luồng UI; lấy ở ngoài rồi mới nhảy có thể làm mất dấu args + deferral nếu lời nhảy không chạy được.
+- CI: step Type check in mỗi dòng `error TS…` thành annotation và 60 dòng cuối vào Summary, như các bước Rust đã làm.
+
 ## 0.0.3 — 2026-11-19
 ### Thêm
 - Tab dọc: mục Cài đặt "Bố cục tab và workspace" chuyển thanh công cụ thành cột trái 260 px, tab và thanh địa chỉ xếp dọc, nội dung dịch sang phải.

@@ -13,11 +13,18 @@ use crate::terms;
 #[tauri::command]
 pub async fn browser_command(
     app: AppHandle,
+    webview: tauri::Webview<tauri::Wry>,
     state: State<'_, BrowserState>,
     queue: State<'_, PopupQueue>,
     action: String,
     args: Option<Value>,
 ) -> Result<Value, String> {
+    // ACL của Tauri CHẶN BỎ lệnh tùy biến khi origin gọi là cục bộ và dự án không
+    // sinh app manifest (build.rs gọi tauri_build::build() trần). Vì vậy khả năng
+    // duy nhất đáng tin là nhãn webview gọi tới: chỉ toolbar (ADR-002).
+    if webview.label() != "toolbar" {
+        return Err("lệnh này chỉ thanh công cụ được gọi".into());
+    }
     let arg = |key: &str| -> Result<String, String> {
         args.as_ref()
             .and_then(|a| a.get(key))

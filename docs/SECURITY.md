@@ -4,7 +4,8 @@
 - Popup: cửa sổ mới luôn bị chặn; URL hợp lệ mở thành tab nền (tối đa 16 mục trong hàng đợi). Danh sách tên miền chặn tối thiểu trong `navigation.rs` — không phải filter list được bảo trì và không chặn tài nguyên trong trang.
 - Thư mục tải xuống: file được đặt trong thư mục Downloads của người dùng; file thực thi/script bị đổi đuôi `.download` (chưa quét nội dung).
 - Trang http không mã hóa (trừ localhost) bị chặn theo HTTPS-first (ADR-011). Chưa có cách cho phép thủ công từng trang.
-- Lệnh IPC chỉ được gọi từ webview `toolbar` (capabilities/default.json).
+- Lệnh IPC chỉ nhận lời gọi từ webview có nhãn `toolbar`. Trước đây điều này dựa vào `capabilities/default.json`, nhưng Tauri **bỏ qua kiểm tra ACL** với lệnh tùy biến khi origin gọi là cục bộ và dự án không sinh app manifest (`build.rs` gọi `tauri_build::build()` trần) — nên từ bản này `browser_command` tự chặn theo nhãn webview gọi tới (`commands.rs`).
+- Liên kết tới origin của chính ứng dụng (`*.tauri.localhost`, `ipc.localhost`) bị chặn ở cả hai lớp: ô địa chỉ coi là tìm kiếm, và `page_navigation_allowed` từ chối trong tab. Lý do: ở origin đó, nội dung web rơi vào vùng Tauri coi là "cục bộ" và gọi được mọi lệnh IPC, gồm cả kho mật khẩu.
 
 ## Kho mật khẩu (M11)
 
