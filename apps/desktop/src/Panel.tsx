@@ -7,6 +7,7 @@ import {
   AlertIcon,
   BackupIcon,
   BookIcon,
+  BookTextIcon,
   BookmarkPlusIcon,
   CheckCircleIcon,
   ClockIcon,
