@@ -36,7 +36,7 @@ thread_local! {
 }
 
 /// Nội dung event gửi xuống toolbar để vẽ bảng hỏi.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Prompt {
     id: u64,
@@ -56,14 +56,15 @@ pub fn attach(webview: &Webview<tauri::Wry>, app: AppHandle, handle: Permissions
             let _ = unsafe { core.remove_PermissionRequested(old_token) };
         }
 
+        let closure_label = label.clone();
         let closure: EventClosure<
             Option<ICoreWebView2>,
             Option<ICoreWebView2PermissionRequestedEventArgs>,
         > = Box::new(move |_sender, args| {
             let Some(args) = args else { return Ok(()) };
             // Callback chạy trên luồng UI: không I/O đồng bộ, không pump message.
-            if let Err(e) = unsafe { on_requested(&args, &app, &handle, &label) } {
-                log::warn!("[{label}] xử lý PermissionRequested: {e}");
+            if let Err(e) = unsafe { on_requested(&args, &app, &handle, &closure_label) } {
+                log::warn!("[{closure_label}] xử lý PermissionRequested: {e}");
             }
             Ok(())
         });
@@ -186,11 +187,10 @@ pub fn respond(
 
 /// `scheme://host[:port]` — quyền là theo origin, không theo từng trang.
 fn origin_of(url: &str) -> Option<String> {
-    url::Url::parse(url)
-        .ok()?
-        .origin()
-        .ok()
-        .map(|o| o.ascii_serialization())
+    let parsed = url::Url::parse(url).ok()?;
+    let origin = parsed.origin().ascii_serialization();
+    // `null` là origin mờ (data:, sandbox…); không ghi luật cho loại này.
+    (origin != "null").then_some(origin)
 }
 
 /// Tên state cho frontend/IPC dùng khi ghi luật.
