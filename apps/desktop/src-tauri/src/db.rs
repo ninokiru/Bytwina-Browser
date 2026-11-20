@@ -23,6 +23,17 @@ impl Db {
     fn settings_cache(&self) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
         self.settings.lock().unwrap_or_else(|e| e.into_inner())
     }
+
+    /// Ghi toàn bộ CSDL ra một tệp khác, gọn và nhất quán, bằng `VACUUM INTO`
+    /// (có sẵn từ SQLite 3.27, không cần bật feature `backup` của rusqlite).
+    /// Tệp đích chưa được tồn tại theo tài liệu SQLite — bên gọi lo việc đó.
+    pub fn vacuum_into(&self, dest: &std::path::Path) -> Result<(), String> {
+        let text = dest.to_string_lossy().into_owned();
+        self.conn()
+            .execute("VACUUM main INTO ?1", params![text])
+            .map(|_| ())
+            .map_err(|e| format!("không tạo được bản lưu: {e}"))
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -80,6 +91,9 @@ fn history_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryItem> {
 /// (mọi tính năng M2 tự tắt, trình duyệt nền vẫn chạy).
 pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     let _ = std::fs::create_dir_all(&app_data_dir);
+    // Khôi phục đang chờ phải áp dụng TRƯỚC khi mở kết nối: SQLite không định nghĩa
+    // hành vi thay tệp CSDL khi connection còn đang mở.
+    crate::backup::apply_pending(&app_data_dir);
     let conn = Connection::open(app_data_dir.join("bytwina.db")).ok()?;
     // WAL thất bại vẫn dùng được (vd. thư mục nằm trên ổ đồng bộ); không vì thế
     // mà tắt toàn bộ lịch sử/dấu trang/phiên.

@@ -146,6 +146,13 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
   settings_reset: () => null,
   clear_data: (args) =>
     args.range && args.range !== "all" ? { range: args.range, history: 12, downloads: 0 } : null,
+  backup_list: () => [
+    { name: "bytwina-1763500000.db", bytes: 248_320, modifiedAt: Math.floor(Date.now() / 1000) - 3600 },
+    { name: "bytwina-1763400000.db", bytes: 244_224, modifiedAt: Math.floor(Date.now() / 1000) - 100_000 },
+  ],
+  backup_create: () => ({ name: "bytwina-now.db", bytes: 250_000, modifiedAt: Math.floor(Date.now() / 1000) }),
+  backup_restore: () => null,
+  backup_delete: () => null,
   password_status: () =>
     vaultDemo
       ? { configured: true, unlocked: true, count: vaultEntries.length, autoLock: 0 }

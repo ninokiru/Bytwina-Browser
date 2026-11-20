@@ -6,6 +6,7 @@ import { applyTheme } from "./theme";
 import PasswordVault from "./PasswordVault";
 import {
   AlertIcon,
+  BackupIcon,
   BoltIcon,
   CheckCircleIcon,
   ChevronRightIcon,
@@ -44,6 +45,18 @@ interface SitePermission {
   origin: string;
   kind: string;
   allowed: boolean;
+}
+
+interface BackupInfo {
+  name: string;
+  bytes: number;
+  modifiedAt: number;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // Nhãn quyền theo kind; backend trả cùng bộ tên với bảng hỏi.
@@ -97,6 +110,10 @@ export default function Settings({
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [ab, setAb] = useState<AdblockStatus | null>(null);
   const [perms, setPerms] = useState<SitePermission[]>([]);
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [backupBusy, setBackupBusy] = useState(false);
+  // Tên bản lưu đã xếp hàng khôi phục (chỉ áp dụng khi mở lại ứng dụng).
+  const [restoreQueued, setRestoreQueued] = useState("");
   const [abBusy, setAbBusy] = useState(false);
   // Master–detail như Cốc Cốc/Chrome: mục lục chọn MỘT trang để hiện, không cuộn cả loạt.
   const [page, setPage] = useState<string>(initialPage ?? SECTIONS[0].id);
@@ -117,6 +134,37 @@ export default function Settings({
 
   const forgetPerm = (origin: string) => {
     void cmd("permission_forget", { origin }).then(loadPerms).catch(() => undefined);
+  };
+
+  const loadBackups = () =>
+    cmd("backup_list")
+      .then((l) => setBackups((l as BackupInfo[]) ?? []))
+      .catch(() => setBackups([]));
+
+  const createBackup = () => {
+    setBackupBusy(true);
+    void cmd("backup_create")
+      .then(() => {
+        setMessage(t("settings.backupDone"));
+        return loadBackups();
+      })
+      .catch((e) => setMessage(String(e)))
+      .finally(() => setBackupBusy(false));
+  };
+
+  const restoreBackup = (name: string) => {
+    void cmd("backup_restore", { name })
+      .then(() => {
+        setRestoreQueued(name);
+        setMessage(t("settings.backupQueued"));
+      })
+      .catch((e) => setMessage(String(e)));
+  };
+
+  const deleteBackup = (name: string) => {
+    void cmd("backup_delete", { name })
+      .then(loadBackups)
+      .catch((e) => setMessage(String(e)));
   };
 
   // Đọc lại toàn bộ giá trị đang lưu — dùng lúc mở trang và sau khi đặt lại.
@@ -150,6 +198,7 @@ export default function Settings({
     });
     void loadAdblock();
     void loadPerms();
+    void loadBackups();
     // Mục "Bạn và Bytwina" hiện thông tin ngay, không cần bấm nút lấy chẩn đoán.
     void loadDiagnostics();
     void cmd("autostart_get")
@@ -595,6 +644,51 @@ export default function Settings({
             <p className="hint">{t("settings.downloadsHint")}</p>
           </Section>
 
+          <Section id="settings-backup" title={t("settings.backup")}>
+            <p className="hint">{t("settings.backupHint")}</p>
+            <button type="button" className="btn" disabled={backupBusy} onClick={createBackup}>
+              {backupBusy ? t("settings.backupDoing") : t("settings.backupCreate")}
+            </button>
+            {backups.length === 0 ? (
+              <p className="hint">{t("settings.backupEmpty")}</p>
+            ) : (
+              <ul
+                style={{
+                  listStyle: "none",
+                  margin: 0,
+                  padding: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {backups.map((b) => (
+                  <li
+                    key={b.name}
+                    style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5 }}
+                  >
+                    <span style={{ flex: "1 1 auto", overflowWrap: "anywhere" }}>{b.name}</span>
+                    <span style={{ color: "var(--muted)" }}>{formatBytes(b.bytes)}</span>
+                    <span style={{ color: "var(--muted)" }}>
+                      {new Date(b.modifiedAt * 1000).toLocaleString()}
+                    </span>
+                    {restoreQueued === b.name ? (
+                      <span style={{ color: "var(--accent)" }}>{t("settings.backupQueuedTag")}</span>
+                    ) : (
+                      <button type="button" className="btn" onClick={() => restoreBackup(b.name)}>
+                        {t("settings.backupRestore")}
+                      </button>
+                    )}
+                    <button type="button" className="btn" onClick={() => deleteBackup(b.name)}>
+                      {t("settings.backupDelete")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {restoreQueued && <p className="hint">{t("settings.backupRestart")}</p>}
+          </Section>
+
           <Section id="settings-languages" title={t("settings.languages")}>
             <label className="settings-row">
               {t("settings.language")}
@@ -689,6 +783,7 @@ const SECTIONS: { id: string; label: Key; icon: ComponentType; group: number; ke
     { id: "settings-adblock", label: "settings.adblock", icon: ShieldIcon, group: 1, keywords: "chan quang cao tracker easylist abpvn" },
     { id: "settings-performance", label: "settings.performance", icon: BoltIcon, group: 1, keywords: "hieu suat ram tab ngu sleep memory" },
     { id: "settings-downloads", label: "settings.downloads", icon: DownloadIcon, group: 1, keywords: "tai file thu muc downloads" },
+    { id: "settings-backup", label: "settings.backup", icon: BackupIcon, group: 1, keywords: "sao luu phuc hoi restore backup du phong database" },
     { id: "settings-languages", label: "settings.languages", icon: TranslateIcon, group: 1, keywords: "ngon ngu tieng viet english language" },
     { id: "settings-passwords", label: "settings.passwords", icon: KeyIcon, group: 2, keywords: "mat khau tu dong dien vault autofill" },
     { id: "settings-system", label: "settings.system", icon: SettingsIcon, group: 2, keywords: "trinh duyet mac dinh khoi dong cung windows dat lai reset" },

@@ -84,6 +84,19 @@ const vi = {
   "settings.permissionsHint":
     "Mặc định luôn hỏi. Lựa chọn bạn đánh dấu \"nhớ\" được giữ theo địa chỉ trang, không theo từng URL.",
   "settings.permissionsRemove": "Xóa",
+  "settings.backup": "Sao lưu và khôi phục",
+  "settings.backupHint":
+    "Bản lưu là một tệp SQLite gọn nằm trong thư mục dữ liệu của Bytwina, gồm lịch sử, dấu trang, cài đặt, phiên, danh sách đọc và kho mật khẩu đã mã hóa.",
+  "settings.backupCreate": "Tạo bản lưu ngay",
+  "settings.backupDoing": "Đang tạo bản lưu…",
+  "settings.backupEmpty": "Chưa có bản lưu nào.",
+  "settings.backupRestore": "Khôi phục",
+  "settings.backupDelete": "Xóa",
+  "settings.backupQueuedTag": "Sẽ khôi phục",
+  "settings.backupQueued": "Đã xếp hàng khôi phục. Bản an toàn của dữ liệu hiện tại được giữ lại.",
+  "settings.backupRestart":
+    "Khôi phục chỉ chạy khi mở lại ứng dụng, vì SQLite không an toàn nếu bị thay tệp đang mở. Hãy đóng và mở Bytwina để áp dụng.",
+  "settings.backupDone": "Đã tạo bản lưu.",
   "settings.autostart": "Khởi động Bytwina khi đăng nhập Windows",
   "settings.autostartHint":
     "Bật sẽ thêm ứng dụng vào danh sách tự chạy của tài khoản này (kho Run trong registry).",
@@ -339,6 +352,19 @@ const en: Record<Key, string> = {
   "settings.permissionsHint":
     "By default the browser always asks. Choices you tick to remember are kept per site origin, not per full URL.",
   "settings.permissionsRemove": "Remove",
+  "settings.backup": "Backup and restore",
+  "settings.backupHint":
+    "Each backup is a compact SQLite file inside Bytwina's data folder: history, bookmarks, settings, session, reading list and the encrypted password vault.",
+  "settings.backupCreate": "Back up now",
+  "settings.backupDoing": "Creating backup…",
+  "settings.backupEmpty": "No backups yet.",
+  "settings.backupRestore": "Restore",
+  "settings.backupDelete": "Delete",
+  "settings.backupQueuedTag": "Will restore",
+  "settings.backupQueued": "Restore queued. A safety copy of the current data is kept.",
+  "settings.backupRestart":
+    "Restore only runs on the next launch: replacing an open SQLite file is not safe. Close and reopen Bytwina to apply it.",
+  "settings.backupDone": "Backup created.",
   "settings.autostart": "Start Bytwina when I sign in to Windows",
   "settings.autostartHint":
     "Turning this on adds the app to this account's run list (the registry Run key).",

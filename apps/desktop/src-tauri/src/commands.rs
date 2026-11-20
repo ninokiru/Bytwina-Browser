@@ -600,6 +600,34 @@ pub async fn browser_command(
             app.state::<crate::passwords::PasswordVault>().lock();
             Ok(Value::Null)
         }
+        // ===== M13: sao lưu và khôi phục CSDL =====
+        "backup_create" => {
+            let db = app
+                .state::<crate::db::DbState>()
+                .0
+                .clone()
+                .ok_or("lưu trữ chưa khả dụng")?;
+            let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            // VACUUM đọc toàn bộ CSDL: chạy ở luồng nền để không đứng chắn UI.
+            let info = tauri::async_runtime::spawn_blocking(move || crate::backup::create(&db, &dir))
+                .await
+                .map_err(|e| e.to_string())??;
+            to_json(info)
+        }
+        "backup_list" => {
+            let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            to_json(crate::backup::list(&dir))
+        }
+        "backup_restore" => {
+            let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            crate::backup::request_restore(&dir, &arg("name")?)?;
+            Ok(Value::Null)
+        }
+        "backup_delete" => {
+            let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            crate::backup::delete(&dir, &arg("name")?)?;
+            Ok(Value::Null)
+        }
         other => Err(format!("lệnh không biết: {other}")),
     }
 }

@@ -8,6 +8,7 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use tauri::{LogicalPosition, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
 
 mod browser;
+mod backup;
 mod commands;
 mod db;
 mod diagnostics;

@@ -277,3 +277,12 @@ export const ChevronRightIcon = (p: Props) => (
     <path d="M9 6l6 6-6 6" />
   </Icon>
 );
+
+// Đĩa + mũi tên: mục sao lưu trong Cài đặt.
+export const BackupIcon = (p: Props) => (
+  <Icon {...p}>
+    <ellipse cx="12" cy="6" rx="7" ry="3" />
+    <path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" />
+    <path d="M12 11v6M9.5 14.5 12 17l2.5-2.5" />
+  </Icon>
+);
