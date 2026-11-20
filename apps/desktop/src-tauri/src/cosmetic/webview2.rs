@@ -20,9 +20,8 @@ use std::collections::HashMap;
 
 use tauri::{AppHandle, Manager, Webview};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
-    ICoreWebView2, ICoreWebView2ExecuteScriptCompletedHandler,
-    ICoreWebView2NavigationCompletedEventArgs, ICoreWebView2NavigationCompletedEventHandler,
-    ICoreWebView2_2,
+    ICoreWebView2, ICoreWebView2NavigationCompletedEventArgs,
+    ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2_2,
 };
 use webview2_com::{
     EventClosure, ExecuteScriptCompletedHandler, NavigationCompletedEventHandler,
@@ -181,24 +180,16 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
     });
 }
 
-/// Chèn CSS. Phải quay về luồng UI vì ExecuteScript thuộc về webview.
+/// Chèn CSS. Phải quay về luồng UI vì script chạy trên webview.
+/// Dùng `Webview::eval` của Tauri (nó gọi đúng ExecuteScript bên trong) thay vì
+/// tự dựng completed handler: cùng việc, ít chỗ sai hơn nhiều.
 fn inject(app: &AppHandle, label: &str, css: &str) {
     let Some(webview) = app.get_webview(label) else {
         return;
     };
-    let script = apply_script(css);
-    let _ = webview.with_webview(move |pv| {
-        let Ok(core) = (unsafe { pv.controller().CoreWebView2() }) else {
-            return;
-        };
-        let ignore = ExecuteScriptCompletedHandler::create(Box::new(|_, _| Ok(())));
-        let _ = unsafe {
-            core.ExecuteScript(
-                &HSTRING::from(script.as_str()),
-                &ignore as &ICoreWebView2ExecuteScriptCompletedHandler,
-            )
-        };
-    });
+    if let Err(e) = webview.eval(apply_script(css)) {
+        log::debug!("[{label}] chèn CSS thẩm mỹ thất bại: {e}");
+    }
 }
 
 /// `[["a","b"],["c"]]` -> (classes, ids). JSON hỏng hoặc sai hình dạng: coi như
@@ -225,7 +216,7 @@ mod tests {
     fn apply_script_escapes_css_as_a_json_string() {
         let script = apply_script(".a{content:\"]\"}");
         assert!(script.contains("__bytwina_cosmetic__"), "{script}");
-        assert!(script.contains(r#"\"" ), "phải escape dấu nháy: {script}");
+        assert!(script.contains(r#"\""#), "phải escape dấu nháy: {script}");
         assert!(!script.contains("tauri"), "không được lộ API ứng dụng: {script}");
     }
 

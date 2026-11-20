@@ -32,10 +32,15 @@ jobs:
           $out = npm run typecheck 2>&1 | Tee-Object -FilePath tsc.txt
           $code = $LASTEXITCODE
           $hits = @($out | Select-String -Pattern 'error TS\d+' | Select-Object -First 20)
+          # Chuỗi bắt đầu bằng `::` được PowerShell hiểu là tham số định vị, nên
+          # phải ép về một string rồi mới in ra.
           if ($hits.Count -eq 0) {
-            Write-Output "::error::Type check thất bại, không bắt được dòng TS nào; xem Summary."
+            Write-Output ("::error::Type check that failed without a TS line; xem Summary.")
           }
-          foreach ($h in $hits) { Write-Output "::error::$($h.Line.Trim())" }
+          foreach ($h in $hits) {
+            $line = "::error::" + $h.Line.Trim()
+            Write-Output ([string]$line)
+          }
           "### Type check" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           "``````" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           (Get-Content tsc.txt -Tail 60) | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
