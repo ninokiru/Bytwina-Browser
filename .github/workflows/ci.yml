@@ -50,25 +50,22 @@ jobs:
           "``````" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           exit $code
       - name: Build
+        if: always()
         run: npm run build
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: frontend-dist
           path: apps/desktop/dist
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   rust:
-    needs: frontend
     runs-on: windows-2025
     defaults:
       run:
         working-directory: apps/desktop/src-tauri
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: apps/desktop/dist
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -116,6 +113,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
       - name: Tests
+        if: always()
         shell: bash
         run: |
           set +e

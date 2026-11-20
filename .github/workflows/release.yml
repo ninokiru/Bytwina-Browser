@@ -98,7 +98,7 @@ jobs:
           # minisign (tệp .sig do tauri build sinh ra khi có khoá).
           if ($env:UPDATER_SIGNED -eq "1") {
             $sigFile = "$($f.FullName).sig"
-            if (-not (Test-Path $sigFile)) { throw "Thiếu $sigFile: bản build không sinh chữ ký cập nhật." }
+            if (-not (Test-Path $sigFile)) { throw "Thiếu ${sigFile}: bản build không sinh chữ ký cập nhật." }
             $sig = (Get-Content $sigFile -Raw).Trim()
             $version = $env:TAG.TrimStart("v")
             $manifest = @{
