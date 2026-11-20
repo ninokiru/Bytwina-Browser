@@ -11,6 +11,7 @@
 //! mô tả JSON, việc match DOM phải viết tay trong JS — để riêng, không làm nửa vời.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use adblock::engine::Engine;
 
@@ -70,11 +71,11 @@ mod tests {
         Engine::new_with_filter_set(set)
     }
 
-    /// Như production thật (filters::build_engine): `new_with_filter_set` bật
-    /// tối ưu của NetworkRulesBuilder, còn đường cache engine của Blocker thì
-    /// dùng `serialize`/`deserialize`. Hai đường này có thể xử lý cosmetic khác
-    /// nhau, nên test cuối phải đi đúng đường production.
-    fn production_engine(rules: &str) -> Engine {
+    /// Như production thật (filters::build_engine): đường Blocker::load có thể
+    /// đi qua cache engine (`serialize`/`deserialize`), thứ mà
+    /// `Engine::new_with_filter_set` không chạm tới. Hai đường này có thể xử lý
+    /// cosmetic khác nhau, nên test cuối phải đi đúng đường production.
+    fn production_engine(rules: &str) -> Arc<Engine> {
         let dir = std::env::temp_dir().join(format!(
             "bytwina-cosmetic-{}-{}",
             std::process::id(),
@@ -162,10 +163,11 @@ mod tests {
     fn generic_rules_need_page_classes_and_ids() {
         // Đi đúng đường production: Blocker.load() có thể đi qua cache/serialize.
         let e = production_engine(".advert\n#sponsor\n");
+        let e = &*e;
         // Chưa đưa class/id thì chưa ẩn được gì: đó là giới hạn của bộ lọc chung.
-        assert!(stylesheet(&e, "https://any.test/", &[], &[]).is_empty());
+        assert!(stylesheet(e, "https://any.test/", &[], &[]).is_empty());
         let css = stylesheet(
-            &e,
+            e,
             "https://any.test/",
             &["advert".to_string()],
             &["sponsor".to_string()],
