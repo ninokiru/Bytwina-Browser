@@ -20,7 +20,7 @@ use crate::db::Db;
 /// Tên marker báo "khôi phục chờ lần khởi động sau"; chứa tên tệp bản lưu.
 pub const PENDING_FILE: &str = "pending-restore.txt";
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupInfo {
     pub name: String,
@@ -85,7 +85,8 @@ pub fn list(app_data: &Path) -> Vec<BackupInfo> {
             })
         })
         .collect();
-    out.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+    // Mới nhất trước; clippy bắt sort_by_key nên đảo thứ tự bằng Reverse.
+    out.sort_by_key(|b| std::cmp::Reverse(b.modified_at));
     out
 }
 
