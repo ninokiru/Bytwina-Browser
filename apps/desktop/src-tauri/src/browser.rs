@@ -965,8 +965,6 @@ pub fn clear_browsing_on_exit(app: &AppHandle, state: &BrowserState) {
         let _ = wv.clear_all_browsing_data();
     }
 }
-    }
-}
 
 /// M2/M6: lưu danh sách tab hiện tại vào DB (phiên). Gọi khi đóng cửa sổ và định kỳ.
 pub fn persist_session(app: &AppHandle, state: &BrowserState) {
