@@ -80,24 +80,26 @@ pub struct SitePermission {
 pub struct Permissions {
     /// origin -> (kind -> cho phép hay không).
     rules: RwLock<HashMap<String, HashMap<&'static str, bool>>>,
-    /// id lời hỏi đang chờ -> nhãn webview đã sinh ra nó. Bảng này nằm trong state
-    /// dùng chung vì luồng lệnh IPC cần tìm đúng tab để nhảy về, còn đối tượng COM
-    /// thật thì ở thread_local của `webview2.rs` (interface COM không `Send`).
-    pending: std::sync::Mutex<HashMap<u64, String>>,
+    /// id lời hỏi đang chờ -> (nhãn webview, origin, kind).
+    pending: std::sync::Mutex<HashMap<u64, (String, String, &'static str)>>,
     /// Số thứ tự của lời hỏi đang chờ người trả lời.
     next_id: AtomicU64,
 }
 
 impl Permissions {
-    pub fn remember_prompt(&self, id: u64, label: &str) {
+    pub fn remember_prompt(&self, id: u64, label: &str, origin: &str, kind: &'static str) {
         if let Ok(mut map) = self.pending.lock() {
-            map.insert(id, label.to_string());
+            map.insert(id, (label.to_string(), origin.to_string(), kind));
         }
     }
 
-    /// Lấy và xóa nhãn của một lời hỏi; `None` nếu id không còn (trang đã đổi).
-    pub fn take_prompt_label(&self, id: u64) -> Option<String> {
+    /// Lấy và xóa thông tin của một lời hỏi; `None` nếu id không còn (trang đã đổi).
+    pub fn take_prompt_info(&self, id: u64) -> Option<(String, String, &'static str)> {
         self.pending.lock().ok()?.remove(&id)
+    }
+
+    pub fn take_prompt_label(&self, id: u64) -> Option<String> {
+        self.pending.lock().ok()?.remove(&id).map(|(l, _, _)| l)
     }
 
     /// Các id còn treo của một webview, để từ chối chúng khi tab đóng.
@@ -107,12 +109,22 @@ impl Permissions {
         };
         let ids: Vec<u64> = map
             .iter()
-            .filter(|(_, l)| l.as_str() == label)
+            .filter(|(_, (l, _, _))| l.as_str() == label)
             .map(|(id, _)| *id)
             .collect();
         for id in &ids {
             map.remove(id);
         }
+        ids
+    }
+
+    /// Xóa toàn bộ lời hỏi quyền đang treo (dùng khi bật/tắt chế độ riêng tư).
+    pub fn clear_pending(&self) -> Vec<u64> {
+        let Ok(mut map) = self.pending.lock() else {
+            return Vec::new();
+        };
+        let ids: Vec<u64> = map.keys().copied().collect();
+        map.clear();
         ids
     }
 }

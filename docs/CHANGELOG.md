@@ -2,6 +2,41 @@
 
 Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Thêm · Thay đổi · Gỡ bỏ · Sửa · Bảo mật.
 
+## 0.0.5 — 2026-11-21 (so với 0.0.4)
+
+### Thêm (Add)
+- **Omnibox Thông minh (Smart Address Bar)**:
+  - **Tính toán nhanh trực tiếp**: Nhập các phép toán (vd `100*5+20`, `25/5 + 10`) sẽ lập tức hiển thị kết quả ngay trong thanh gợi ý. Bấm vào để copy kết quả.
+  - **Gợi ý lịch sử tức thì (Instant History Search)**: Khi nhập từ khóa, tự động truy vấn và hiển thị dropdown danh sách các trang web đã từng truy cập để mở nhanh.
+  - **Phím tắt tìm kiếm đa công cụ (Search Engine Shortcuts)**: Nhập tiền tố `!g <từ khóa>` (Google), `!d` (DuckDuckGo), `!b` (Bing), `!y` (YouTube), `!w` (Wikipedia) để tìm kiếm trực tiếp trên dịch vụ mong muốn mà không cần đổi cài đặt mặc định.
+- **Giao diện Modern Glassmorphism (Phong cách Chrome & Cốc Cốc)**:
+  - Thanh Tab bo tròn 12px, tab đang chọn nổi bật với hiệu ứng kính mờ (frosted glass), viền sáng phản quang trên đỉnh và bóng đổ đa tầng.
+  - Hỗ trợ hiển thị Favicon thật từ website kèm hiệu ứng bóng tinh tế.
+  - Thanh địa chỉ Omnibox dạng Pill mềm mại hoàn toàn bo tròn (`border-radius: 9999px`), có hiệu ứng viền phát sáng (focus glow) và icon khiên bảo mật trực quan.
+  - Các mục Cài đặt được tổ chức theo khối Card Group bo góc hiện đại, tự động nổi khối khi rê chuột.
+- **Chặn quảng cáo động (Dynamic Adblock & MutationObserver)**:
+  - Tích hợp `MutationObserver` phát hiện và dập tắt các phần tử quảng cáo sinh ra động bằng JavaScript trên các Single Page App (SPA) mà không cần tải lại trang.
+- **Bộ danh sách chặn quảng cáo tối ưu cho người Việt**:
+  - Tích hợp thêm bộ lọc ABPVN, uBlock Filters và uBlock Privacy vào bộ lọc mặc định.
+
+### Thay đổi (Change)
+- **Dark Mode**: Chuyển sang tông màu tối sâu (`#0d1117`), tăng độ tương phản và viền phản quang giúp dịu mắt và sang trọng hơn.
+- **Tự động khóa Kho mật khẩu**: Nâng cấp thời gian tự động khóa mặc định lên 15 phút (thay vì không bao giờ khóa) để bảo vệ tài khoản khi rời máy.
+- **Tối ưu tốc độ CI/CD**: Chạy song song độc lập giữa Frontend và Rust, tự động gom toàn bộ lỗi vào bảng thông báo trong 1 lần chạy duy nhất.
+
+### Sửa lỗi (Fix)
+- **Lỗi Race Condition khi tắt trình duyệt**: Khắc phục hiện tượng app bị đóng trước khi WebView2 xóa xong cookie (`clearOnExit`) hoặc trước khi lưu xong phiên duyệt web.
+- **Lỗi rò rỉ phiên trong Chế độ riêng tư (Private Mode)**:
+  - Ngăn chặn hoàn toàn việc ghi lịch sử tải file khi đang bật InPrivate.
+  - Chặn lưu danh sách tab ẩn danh vào bộ nhớ phiên tab tự động.
+  - Reset toàn bộ cache hỏi quyền trang web khi bật/tắt chế độ riêng tư.
+- **Lỗi cú pháp PowerShell trong Action Release**: Sửa lỗi tham chiếu biến `$sigFile:` gây dừng script build.
+
+### Bảo mật (Security)
+- **Content Security Policy (CSP)**: Thiết lập CSP nghiêm ngặt cho webview thanh công cụ, ngăn chặn hoàn toàn nguy cơ chèn script độc hại vào tầng điều khiển.
+- **Khắc phục lỗi Path Traversal trong Backup**: Chặn ký tự ổ đĩa `:` trên Windows để đảm bảo tệp sao lưu không bị ghi lệch khỏi thư mục an toàn.
+- **Origin Permission chặt chẽ**: Cố định kiểm tra tên miền theo ID phía Rust, loại bỏ lỗ hổng can thiệp từ giao diện.
+
 ## 0.0.4 — 2026-11-20 (so với 0.0.3)
 
 ### Thêm

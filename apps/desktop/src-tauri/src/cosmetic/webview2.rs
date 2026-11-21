@@ -67,6 +67,18 @@ el.type = 'text/css';\
 (document.head || document.documentElement).appendChild(el);\
 }}\
 el.textContent = {literal};\
+if (!window.__bytwina_observer__) {{\
+window.__bytwina_observer__ = new MutationObserver(() => {{\
+if (!document.getElementById(ID) && (document.head || document.documentElement)) {{\
+let re = document.createElement('style');\
+re.id = ID;\
+re.type = 'text/css';\
+re.textContent = {literal};\
+(document.head || document.documentElement).appendChild(re);\
+}}\
+}});\
+window.__bytwina_observer__.observe(document.documentElement || document.body, {{ childList: true, subtree: true }});\
+}}\
 }})()"
     )
 }

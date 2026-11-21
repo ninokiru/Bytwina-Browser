@@ -15,7 +15,7 @@
   <a href="LICENSE"><img alt="Giấy phép" src="https://img.shields.io/badge/gi%E1%BA%A5y%20ph%C3%A9p-MIT-blue"></a>
 </p>
 
-> **Bản thử nghiệm (0.0.4).** Đủ tính năng để dùng hằng ngày, nhưng chưa được kiểm thử tay đầy đủ trên mọi cấu hình Windows và chưa ký số — SmartScreen sẽ cảnh báo khi cài.
+> **Bản thử nghiệm (0.0.5).** Đủ tính năng để dùng hằng ngày, nhưng chưa được kiểm thử tay đầy đủ trên mọi cấu hình Windows và chưa ký số — SmartScreen sẽ cảnh báo khi cài.
 
 ## Tải và cài
 

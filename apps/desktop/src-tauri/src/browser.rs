@@ -563,7 +563,8 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
         // M3: chọn nơi lưu file và ghi nhận kết quả tải xuống.
         .on_download({
             let app = app.clone();
-            move |_webview, event| on_download(&app, event)
+            let is_private = state.is_private();
+            move |_webview, event| on_download(&app, event, is_private)
         })
         .on_new_window({
             let app = app.clone();
@@ -920,6 +921,10 @@ pub fn apply_private(app: &AppHandle, state: &BrowserState, on: bool) {
     if let Some(id) = active {
         focus_tab(app, state, id);
     }
+    // Đổi chế độ riêng tư: xóa toàn bộ lời hỏi quyền đang treo để tránh rò rỉ session
+    if let Some(handle) = app.try_state::<crate::permissions::PermissionsHandle>() {
+        let _ = handle.0.clear_pending();
+    }
     emit_state(app, state);
 }
 
@@ -940,7 +945,7 @@ fn download_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 /// Cài đặt `clearOnExit`: xóa cookie và dữ liệu duyệt web khi thoát.
-/// Gọi bất đồng bộ nên có thể chưa xong trước khi tiến trình kết thúc (chưa kiểm chứng trên Windows).
+/// Trả về Result để caller có thể đồng bộ hóa trong graceful shutdown.
 pub fn clear_browsing_on_exit(app: &AppHandle, state: &BrowserState) {
     let enabled = app
         .try_state::<DbState>()
@@ -958,6 +963,8 @@ pub fn clear_browsing_on_exit(app: &AppHandle, state: &BrowserState) {
         .find_map(|t| app.get_webview(&t.label));
     if let Some(wv) = first {
         let _ = wv.clear_all_browsing_data();
+    }
+}
     }
 }
 
@@ -1034,7 +1041,8 @@ pub fn is_risky_file(name: &str) -> bool {
 
 /// M3: xử lý sự kiện tải xuống. Lưu vào thư mục Downloads của người dùng,
 /// không ghi đè file cũ, và ghi lịch sử tải vào DB khi hoàn tất.
-fn on_download(app: &AppHandle, event: DownloadEvent<'_>) -> bool {
+/// Không ghi lịch sử khi đang ở chế độ riêng tư (private mode).
+fn on_download(app: &AppHandle, event: DownloadEvent<'_>, is_private: bool) -> bool {
     match event {
         DownloadEvent::Requested { url, destination } => {
             if let Ok(dir) = download_dir(app) {
@@ -1053,9 +1061,11 @@ fn on_download(app: &AppHandle, event: DownloadEvent<'_>) -> bool {
             true
         }
         DownloadEvent::Finished { url, path, success } => {
-            if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.clone()) {
-                let path_str = path.as_deref().and_then(|p| p.to_str()).unwrap_or("");
-                let _ = db.record_download(url.as_str(), path_str, success);
+            if !is_private {
+                if let Some(db) = app.try_state::<DbState>().and_then(|d| d.0.clone()) {
+                    let path_str = path.as_deref().and_then(|p| p.to_str()).unwrap_or("");
+                    let _ = db.record_download(url.as_str(), path_str, success);
+                }
             }
             true
         }

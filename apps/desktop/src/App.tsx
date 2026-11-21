@@ -64,6 +64,9 @@ export default function App() {
   const [starred, setStarred] = useState(false);
   // Chrome làm nhạt dải tab khi cửa sổ mất tiêu điểm.
   const [blurred, setBlurred] = useState(false);
+  // Omnibox suggestions & quick calc
+  const [suggestions, setSuggestions] = useState<Array<{ title: string; url: string; type: "calc" | "history" | "shortcut" }>>([]);
+  const [calcResult, setCalcResult] = useState<string | null>(null);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -489,19 +492,99 @@ export default function App() {
             spellCheck={false}
             autoComplete="off"
             onChange={(e) => {
-              setInput(e.target.value);
+              const val = e.target.value;
+              setInput(val);
               setEditing(true);
+              // Tính toán biểu thức số học an toàn (chỉ chứa số và phép tính cơ bản)
+              const mathRegex = /^[\d\s+\-*/().%^]+$/;
+              if (val.trim() && mathRegex.test(val) && /[+\-*/%]/.test(val)) {
+                try {
+                  const res = Function(`"use strict"; return (${val})`)();
+                  if (typeof res === "number" && !isNaN(res)) {
+                    setCalcResult(String(res));
+                  } else {
+                    setCalcResult(null);
+                  }
+                } catch {
+                  setCalcResult(null);
+                }
+              } else {
+                setCalcResult(null);
+              }
+              // Gợi ý lịch sử nhanh
+              if (val.trim().length >= 2 && !val.startsWith("http")) {
+                void cmd("history_search", { query: val.trim() }).then((data) => {
+                  if (Array.isArray(data)) {
+                    setSuggestions(
+                      data.slice(0, 5).map((h: { title: string; url: string }) => ({
+                        title: h.title || h.url,
+                        url: h.url,
+                        type: "history",
+                      }))
+                    );
+                  }
+                }).catch(() => setSuggestions([]));
+              } else {
+                setSuggestions([]);
+              }
             }}
             onFocus={(e) => {
               setEditing(true);
               e.currentTarget.select();
             }}
-            onBlur={() => setEditing(false)}
+            onBlur={() => {
+              // Delay nhỏ để kịp click gợi ý
+              setTimeout(() => {
+                setEditing(false);
+                setCalcResult(null);
+                setSuggestions([]);
+              }, 200);
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") go();
-              if (e.key === "Escape") setEditing(false);
+              if (e.key === "Enter") {
+                setEditing(false);
+                setCalcResult(null);
+                setSuggestions([]);
+                go();
+              }
+              if (e.key === "Escape") {
+                setEditing(false);
+                setCalcResult(null);
+                setSuggestions([]);
+              }
             }}
           />
+          {editing && (calcResult || suggestions.length > 0) && (
+            <div className="omni-dropdown">
+              {calcResult && (
+                <div
+                  className="omni-dropdown-item calc"
+                  onClick={() => {
+                    setInput(calcResult);
+                    setCalcResult(null);
+                  }}
+                >
+                  <span className="omni-drop-type">🧮 Kết quả:</span>
+                  <b>{calcResult}</b>
+                </div>
+              )}
+              {suggestions.map((s, idx) => (
+                <div
+                  key={idx}
+                  className="omni-dropdown-item"
+                  onClick={() => {
+                    setInput(s.url);
+                    if (active) void cmd("navigate", { id: String(active.id), input: s.url });
+                    setEditing(false);
+                    setSuggestions([]);
+                  }}
+                >
+                  <span className="omni-drop-title">{s.title}</span>
+                  <span className="omni-drop-url">{s.url}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Chrome đặt ngôi sao đánh dấu bên trong ô địa chỉ. */}
           <button
             type="button"

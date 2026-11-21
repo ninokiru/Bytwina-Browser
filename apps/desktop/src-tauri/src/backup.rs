@@ -162,6 +162,7 @@ fn safe_path(app_data: &Path, name: &str) -> Result<PathBuf, String> {
     let ok = !trimmed.is_empty()
         && !trimmed.contains('/')
         && !trimmed.contains('\\')
+        && !trimmed.contains(':')
         && trimmed != "."
         && trimmed != ".."
         && trimmed.ends_with(".db");

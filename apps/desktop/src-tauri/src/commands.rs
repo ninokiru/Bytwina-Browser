@@ -166,8 +166,12 @@ pub async fn browser_command(
             Ok(Value::Null)
         }),
         "settings_get" => with_db(&app, |db| db.get_setting(&arg("key")?)),
-        "session_save" => with_db(&app, |db| {
-            let snap = state.snapshot();
+        "session_save" => {
+            if state.is_private() {
+                return Ok(Value::Null);
+            }
+            with_db(&app, |db| {
+                let snap = state.snapshot();
             let active_index = snap
                 .active_tab
                 .and_then(|a| snap.tabs.iter().position(|t| t.id == a))
@@ -185,7 +189,8 @@ pub async fn browser_command(
                 .collect::<Vec<_>>();
             db.save_session(&tabs, active_index)?;
             Ok(())
-        }),
+            })
+        }
         "session_load" => with_db(&app, |db| db.load_session()),
         "session_clear" => with_db(&app, |db| {
             db.clear_session()?;
@@ -481,10 +486,18 @@ pub async fn browser_command(
         "permission_respond" => {
             let id = arg("id")?.parse::<u64>().map_err(|_| "id không hợp lệ")?;
             let allowed = arg("allow")? == "1";
+            let remember = arg("remember").unwrap_or_default() == "1";
+            let prompt_info = {
+                let handle = app.state::<crate::permissions::PermissionsHandle>();
+                handle.0.take_prompt_info(id)
+            };
+            let Some((_label, origin, kind)) = prompt_info else {
+                return Err("lời hỏi không còn tồn tại".into());
+            };
             // Trả lời WebView2 trước: trang đang chờ deferral, không nên chờ ghi đĩa.
             answer_permission(&app, id, allowed)?;
-            if arg("remember").unwrap_or_default() == "1" {
-                persist_rule(&app, &arg("origin")?, &arg("kind")?, allowed)?;
+            if remember {
+                persist_rule(&app, &origin, kind, allowed)?;
             }
             Ok(Value::Null)
         }
@@ -717,7 +730,7 @@ const DEFAULT_SETTINGS: &[(&str, &str)] = &[
     ("tabLayout", "horizontal"),
     ("adblockEnabled", "1"),
     ("adblockDisabledSites", ""),
-    ("vaultAutoLock", "0"),
+    ("vaultAutoLock", "15"),
 ];
 
 /// Mở trang "Ứng dụng mặc định" của Windows, cách Chrome/Edge dùng thay vì tự ghi

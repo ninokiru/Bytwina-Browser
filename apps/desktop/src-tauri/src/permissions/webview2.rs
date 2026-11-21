@@ -149,7 +149,7 @@ unsafe fn on_requested(
     PENDING.with(|p| {
         p.borrow_mut().insert(id, (args.clone(), deferral));
     });
-    handle.0.remember_prompt(id, label);
+    handle.0.remember_prompt(id, label, &origin, kind.key());
     let _ = app.emit_to(
         "toolbar",
         "browser://permission",

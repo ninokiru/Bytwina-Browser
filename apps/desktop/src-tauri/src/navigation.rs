@@ -55,11 +55,25 @@ pub fn to_url(input: &str) -> String {
 
 /// Chuyển ô nhập thành URL; `engine` là tiền tố tìm kiếm (xem `engine_prefix`).
 pub fn to_url_with(input: &str, engine: &str) -> String {
-    let search = |s: &str| format!("{engine}{}", urlencode(s));
     let input = input.trim();
     if input.is_empty() {
         return NEW_TAB_URL.to_string();
     }
+    // Hỗ trợ Search Engine Shortcuts: !g (Google), !d (DuckDuckGo), !b (Bing), !y (YouTube), !w (Wikipedia)
+    if let Some(rest) = input.strip_prefix('!') {
+        if let Some((prefix, query)) = rest.split_once(' ') {
+            let q = urlencode(query.trim());
+            match prefix.to_ascii_lowercase().as_str() {
+                "g" => return format!("https://www.google.com/search?q={q}"),
+                "d" => return format!("https://duckduckgo.com/?q={q}"),
+                "b" => return format!("https://www.bing.com/search?q={q}"),
+                "y" => return format!("https://www.youtube.com/results?search_query={q}"),
+                "w" => return format!("https://en.wikipedia.org/wiki/Special:Search?search={q}"),
+                _ => {}
+            }
+        }
+    }
+    let search = |s: &str| format!("{engine}{}", urlencode(s));
     if let Some(pos) = input.find("://") {
         let scheme = input[..pos].to_ascii_lowercase();
         // url::Url chỉ cho phép http/https vào webview nội dung.

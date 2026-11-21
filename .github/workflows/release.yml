@@ -125,7 +125,22 @@ jobs:
         run: |
           $files = @($env:INSTALLER, "SHA256SUMS.txt")
           if ($env:UPLOAD_UPDATER -eq "1") { $files += "latest.json" }
-          gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --generate-notes --latest @files
+          $notesFile = "docs/CHANGELOG.md"
+          $releaseNotes = ""
+          if (Test-Path $notesFile) {
+            $content = Get-Content $notesFile -Raw -Encoding utf8
+            # Trích xuất phần release notes của phiên bản hiện tại
+            $pattern = "(?s)## " + [regex]::Escape($env:TAG.TrimStart("v")) + ".*?(?=## \d|\Z)"
+            if ($content -match $pattern) {
+              $releaseNotes = $matches[0].Trim()
+            }
+          }
+          if ($releaseNotes) {
+            $releaseNotes | Out-File -FilePath release_notes.txt -Encoding utf8
+            gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --notes-file release_notes.txt --latest @files
+          } else {
+            gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --generate-notes --latest @files
+          }
       - name: Verify assets
         shell: pwsh
         env:
