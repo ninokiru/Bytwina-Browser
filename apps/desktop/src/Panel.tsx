@@ -13,9 +13,11 @@ import {
   ClockIcon,
   CloseIcon,
   DownloadIcon,
+  FileTextIcon,
   GlassesIcon,
   GridIcon,
   KeyIcon,
+  LayersIcon,
   MoreIcon,
   PaletteIcon,
   PlusIcon,
@@ -56,6 +58,8 @@ export type PanelKind =
   | "tabs"
   | "settings"
   | "dictionary"
+  | "notes"
+  | "sessions"
   | "menu";
 
 interface DownloadItem {
@@ -125,6 +129,11 @@ export default function Panel({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [word, setWord] = useState("");
   const [dictLang, setDictLang] = useState<"en" | "vi">("en");
+  const [noteContent, setNoteContent] = useState("");
+  const [notePreview, setNotePreview] = useState(false);
+  const [noteHtml, setNoteHtml] = useState("");
+  const [sessionName, setSessionName] = useState("");
+  const [savedSessions, setSavedSessions] = useState<Array<{ name: string; tabCount: number; createdAt: number }>>([]);
 
   // Gõ tới đâu tìm tới đó sẽ bắn một truy vấn DB mỗi phím; chờ 250ms.
   useEffect(() => {
@@ -163,13 +172,21 @@ export default function Panel({
       setReading(((await cmd("reading_list")) as ReadingItem[]) ?? []);
     } else if (kind === "downloads") {
       setDownloads(((await cmd("downloads_list")) as DownloadItem[]) ?? []);
+    } else if (kind === "notes" && menu?.url) {
+      const n = (await cmd("note_get", { url: menu.url })) as string | null;
+      setNoteContent(n ?? "");
+      setNotePreview(false);
+      setNoteHtml("");
+    } else if (kind === "sessions") {
+      const s = (await cmd("session_list_named")) as Array<{ name: string; tabCount: number; createdAt: number }>;
+      setSavedSessions(s ?? []);
     }
   };
 
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, debouncedQuery]);
+  }, [kind, debouncedQuery, menu?.url]);
 
   const remove = (command: string, id: number) => {
     void cmd(command, { id: String(id) }).then(reload);
@@ -211,6 +228,40 @@ export default function Panel({
             ))}
           </ul>
         );
+      foot = (
+        <div className="btn-row" style={{ marginTop: 0, justifyContent: "space-between" }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              void cmd("bookmark_import_chrome").then((res) => {
+                const r = res as { imported?: number };
+                alert(`Đã nhập ${r.imported || 0} dấu trang từ Chrome!`);
+                reload();
+              });
+            }}
+          >
+            Nhập từ Chrome
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              void cmd("bookmark_export_html").then((html) => {
+                const blob = new Blob([html as string], { type: "text/html" });
+                const u = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = u;
+                a.download = "bytwina_bookmarks.html";
+                a.click();
+                URL.revokeObjectURL(u);
+              });
+            }}
+          >
+            Xuất HTML
+          </button>
+        </div>
+      );
       break;
 
     case "history":
@@ -399,6 +450,184 @@ export default function Panel({
       );
       break;
 
+    case "notes":
+      body = (
+        <div className="note-panel">
+          <div className="note-url" title={menu?.url ?? ""}>
+            {t("note.page")}: <b>{hostOf(menu?.url ?? "") || menu?.url}</b>
+          </div>
+          <div className="note-tabs">
+            <button
+              type="button"
+              className={`note-tab${notePreview ? "" : " on"}`}
+              onClick={() => setNotePreview(false)}
+            >
+              {t("note.edit")}
+            </button>
+            <button
+              type="button"
+              className={`note-tab${notePreview ? " on" : ""}`}
+              onClick={() => {
+                setNotePreview(true);
+                void cmd("note_render", { content: noteContent })
+                  .then((html) => setNoteHtml(typeof html === "string" ? html : ""))
+                  .catch(() => setNoteHtml(""));
+              }}
+            >
+              {t("note.preview")}
+            </button>
+            <span className="note-spacer" />
+            <button
+              type="button"
+              className="note-tab"
+              onClick={() => {
+                void cmd("note_export_markdown").then((md) => {
+                  if (!md || md === "# Ghi chú Bytwina\n\n") {
+                    alert(t("note.exportEmpty"));
+                    return;
+                  }
+                  const blob = new Blob([md as string], { type: "text/markdown" });
+                  const u = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = u;
+                  a.download = "bytwina_notes.md";
+                  a.click();
+                  URL.revokeObjectURL(u);
+                });
+              }}
+            >
+              {t("note.export")}
+            </button>
+          </div>
+          {notePreview ? (
+            noteHtml.trim() ? (
+              <div className="note-preview" dangerouslySetInnerHTML={{ __html: noteHtml }} />
+            ) : (
+              <p className="note-empty">{t("note.emptyPreview")}</p>
+            )
+          ) : (
+            <textarea
+              className="field note-textarea"
+              placeholder={t("note.placeholder")}
+              value={noteContent}
+              autoFocus
+              onChange={(e) => setNoteContent(e.target.value)}
+            />
+          )}
+        </div>
+      );
+      foot = (
+        <div className="btn-row note-foot">
+          <button
+            type="button"
+            className="btn danger"
+            disabled={!noteContent.trim()}
+            onClick={() => {
+              if (!menu?.url) return;
+              if (!window.confirm(`${t("note.delete")}?`)) return;
+              void cmd("note_delete", { url: menu.url }).then(() => {
+                setNoteContent("");
+                setNoteHtml("");
+                onClose();
+              });
+            }}
+          >
+            {t("note.delete")}
+          </button>
+          <span className="note-spacer" />
+          <button
+            type="button"
+            className="btn primary"
+            disabled={!menu?.url}
+            onClick={() => {
+              if (!menu?.url) return;
+              void cmd("note_set", { url: menu.url, content: noteContent }).then(onClose);
+            }}
+          >
+            {t("note.save")}
+          </button>
+        </div>
+      );
+      break;
+
+    case "sessions":
+      body = (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="row-inline">
+            <input
+              className="field"
+              placeholder={t("sessions.placeholder")}
+              value={sessionName}
+              onChange={(e) => setSessionName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && sessionName.trim()) {
+                  void cmd("session_save_named", { name: sessionName.trim() }).then(() => {
+                    setSessionName("");
+                    void reload();
+                  });
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn primary"
+              disabled={!sessionName.trim()}
+              onClick={() => {
+                void cmd("session_save_named", { name: sessionName.trim() }).then(() => {
+                  setSessionName("");
+                  void reload();
+                });
+              }}
+            >
+              {t("sessions.save")}
+            </button>
+          </div>
+          {savedSessions.length === 0 ? (
+            <EmptyState icon={<LayersIcon />} text={t("sessions.empty")} />
+          ) : (
+            <ul className="list">
+              {savedSessions.map((s) => (
+                <li key={s.name} className="list-row">
+                  <span className="row-icon">
+                    <LayersIcon />
+                  </span>
+                  <div className="list-main">
+                    <span className="list-title">{s.name}</span>
+                    <span className="list-sub">
+                      {t("sessions.tabCount").replace("{n}", String(s.tabCount))} ·{" "}
+                      {new Date(s.createdAt * 1000).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ height: 26, padding: "0 8px", fontSize: 11 }}
+                    onClick={() => {
+                      void cmd("session_restore_named", { name: s.name }).then(() => {
+                        onClose();
+                      });
+                    }}
+                  >
+                    {t("sessions.restore")}
+                  </button>
+                  <button
+                    type="button"
+                    className="row-remove"
+                    title={t("sessions.delete")}
+                    onClick={() => {
+                      void cmd("session_delete_named", { name: s.name }).then(reload);
+                    }}
+                  >
+                    <TrashIcon />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+      break;
+
     case "menu":
       body = (
         <div className="menu-list">
@@ -467,6 +696,8 @@ export default function Panel({
             }}
           />
           <MenuItem icon={<BookIcon />} label={t("title.reading")} onOpen={onOpen} kind="reading" />
+          <MenuItem icon={<FileTextIcon />} label={t("title.notes")} onOpen={onOpen} kind="notes" />
+          <MenuItem icon={<LayersIcon />} label={t("title.sessions")} onOpen={onOpen} kind="sessions" />
           <MenuItem icon={<GridIcon />} label={t("title.tabs")} onOpen={onOpen} kind="tabs" />
           <MenuItem
             icon={<BookTextIcon />}
@@ -594,6 +825,14 @@ export default function Panel({
   );
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
 function EmptyState({ icon, text }: { icon: ReactNode; text: string }) {
   return (
     <div className="empty">
@@ -617,6 +856,10 @@ function titleKey(kind: PanelKind): Key {
       return "title.reading";
     case "dictionary":
       return "title.dictionary";
+    case "notes":
+      return "title.notes";
+    case "sessions":
+      return "title.sessions";
     case "menu":
       return "bar.menu";
     default:
@@ -638,6 +881,10 @@ function titleIcon(kind: PanelKind): ReactNode {
       return <BookIcon />;
     case "dictionary":
       return <BookTextIcon />;
+    case "notes":
+      return <FileTextIcon />;
+    case "sessions":
+      return <LayersIcon />;
     case "menu":
       return <MoreIcon />;
     default:

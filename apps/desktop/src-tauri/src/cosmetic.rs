@@ -29,7 +29,7 @@ pub fn stylesheet(engine: &Engine, url: &str, classes: &[String], ids: &[String]
         selectors.extend(engine.hidden_class_id_selectors(classes, ids, &exceptions(&resources)));
     }
 
-    // Các luật ẩn quảng cáo cứng chuyên dụng cho YouTube, Facebook, TikTok
+    // Các luật ẩn quảng cáo CSS chuẩn cho YouTube, TikTok (thuộc tính data-* ổn định)
     if url.contains("youtube.com") {
         for s in [
             "ytd-ad-slot-renderer",
@@ -44,19 +44,10 @@ pub fn stylesheet(engine: &Engine, url: &str, classes: &[String], ids: &[String]
         ] {
             selectors.push(s.to_string());
         }
-    } else if url.contains("facebook.com") {
-        for s in [
-            "div[data-pagelet*='FeedUnit']:has(span:contains('Sponsored'))",
-            "div[data-pagelet*='FeedUnit']:has(span:contains('Được tài trợ'))",
-            "div[data-pagelet='RightRail'] div:has(span:contains('Được tài trợ'))",
-            "div[data-pagelet='RightRail'] div:has(span:contains('Sponsored'))"
-        ] {
-            selectors.push(s.to_string());
-        }
     } else if url.contains("tiktok.com") {
+        // Dùng thuộc tính ổn định data-e2e thay vì hash class
         for s in [
             "div[data-e2e='feed-ad']",
-            ".tiktok-1w9z8e4-DivAdItem",
             ".ad-badge"
         ] {
             selectors.push(s.to_string());

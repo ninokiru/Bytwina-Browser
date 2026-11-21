@@ -149,6 +149,61 @@ pub async fn browser_command(
             db.remove_bookmark(arg("id")?.parse().map_err(|_| "id không hợp lệ")?)
         }),
         "bookmark_list" => with_db(&app, |db| to_json(db.list_bookmarks()?)),
+        "bookmark_export_html" => with_db(&app, |db| {
+            let bookmarks = db.list_bookmarks()?;
+            let mut html = String::from("<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n");
+            for b in bookmarks {
+                html.push_str(&format!("    <DT><A HREF=\"{}\">{}</A>\n", b.url, b.title));
+            }
+            html.push_str("</DL><p>\n");
+            Ok(Value::String(html))
+        }),
+        "bookmark_import_chrome" => {
+            // Đọc tệp Bookmarks mặc định của Google Chrome trên Windows
+            let mut count = 0usize;
+            if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+                let chrome_bm_path = std::path::PathBuf::from(local_app_data)
+                    .join("Google")
+                    .join("Chrome")
+                    .join("User Data")
+                    .join("Default")
+                    .join("Bookmarks");
+                if chrome_bm_path.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&chrome_bm_path) {
+                        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                            if let Some(roots) = json.get("roots").and_then(|r| r.as_object()) {
+                                fn extract_bm(node: &Value, list: &mut Vec<(String, String)>) {
+                                    if let Some(children) = node.get("children").and_then(|c| c.as_array()) {
+                                        for child in children {
+                                            extract_bm(child, list);
+                                        }
+                                    } else if let (Some(name), Some(url)) = (
+                                        node.get("name").and_then(|n| n.as_str()),
+                                        node.get("url").and_then(|u| u.as_str()),
+                                    ) {
+                                        if url.starts_with("http://") || url.starts_with("https://") {
+                                            list.push((name.to_string(), url.to_string()));
+                                        }
+                                    }
+                                }
+                                let mut extracted = Vec::new();
+                                for (_key, val) in roots {
+                                    extract_bm(val, &mut extracted);
+                                }
+                                count = extracted.len();
+                                with_db(&app, |db| {
+                                    for (title, url) in extracted {
+                                        let _ = db.add_bookmark(&title, &url, "Chrome");
+                                    }
+                                    Ok(())
+                                })?;
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(serde_json::json!({ "imported": count }))
+        },
         "history_search" => with_db(&app, |db| {
             let q = args
                 .as_ref()
@@ -195,6 +250,105 @@ pub async fn browser_command(
         "session_clear" => with_db(&app, |db| {
             db.clear_session()?;
             Ok(())
+        }),
+        // ===== Lưu và nạp phiên theo tên (Named Sessions) =====
+        "session_save_named" => {
+            let name = arg("name")?;
+            let name = name.trim();
+            if name.is_empty() {
+                return Err("tên phiên không được để trống".into());
+            }
+            let snap = state.snapshot();
+            let tabs = snap
+                .tabs
+                .iter()
+                .map(|t| crate::db::SessionTab {
+                    url: t.url.clone(),
+                    title: t.title.clone(),
+                    pinned: t.pinned,
+                    group: t.group.clone(),
+                })
+                .collect::<Vec<_>>();
+            let json = serde_json::to_string(&tabs).map_err(|e| e.to_string())?;
+            with_db(&app, move |db| db.save_named_session(name, &json))
+        }
+        "session_list_named" => with_db(&app, |db| {
+            let list = db.list_named_sessions()?;
+            let mapped = list
+                .into_iter()
+                .map(|(name, json, created_at)| {
+                    let tabs: Vec<crate::db::SessionTab> = serde_json::from_str(&json).unwrap_or_default();
+                    serde_json::json!({
+                        "name": name,
+                        "tabCount": tabs.len(),
+                        "createdAt": created_at,
+                    })
+                })
+                .collect::<Vec<_>>();
+            Ok(Value::Array(mapped))
+        }),
+        "session_restore_named" => {
+            let name = arg("name")?;
+            let tabs_json = with_db(&app, move |db| {
+                let list = db.list_named_sessions()?;
+                list.into_iter()
+                    .find(|(n, _, _)| n == &name)
+                    .map(|(_, j, _)| j)
+                    .ok_or_else(|| "không tìm thấy phiên lưu".to_string())
+            })?;
+            let tabs_str = tabs_json.as_str().ok_or_else(|| "dữ liệu không hợp lệ".to_string())?;
+            let tabs: Vec<crate::db::SessionTab> = serde_json::from_str(tabs_str).map_err(|e| e.to_string())?;
+            // Mở lại các tab trong phiên
+            for t in tabs {
+                let id = state.add_tab(t.url);
+                if t.pinned {
+                    let _ = state.set_pinned(id, true);
+                }
+                if let Some(g) = t.group {
+                    let _ = state.set_group(id, Some(g));
+                }
+            }
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "session_delete_named" => {
+            let name = arg("name")?;
+            with_db(&app, move |db| db.delete_named_session(&name))
+        }
+        // ===== Ghi chú theo URL (URL-Attached Notes) =====
+        "note_get" => {
+            let url = arg("url")?;
+            with_db(&app, move |db| db.get_note(&url))
+        }
+        "note_set" => {
+            let url = arg("url")?;
+            let content = arg("content").unwrap_or_default();
+            with_db(&app, move |db| db.set_note(&url, &content))
+        }
+        "note_delete" => {
+            let url = arg("url")?;
+            with_db(&app, move |db| db.delete_note(&url))
+        }
+        // Markdown do người dùng viết: parse bằng pulldown-cmark rồi ammonia
+        // khử HTML nguy hiểm trước khi đưa vào webview. Không render ở JS để
+        // tránh hai bộ lọc lệch nhau.
+        "note_render" => {
+            let content = arg("content")?;
+            let parser = pulldown_cmark::Parser::new_ext(
+                &content,
+                pulldown_cmark::Options::all(),
+            );
+            let mut html = String::new();
+            pulldown_cmark::html::push_html(&mut html, parser);
+            Ok(Value::String(ammonia::clean(&html)))
+        }
+        "note_export_markdown" => with_db(&app, |db| {
+            let notes = db.list_notes()?;
+            let mut out = String::from("# Ghi chú Bytwina\n\n");
+            for (url, content, _updated_at) in notes {
+                out.push_str(&format!("## {url}\n\n{content}\n\n---\n\n"));
+            }
+            Ok(Value::String(out))
         }),
         // ===== M3: tải xuống =====
         "downloads_list" => with_db(&app, |db| db.list_downloads()),

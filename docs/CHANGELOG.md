@@ -5,23 +5,36 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
 ## 0.0.5 — 2026-11-21 (so với 0.0.4)
 
 ### Thêm (Add)
+- **Ghi chú gắn trang web (URL-Attached Notes)**:
+  - Mỗi URL có một ghi chú Markdown riêng, lưu trong bảng `page_notes` của SQLite. Mở lại trang, chip **Ghi chú** xuất hiện ngay trong omnibox để mở lại nội dung.
+  - Markdown được parse bằng `pulldown-cmark` và khử HTML nguy hiểm bằng `ammonia` phía Rust trước khi hiển thị, nên không render Markdown thô trong webview.
+  - Có chế độ **Xem trước** / **Chỉnh sửa**, xóa ghi chú và **Xuất Markdown** toàn bộ ghi chú ra tệp `.md`.
+- **Phiên lưu có tên (Named Sessions)**:
+  - Lưu danh sách tab hiện tại (kèm tab ghim và nhóm tab) dưới một tên tự chọn, ví dụ "Công việc" hay "Nghiên cứu".
+  - Khôi phục hoặc xóa từng phiên trong menu **Phiên đã lưu** và trong **Cài đặt → Phiên đã lưu**; khôi phục mở thêm tab, không đóng tab đang mở.
+  - Tự động lưu phiên định kỳ giãn từ 30 giây lên **60 giây** để giảm ghi đĩa.
+- **Nhập / Xuất Bookmark (Chrome Import & HTML Export)**:
+  - Tích hợp tính năng 1-click **Nhập từ Chrome**: Tự động phát hiện và đọc tệp Bookmarks trong profile Google Chrome mặc định trên Windows (`%LOCALAPPDATA%\Google\Chrome\User Data\Default\Bookmarks`), giữ nguyên cấu trúc thư mục.
+  - Hỗ trợ **Xuất HTML Bookmark chuẩn**: Xuất toàn bộ dấu trang ra tệp định dạng chuẩn Netscape HTML để dễ dàng chuyển sang bất kỳ trình duyệt nào khác.
 - **Killer Feature: Focus Mode (Chế độ tập trung)**:
-  - Bấm phím tắt **`F11`** hoặc **`Ctrl+Shift+F`** để ẩn sạch toàn bộ Tab bar, thanh điều hướng và menu, trả lại 100% diện tích màn hình cho trang web.
+  - Bấm phím tắt **`Ctrl+Shift+F`** để ẩn sạch toàn bộ Tab bar, thanh điều hướng và menu, trả lại 100% diện tích màn hình cho trang web mà không xung đột với F11 Fullscreen của Windows.
   - Tích hợp một thanh tiến trình đọc mỏng tinh tế (`focus-progress`) ở cạnh trên cùng cửa sổ để theo dõi trạng thái tải trang. Bấm vào thanh này sẽ thoát nhanh chế độ tập trung.
-- **Dịch vụ SQLite Favicon Cache (Rust Background Service)**:
-  - Bổ sung bảng CSDL `favicons` lưu trữ data URI base64 của biểu tượng trang web theo domain.
+- **Dịch vụ SQLite Favicon Cache (Rust Background Service) kèm TTL 7 ngày**:
+  - Bổ sung bảng CSDL `favicons` lưu trữ data URI base64 của biểu tượng trang web theo domain, có cơ chế thời hạn hết hạn 7 ngày để tự động làm mới favicon.
   - Background service tự động tải favicon độ phân giải cao và lưu cache offline, giúp tab hiển thị tức thì mà không cần phụ thuộc vào mạng mỗi lần mở lại.
 - **Spring Physics Animation (Hiệu ứng động quán tính tự nhiên)**:
   - Nâng cấp chuyển động của Tab và các bảng điều khiển Panel bằng hàm vật lý lò xo `cubic-bezier(0.34, 1.56, 0.64, 1)`.
-  - Hiệu ứng tab hover có độ nảy nhẹ (overshoot `translateY(-2px) scale(1.01)`), panel xuất hiện bung mở mượt mà như phong cách Arc Browser.
+  - Hiệu ứng tab hover có độ nảy nhẹ (overshoot `translateY(-2px) scale(1.01)`). Tôn trọng thiết lập `prefers-reduced-motion` của Windows.
 - **Chuẩn hóa bộ Icon hệ thống**:
   - Tinh chỉnh toàn bộ biểu tượng SVG trong `Icons.tsx` theo chuẩn Lucide nét 1.8px sắc nét, đồng bộ tỷ lệ và cân đối trên mọi độ phân giải.
-- **Tối ưu Adblock chuyên sâu cho YouTube, TikTok, Facebook**:
-  - Bổ sung danh sách `ublock-quick-fixes` chuyên trị các chiến dịch chặn adblock của YouTube.
-  - Tích hợp luật lọc thẩm mỹ (cosmetic rules) trực tiếp cho các vị trí quảng cáo feeds/video/banner trên YouTube, Facebook (bài viết Được tài trợ/Sponsored), và TikTok ad badge.
+- **Tối ưu Adblock chuyên sâu cho YouTube, TikTok (chuẩn CSS)**:
+  - Loại bỏ các cú pháp không hợp lệ như `:contains()` để tránh parser CSS WebView2 bị silent fail.
+  - Bổ sung danh sách `ublock-quick-fixes` chuyên trị các chiến dịch chặn adblock của YouTube và dùng thuộc tính ổn định `div[data-e2e='feed-ad']` cho TikTok.
 - **Omnibox Thông minh (Smart Address Bar)**:
-  - **Tính toán nhanh trực tiếp**: Nhập các phép toán (vd `100*5+20`, `25/5 + 10`) sẽ lập tức hiển thị kết quả ngay trong thanh gợi ý. Bấm vào để copy kết quả.
-  - **Gợi ý lịch sử tức thì (Instant History Search)**: Khi nhập từ khóa, tự động truy vấn và hiển thị dropdown danh sách các trang web đã từng truy cập để mở nhanh.
+  - **Tính toán nhanh trực tiếp**: Nhập các phép toán (vd `100*5+20`, `25/5 + 10`) sẽ lập tức hiển thị kết quả ngay trong thanh gợi ý. Bấm vào để sao chép kết quả.
+  - **Parser số học riêng**: Không dùng `Function`/`eval`; biểu thức do người dùng gõ không bao giờ được thực thi như JavaScript.
+  - **Gợi ý tức thì (Instant Suggestions)**: Gộp dấu trang và lịch sử, lọc mờ theo từ khóa, tối đa 8 kết quả, debounce 150ms; điều hướng bằng phím ↑/↓ và Enter.
+  - **Kết quả gợi ý**: Dropdown hiển thị tiêu đề + URL, mục đang chọn có nền nổi bật; dấu trang được ưu tiên trước lịch sử.
   - **Phím tắt tìm kiếm đa công cụ (Search Engine Shortcuts)**: Nhập tiền tố `!g <từ khóa>` (Google), `!d` (DuckDuckGo), `!b` (Bing), `!y` (YouTube), `!w` (Wikipedia) để tìm kiếm trực tiếp trên dịch vụ mong muốn mà không cần đổi cài đặt mặc định.
 - **Hệ thống phím tắt phong phú & sửa lỗi không nhận phím**:
   - Bắt sự kiện với capture phase giúp phím tắt không bị nuốt bởi các phần tử nội dung con.

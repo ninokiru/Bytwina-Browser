@@ -4,6 +4,7 @@ import { cmd } from "./tabs";
 import { getLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
 import PasswordVault from "./PasswordVault";
+import SessionManager from "./SessionManager";
 import {
   AlertIcon,
   BackupIcon,
@@ -14,6 +15,7 @@ import {
   DownloadIcon,
   GridIcon,
   KeyIcon,
+  LayersIcon,
   LockIcon,
   PaletteIcon,
   PowerIcon,
@@ -516,6 +518,10 @@ export default function Settings({
             <p className="hint">{t("settings.startupHint")}</p>
           </Section>
 
+          <Section id="settings-sessions" title={t("settings.sessions")}>
+            <SessionManager />
+          </Section>
+
           <Section id="settings-privacy" title={t("settings.privacy")}>
             <label className="settings-row">
               {t("settings.privateMode")}
@@ -778,6 +784,7 @@ const SECTIONS: { id: string; label: Key; icon: ComponentType; group: number; ke
     { id: "settings-layout", label: "settings.layout", icon: GridIcon, group: 0, keywords: "tab doc ngang layout vertical chia man hinh" },
     { id: "settings-search", label: "settings.search", icon: SearchIcon, group: 0, keywords: "cong cu tim kiem engine google duckduckgo trang chu homepage" },
     { id: "settings-startup", label: "settings.startup", icon: PowerIcon, group: 0, keywords: "khoi dong phien truoc restore" },
+    { id: "settings-sessions", label: "settings.sessions", icon: LayersIcon, group: 0, keywords: "phien session luu ten tab restore khoi phuc" },
     { id: "settings-privacy", label: "settings.privacy", icon: LockIcon, group: 1, keywords: "rieng tu an danh cookie xoa lich su download data" },
     { id: "settings-permissions", label: "settings.permissions", icon: KeyIcon, group: 1, keywords: "quyen camera micro thong bao vi tri clipboard site" },
     { id: "settings-adblock", label: "settings.adblock", icon: ShieldIcon, group: 1, keywords: "chan quang cao tracker easylist abpvn" },

@@ -41,11 +41,74 @@ tauri-plugin-autostart = "2"
 # M14: tự cập nhật từ GitHub Releases. Đọc latest.json + verify chữ ký minisign;
 # khoá công khai do CI chèn vào tauri.conf.json từ secret.
 tauri-plugin-updater = "2"
+# Ghi chú gắn URL. Markdown được parse ở Rust rồi ammonia khử HTML nguy
+# hiểm, nên frontend chỉ hiển thị chuỗi đã làm sạch (không tự render Markdown).
+pulldown-cmark = "0.13"
+ammonia = "4"
 # Public Suffix List: xác định đúng registrable domain cho luật third-party của
 # bộ chặn. `adblock` có resolver riêng nhưng hàm so sánh bên ta thì không, nên
 # `co.uk`/`com.vn` từng bị đoán sai. Đã có sẵn trong Cargo.lock qua chuỗi phụ
 # thuộc, khai báo ở đây để dùng trực tiếp.
 psl = "2"
+# Tìm kiếm thông minh: bỏ dấu tiếng Việt, tìm mờ, đo độ tương tự chuỗi.
+unidecode = "0.3"
+nucleo = "0.5"
+strsim = "0.11"
+# Định danh duy nhất và đoán loại MIME từ đuôi file.
+uuid = "1"
+mime_guess = "2"
+# Tìm kiếm toàn văn (engine kiểu Lucene) cho lịch sử và ghi chú.
+tantivy = "0.27"
+# Tìm mờ kiểu fzf (gõ "fce" ra "facebook").
+fuzzy-matcher = "0.3"
+# HTTP client có hỗ trợ tải tiếp (resume); bên cạnh ureq đang dùng cho danh sách lọc.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
+# Xử lý async song song.
+futures = "0.3"
+# Giải nén gzip/deflate và zstd.
+flate2 = "1"
+zstd = "0.14"
+# Xử lý ảnh, đổi kích thước favicon, đọc .ico và WebP.
+image = "0.25"
+ico = "0.5"
+webp = "0.3"
+# Crypto tổng hợp và hash SHA-2.
+ring = "0.17"
+sha2 = "0.11"
+
+# ===== Plugin Tauri 2 (chưa đăng ký trong main.rs: cần .plugin(...) và quyền trong capabilities) =====
+tauri-plugin-dialog = "2.8"
+tauri-plugin-notification = "2.4"
+tauri-plugin-global-shortcut = "2.4"
+tauri-plugin-opener = "2.7"
+tauri-plugin-window-state = "2.5"
+tauri-plugin-single-instance = "2.5"
+tauri-plugin-deep-link = "2.6"
+# Trùng với SQLite (rusqlite) và cài đặt đang lưu trong CSDL: chỉ thêm để có sẵn.
+tauri-plugin-store = "2.4"
+tauri-plugin-log = "2.9"
+tauri-plugin-clipboard-manager = "2.5"
+tauri-plugin-http = "2.8"
+tauri-plugin-process = "2.3"
+
+# ===== Đọc bài, HTML, Markdown, PDF =====
+dom_smoothie = "0.18"
+scraper = "0.29"
+html5ever = "0.40"
+comrak = "1"
+lopdf = "0.46"
+printpdf = "0.12"
+
+# ===== Tiện ích hệ thống =====
+dirs = "7"
+directories = "6"
+notify = "8"
+arboard = "3"
+chrono = "0.4"
+parking_lot = "0.12"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
 
 [features]
 default = []
@@ -55,6 +118,8 @@ alloc-mimalloc = ["dep:mimalloc"]
 # (webview2-com 0.39, windows 0.62). Không tự ý nâng: lệch phiên bản là hai bản
 # crate song song và kiểu COM không tương thích nhau.
 [target.'cfg(target_os = "windows")'.dependencies]
+# Đọc registry Windows.
+winreg = "0.56"
 webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com"] }
 

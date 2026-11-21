@@ -10,8 +10,10 @@ Trạng thái: **chưa biên dịch, chưa chạy thử** cho mọi mục M2–M
   - [x] Trang tab mới trong webview toolbar: ô tìm kiếm lớn, chọn công cụ tìm kiếm, quick link từ dấu trang/lịch sử, gợi ý khi rỗng (chưa kiểm chứng runtime trên Windows)
   - [ ] Phím tắt toàn cục (Ctrl+T/W/L/R hiện chỉ hoạt động khi focus vào toolbar)
   - [x] Popup: chặn cửa sổ mới, URL hợp lệ mở thành tab nền (hàng đợi 16 mục)
-- [~] M2 — Dữ liệu: SQLite (bookmark, lịch sử, cài đặt, phiên). Schema v2.
+- [~] M2 — Dữ liệu: SQLite (bookmark, lịch sử, cài đặt, phiên, ghi chú). Schema v5.
   - [x] Phiên lưu cả tab ghim và nhóm tab
+  - [x] Phiên lưu có tên (bảng `saved_sessions`), khôi phục/xóa từ menu và Cài đặt; tự lưu mỗi 60 giây
+  - [x] Ghi chú gắn URL (bảng `page_notes`), Markdown + ammonia, xuất `.md`
   - [ ] Sao lưu/khôi phục DB, WAL checkpoint khi thoát
   - [ ] Tách profile: đã có thư mục dữ liệu riêng theo workspace; còn thiếu sao lưu và chọn profile mặc định (chưa kiểm chứng runtime)
 - [~] M3 — Tải xuống

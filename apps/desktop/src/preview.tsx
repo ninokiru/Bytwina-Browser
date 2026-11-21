@@ -167,6 +167,30 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
   password_update: () => null,
   password_remove: () => null,
   password_wipe: () => null,
+  // Ghi chú + phiên lưu: ?note=1 bật ghi chú mẫu cho URL đang mở.
+  note_get: (args) =>
+    params.get("note") === "1" && args.url
+      ? "# Ghi chú mẫu\n\nĐây là **ghi chú** gắn với trang này.\n\n- Mở lại trang sẽ thấy chip Ghi chú\n- Bấm để sửa nội dung"
+      : null,
+  note_set: () => null,
+  note_delete: () => null,
+  note_render: (args) => {
+    const text = String(args.content ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    return `<p>${text.replace(/\n/g, "<br>")}</p>`;
+  },
+  note_export_markdown: () => "# Ghi chú Bytwina\n\n## https://example.com/\n\nghi chú mẫu\n",
+  bookmark_export_html: () => "<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p></DL><p>",
+  bookmark_import_chrome: () => ({ imported: 3 }),
+  session_list_named: () => [
+    { name: "Công việc", tabCount: 5, createdAt: Math.floor(Date.now() / 1000) - 3600 },
+    { name: "Nghiên cứu", tabCount: 3, createdAt: Math.floor(Date.now() / 1000) - 86_400 },
+  ],
+  session_save_named: () => null,
+  session_restore_named: () => null,
+  session_delete_named: () => null,
 };
 
 (globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {

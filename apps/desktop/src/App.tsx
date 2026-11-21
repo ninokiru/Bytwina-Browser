@@ -7,11 +7,13 @@ import NewTab from "./NewTab";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
+import { evaluateArithmetic } from "./calc";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
   CloseIcon,
   BookmarkPlusIcon,
+  FileTextIcon,
   GlassesIcon,
   GlobeIcon,
   GridIcon,
@@ -31,9 +33,22 @@ import {
 
 const DEFAULT_HOME = "https://example.com/";
 
-// Chỉ cần đúng phần App dùng để tô ngôi sao.
+// Chỉ cần đúng phần App dùng để tô ngôi sao và gợi ý dấu trang.
 interface Bookmark {
+  title: string;
   url: string;
+}
+
+interface Suggestion {
+  title: string;
+  url: string;
+  type: "calc" | "history" | "shortcut";
+}
+
+// Ghi chú gắn với URL đang mở; nội dung chỉ dùng cho tooltip của chip.
+interface PageNote {
+  url: string;
+  content: string;
 }
 
 // Toolbar là webview tin cậy duy nhất được phép gọi IPC (capabilities/default.json).
@@ -67,8 +82,11 @@ export default function App() {
   // Chế độ tập trung (Focus Mode): ẩn toàn bộ thanh công cụ, chỉ để lại webview và progress bar
   const [focusMode, setFocusMode] = useState(false);
   // Omnibox suggestions & quick calc
-  const [suggestions, setSuggestions] = useState<Array<{ title: string; url: string; type: "calc" | "history" | "shortcut" }>>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [calcResult, setCalcResult] = useState<string | null>(null);
+  const [suggestIndex, setSuggestIndex] = useState(-1);
+  // Ghi chú gắn URL: hiện chip trong omnibox khi mở lại trang đã có ghi chú.
+  const [pageNote, setPageNote] = useState<PageNote | null>(null);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -128,6 +146,81 @@ export default function App() {
       .then((list) => setStarred(((list as Bookmark[]) ?? []).some((b) => b.url === url)))
       .catch(() => setStarred(false));
   }, [active?.url, panel]);
+
+  // Ghi chú gắn URL: đọc khi tab đổi trang. Chỉ nhận http(s) và bỏ qua khi
+  // chính bảng ghi chú đang mở (tránh thẻ nổi che trình soạn thảo).
+  useEffect(() => {
+    const url = active?.url;
+    if (!url || url === "about:blank" || !/^https?:/i.test(url) || panel === "notes") {
+      setPageNote(null);
+      return;
+    }
+    let alive = true;
+    void cmd("note_get", { url })
+      .then((note) => {
+        if (!alive) return;
+        if (typeof note !== "string" || !note.trim()) {
+          setPageNote(null);
+          return;
+        }
+        setPageNote({ url, content: note });
+      })
+      .catch(() => {
+        if (alive) setPageNote(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [active?.url, active?.id, panel]);
+
+  // Omnibox: chờ 150ms sau lần gõ cuối rồi mới truy vấn, gộp lịch sử và dấu
+  // trang, tối đa 8 gợi ý. Tính toán chạy qua parser riêng, không eval.
+  useEffect(() => {
+    if (!editing) return;
+    const val = input.trim();
+    setSuggestIndex(-1);
+    if (!val) {
+      setCalcResult(null);
+      setSuggestions([]);
+      return;
+    }
+    setCalcResult(evaluateArithmetic(val));
+    // Chuỗi trông như URL thì không cần gợi ý tìm kiếm.
+    if (val.length < 2 || /^[a-z][a-z0-9+.-]*:\/\//i.test(val)) {
+      setSuggestions([]);
+      return;
+    }
+    let alive = true;
+    const timer = setTimeout(() => {
+      void Promise.all([
+        cmd("history_search", { query: val }).catch(() => []),
+        cmd("bookmark_list").catch(() => []),
+      ])
+        .then(([history, marks]) => {
+          if (!alive) return;
+          const merged: Suggestion[] = [];
+          const seen = new Set<string>();
+          const add = (title: string, url: string, type: Suggestion["type"]) => {
+            if (merged.length >= 8 || !url || seen.has(url)) return;
+            if (!/^https?:/i.test(url)) return;
+            if (fuzzyScore(val, `${title} ${url}`) <= 0) return;
+            seen.add(url);
+            merged.push({ title: title || url, url, type });
+          };
+          for (const b of (marks as Bookmark[]) ?? []) add(b.title, b.url, "shortcut");
+          for (const h of (history as Array<{ title: string; url: string }>) ?? [])
+            add(h.title, h.url, "history");
+          setSuggestions(merged);
+        })
+        .catch(() => {
+          if (alive) setSuggestions([]);
+        });
+    }, 150);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [input, editing]);
 
   useEffect(() => {
     const un = listen<BrowserStatePayload>("browser://state", (e) => setState(e.payload));
@@ -280,8 +373,8 @@ export default function App() {
         e.preventDefault();
         void cmd("forward");
       } 
-      // F11 hoặc Ctrl+Shift+F: Bật/tắt Chế độ tập trung (Focus Mode)
-      else if (e.key === "F11" || (mod && e.shiftKey && e.key.toLowerCase() === "f")) {
+      // Ctrl+Shift+F: Bật/tắt Chế độ tập trung (Focus Mode) — tránh tranh chấp với F11 Fullscreen của Windows
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
         e.stopPropagation();
         toggleFocusMode();
@@ -316,6 +409,11 @@ export default function App() {
     setEditing(false);
     // bytwina://... không có thật bị từ chối ở backend: giữ lại ô địa chỉ, không log lỗi.
     void cmd("navigate", { id: String(active.id), input }).catch(() => undefined);
+  };
+
+  const openSuggestion = (s: Suggestion) => {
+    setInput(s.url);
+    if (active) void cmd("navigate", { id: String(active.id), input: s.url }).catch(() => undefined);
   };
 
   // Khiên theo tab đang mở. Bộ đếm là TỔNG của cả phiên (backend chưa phân tách
@@ -588,41 +686,8 @@ export default function App() {
             spellCheck={false}
             autoComplete="off"
             onChange={(e) => {
-              const val = e.target.value;
-              setInput(val);
+              setInput(e.target.value);
               setEditing(true);
-              // Tính toán biểu thức số học an toàn (chỉ chứa số và phép tính cơ bản)
-              const mathRegex = /^[\d\s+\-*/().%^]+$/;
-              if (val.trim() && mathRegex.test(val) && /[+\-*/%]/.test(val)) {
-                try {
-                  const res = Function(`"use strict"; return (${val})`)();
-                  if (typeof res === "number" && !isNaN(res)) {
-                    setCalcResult(String(res));
-                  } else {
-                    setCalcResult(null);
-                  }
-                } catch {
-                  setCalcResult(null);
-                }
-              } else {
-                setCalcResult(null);
-              }
-              // Gợi ý lịch sử nhanh
-              if (val.trim().length >= 2 && !val.startsWith("http")) {
-                void cmd("history_search", { query: val.trim() }).then((data) => {
-                  if (Array.isArray(data)) {
-                    setSuggestions(
-                      data.slice(0, 5).map((h: { title: string; url: string }) => ({
-                        title: h.title || h.url,
-                        url: h.url,
-                        type: "history",
-                      }))
-                    );
-                  }
-                }).catch(() => setSuggestions([]));
-              } else {
-                setSuggestions([]);
-              }
             }}
             onFocus={(e) => {
               setEditing(true);
@@ -634,28 +699,46 @@ export default function App() {
                 setEditing(false);
                 setCalcResult(null);
                 setSuggestions([]);
+                setSuggestIndex(-1);
               }, 200);
             }}
             onKeyDown={(e) => {
+              if (e.key === "ArrowDown" && suggestions.length > 0) {
+                e.preventDefault();
+                setSuggestIndex((i) => (i + 1) % suggestions.length);
+                return;
+              }
+              if (e.key === "ArrowUp" && suggestions.length > 0) {
+                e.preventDefault();
+                setSuggestIndex((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+                return;
+              }
               if (e.key === "Enter") {
+                const picked = suggestIndex >= 0 ? suggestions[suggestIndex] : null;
                 setEditing(false);
                 setCalcResult(null);
                 setSuggestions([]);
-                go();
+                setSuggestIndex(-1);
+                if (picked) openSuggestion(picked);
+                else go();
               }
               if (e.key === "Escape") {
                 setEditing(false);
                 setCalcResult(null);
                 setSuggestions([]);
+                setSuggestIndex(-1);
               }
             }}
           />
           {editing && (calcResult || suggestions.length > 0) && (
             <div className="omni-dropdown">
               {calcResult && (
+
                 <div
                   className="omni-dropdown-item calc"
+                  title="Bấm để sao chép kết quả"
                   onClick={() => {
+                    void navigator.clipboard?.writeText(calcResult).catch(() => undefined);
                     setInput(calcResult);
                     setCalcResult(null);
                   }}
@@ -666,13 +749,14 @@ export default function App() {
               )}
               {suggestions.map((s, idx) => (
                 <div
-                  key={idx}
-                  className="omni-dropdown-item"
+                  key={`${s.type}-${s.url}`}
+                  className={`omni-dropdown-item${idx === suggestIndex ? " active" : ""}`}
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
-                    setInput(s.url);
-                    if (active) void cmd("navigate", { id: String(active.id), input: s.url });
+                    openSuggestion(s);
                     setEditing(false);
                     setSuggestions([]);
+                    setSuggestIndex(-1);
                   }}
                 >
                   <span className="omni-drop-title">{s.title}</span>
@@ -680,6 +764,18 @@ export default function App() {
                 </div>
               ))}
             </div>
+          )}
+          {/* Trang đã có ghi chú: chip trong omnibox, bấm để mở bảng ghi chú. */}
+          {pageNote && pageNote.url === active?.url && (
+            <button
+              type="button"
+              className="omni-chip note"
+              title={`${t("note.cardTitle")}: ${pageNote.content.slice(0, 300)}`}
+              onClick={() => setPanel("notes")}
+            >
+              <FileTextIcon />
+              <span className="omni-note-label">{t("note.chip")}</span>
+            </button>
           )}
           {/* Chrome đặt ngôi sao đánh dấu bên trong ô địa chỉ. */}
           <button
@@ -879,6 +975,26 @@ export default function App() {
       )}
     </div>
   );
+}
+
+// Lọc mờ cho gợi ý omnibox: khớp liền thì điểm cao, khớp theo thứ tự chữ cái
+// vẫn nhận nhưng trừ dần theo khoảng cách. 0 nghĩa là không khớp.
+function fuzzyScore(query: string, haystack: string): number {
+  const q = query.toLowerCase().trim();
+  const h = haystack.toLowerCase();
+  if (!q) return 0;
+  const direct = h.indexOf(q);
+  if (direct >= 0) return 100 - Math.min(direct, 50);
+  let qi = 0;
+  let gaps = 0;
+  let last = -1;
+  for (let i = 0; i < h.length && qi < q.length; i += 1) {
+    if (h[i] !== q[qi]) continue;
+    if (last >= 0) gaps += i - last - 1;
+    last = i;
+    qi += 1;
+  }
+  return qi === q.length ? Math.max(1, 40 - gaps) : 0;
 }
 
 async function cycle(state: BrowserStatePayload, dir: number) {

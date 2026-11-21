@@ -7,6 +7,12 @@
 - Lệnh IPC chỉ nhận lời gọi từ webview có nhãn `toolbar`. Trước đây điều này dựa vào `capabilities/default.json`, nhưng Tauri **bỏ qua kiểm tra ACL** với lệnh tùy biến khi origin gọi là cục bộ và dự án không sinh app manifest (`build.rs` gọi `tauri_build::build()` trần) — nên từ bản này `browser_command` tự chặn theo nhãn webview gọi tới (`commands.rs`).
 - Liên kết tới origin của chính ứng dụng (`*.tauri.localhost`, `ipc.localhost`) bị chặn ở cả hai lớp: ô địa chỉ coi là tìm kiếm, và `page_navigation_allowed` từ chối trong tab. Lý do: ở origin đó, nội dung web rơi vào vùng Tauri coi là "cục bộ" và gọi được mọi lệnh IPC, gồm cả kho mật khẩu.
 
+## Ghi chú gắn URL và phiên lưu có tên
+
+- Nội dung ghi chú (`page_notes`) và danh sách tab của phiên lưu (`saved_sessions`) nằm **chữ rõ** trong SQLite, giống lịch sử và dấu trang. Không đặt mật khẩu hay thông tin nhạy cảm vào ghi chú nếu máy có người khác dùng chung.
+- Markdown chỉ được parse và làm sạch phía Rust (`pulldown-cmark` + `ammonia`) trước khi hiển thị; frontend không dùng `eval` và không tự render Markdown.
+- Ghi chú không tự gửi đi đâu; xuất `.md` chỉ tạo tệp tải xuống cục bộ.
+
 ## Kho mật khẩu (M11)
 
 - Mật khẩu chủ không được lưu ở bất kỳ đâu. Khi tạo kho, ứng dụng sinh salt ngẫu nhiên 16 byte, suy khóa 32 byte bằng Argon2id (19 MiB, 2 vòng, song song 1) rồi lưu **salt** và một **bản mã kiểm tra** dạng base64 trong bảng `settings` để lần sau biết nhập đúng hay sai.
@@ -35,7 +41,7 @@
 | HTTPS-first | Một phần: chặn http trang khác; chưa nâng cấp tự động link trong trang |
 | Chặn tài nguyên quảng cáo/tracker trong trang | CHƯA làm: cần WebResourceRequested |
 | Cô lập cookie theo hồ sơ | Một phần: chế độ riêng tư tạo lại webview bằng InPrivate; chưa tách user data folder |
-| Mã hóa dữ liệu cục bộ (SQLite) | Một phần: kho mật khẩu mã hóa AES-256-GCM; các bảng khác (lịch sử, dấu trang, phiên) vẫn chữ rõ |
+| Mã hóa dữ liệu cục bộ (SQLite) | Một phần: kho mật khẩu mã hóa AES-256-GCM; các bảng khác (lịch sử, dấu trang, phiên, ghi chú) vẫn chữ rõ |
 | Kiểm tra lừa đảo qua nguồn đáng tin cậy | CHƯA làm: cần dịch vụ bên ngoài |
 | Cập nhật bảo mật | Quét phụ thuộc định kỳ (security.yml); cập nhật tự động chưa kích hoạt |
 | Content Security Policy cho giao diện | CHƯA bật: cần kiểm thử IPC trước vì sai CSP sẽ làm hỏng toolbar |

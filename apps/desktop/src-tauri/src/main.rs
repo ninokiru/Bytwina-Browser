@@ -27,6 +27,24 @@ use navigation::PopupQueue;
 
 fn main() {
     tauri::Builder::default()
+        // Single-instance phải đăng ký đầu tiên để các plugin khác không khởi tạo hai lần.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_process::init())
         .manage(BrowserState::new())
         .manage(PopupQueue::default())
         // M11: khóa kho mật khẩu chỉ nằm trong bộ nhớ phiên chạy.
@@ -208,11 +226,12 @@ fn main() {
                 }
             });
             browser::emit_state(app.handle(), &state);
-            // M6: lưu phiên định kỳ (30 giây) để không mất tab khi app thoát bất thường.
+            // M6: lưu phiên định kỳ (60 giây) để không mất tab khi app thoát bất thường.
+            // Nhịp 60 giây giảm ghi đĩa so với 30 giây mà vẫn đủ an toàn khi tắt máy.
             let autosave_handle = app.handle().clone();
             let autosave_state = state.clone();
             std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(30));
+                std::thread::sleep(std::time::Duration::from_secs(60));
                 browser::persist_session(&autosave_handle, &autosave_state);
                 browser::sleep_idle_tabs(&autosave_handle, &autosave_state);
                 // M11: tự khóa kho theo ĐỒNG HỒ. Trước đây hạn chỉ được xét khi có

@@ -230,6 +230,23 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute_batch("CREATE TABLE IF NOT EXISTS favicons (domain TEXT PRIMARY KEY, data_url TEXT NOT NULL, updated_at INTEGER NOT NULL);")?;
         conn.execute("INSERT INTO schema_version (version) VALUES (4)", [])?;
     }
+    if version < 5 {
+        // v5: ghi chú gắn liền với URL (URL-Attached Notes) và lưu phiên theo tên (Named Sessions)
+        conn.execute_batch("
+            CREATE TABLE IF NOT EXISTS page_notes (
+                url TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS saved_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                tabs_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+        ")?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (5)", [])?;
+    }
     Ok(())
 }
 
@@ -442,10 +459,12 @@ impl Db {
     pub fn get_favicon(&self, domain: &str) -> Result<Option<String>, String> {
         let c = self.conn();
         let mut stmt = c
-            .prepare("SELECT data_url FROM favicons WHERE domain = ?1")
+            .prepare("SELECT data_url FROM favicons WHERE domain = ?1 AND updated_at > ?2")
             .map_err(|e| e.to_string())?;
+        // TTL 7 ngày (7 * 86400 giây)
+        let expire_threshold = now() - 7 * 86_400;
         let res = stmt
-            .query_row(params![domain], |r| r.get::<_, String>(0))
+            .query_row(params![domain, expire_threshold], |r| r.get::<_, String>(0))
             .ok();
         Ok(res)
     }
@@ -458,6 +477,96 @@ impl Db {
             params![domain, data_url, now()],
         )
         .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    // ===== Ghi chú theo URL (URL-Attached Notes) =====
+    pub fn get_note(&self, url: &str) -> Result<Option<String>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT content FROM page_notes WHERE url = ?1")
+            .map_err(|e| e.to_string())?;
+        let res = stmt
+            .query_row(params![url], |r| r.get::<_, String>(0))
+            .ok();
+        Ok(res)
+    }
+
+    pub fn set_note(&self, url: &str, content: &str) -> Result<(), String> {
+        let c = self.conn();
+        // Ghi chú rỗng nghĩa là xoá: không giữ hàng trống làm bẩn danh sách.
+        if content.trim().is_empty() {
+            c.execute("DELETE FROM page_notes WHERE url = ?1", params![url])
+                .map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+        c.execute(
+            "INSERT INTO page_notes (url, content, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(url) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at",
+            params![url, content, now()],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn delete_note(&self, url: &str) -> Result<(), String> {
+        let c = self.conn();
+        c.execute("DELETE FROM page_notes WHERE url = ?1", params![url])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Mọi ghi chú, mới nhất trước — dùng cho xuất Markdown.
+    pub fn list_notes(&self) -> Result<Vec<(String, String, i64)>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT url, content, updated_at FROM page_notes ORDER BY updated_at DESC")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
+    }
+
+    // ===== Lưu phiên theo tên (Named Sessions) =====
+    pub fn save_named_session(&self, name: &str, tabs_json: &str) -> Result<(), String> {
+        let c = self.conn();
+        c.execute(
+            "INSERT INTO saved_sessions (name, tabs_json, created_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(name) DO UPDATE SET tabs_json = excluded.tabs_json, created_at = excluded.created_at",
+            params![name, tabs_json, now()],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_named_sessions(&self) -> Result<Vec<(String, String, i64)>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT name, tabs_json, created_at FROM saved_sessions ORDER BY created_at DESC")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
+    }
+
+    pub fn delete_named_session(&self, name: &str) -> Result<(), String> {
+        let c = self.conn();
+        c.execute("DELETE FROM saved_sessions WHERE name = ?1", params![name])
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 }
@@ -914,6 +1023,39 @@ mod security_tests {
         assert_eq!(db.clear_history_for_host("example.com").unwrap(), 1);
         assert!(db.clear_history_for_host("exa mple.com").is_err());
         assert!(db.clear_history_for_host("").is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn notes_and_named_sessions_round_trip() {
+        let dir = std::env::temp_dir().join(format!("bytwina-test-notes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db = open(dir.clone()).expect("mở CSDL test");
+        // Ghi chú gắn đúng URL, sửa tại chỗ, xoá bằng nội dung rỗng.
+        db.set_note("https://a.test/x", "# Ghi chú\n\nnội dung").unwrap();
+        assert!(db
+            .get_note("https://a.test/x")
+            .unwrap()
+            .unwrap()
+            .contains("nội dung"));
+        db.set_note("https://a.test/x", "bản mới").unwrap();
+        assert_eq!(db.get_note("https://a.test/x").unwrap().unwrap(), "bản mới");
+        db.set_note("https://a.test/x", "   ").unwrap();
+        assert!(db.get_note("https://a.test/x").unwrap().is_none());
+        db.set_note("https://b.test/", "khác").unwrap();
+        assert_eq!(db.list_notes().unwrap().len(), 1);
+        db.delete_note("https://b.test/").unwrap();
+        assert!(db.list_notes().unwrap().is_empty());
+        // Phiên có tên: lưu đè theo tên, liệt kê và xoá.
+        db.save_named_session("Công việc", r#"[{"url":"https://a.test/","title":"A","pinned":false,"group":null}]"#)
+            .unwrap();
+        db.save_named_session("Công việc", r#"[{"url":"https://b.test/","title":"B","pinned":true,"group":null}]"#)
+            .unwrap();
+        let sessions = db.list_named_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert!(sessions[0].1.contains("b.test"));
+        db.delete_named_session("Công việc").unwrap();
+        assert!(db.list_named_sessions().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 
