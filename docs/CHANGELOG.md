@@ -12,9 +12,14 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
   - **Tính toán nhanh trực tiếp**: Nhập các phép toán (vd `100*5+20`, `25/5 + 10`) sẽ lập tức hiển thị kết quả ngay trong thanh gợi ý. Bấm vào để copy kết quả.
   - **Gợi ý lịch sử tức thì (Instant History Search)**: Khi nhập từ khóa, tự động truy vấn và hiển thị dropdown danh sách các trang web đã từng truy cập để mở nhanh.
   - **Phím tắt tìm kiếm đa công cụ (Search Engine Shortcuts)**: Nhập tiền tố `!g <từ khóa>` (Google), `!d` (DuckDuckGo), `!b` (Bing), `!y` (YouTube), `!w` (Wikipedia) để tìm kiếm trực tiếp trên dịch vụ mong muốn mà không cần đổi cài đặt mặc định.
+- **Hệ thống phím tắt phong phú & sửa lỗi không nhận phím**:
+  - Bắt sự kiện với capture phase giúp phím tắt không bị nuốt bởi các phần tử nội dung con.
+  - Bổ sung phím tắt: `Ctrl+W` (đóng tab), `Alt+D` / `F6` (chọn thanh địa chỉ), `F5` / `Ctrl+Shift+R` (tải lại trang), `Ctrl+1..8` (nhảy đến tab tương ứng), `Ctrl+9` (nhảy đến tab cuối), `Alt+Home` (về trang chủ).
 - **Giao diện Modern Glassmorphism (Phong cách Chrome & Cốc Cốc)**:
   - Thanh Tab bo tròn 12px, tab đang chọn nổi bật với hiệu ứng kính mờ (frosted glass), viền sáng phản quang trên đỉnh và bóng đổ đa tầng.
-  - Hỗ trợ hiển thị Favicon thật từ website kèm hiệu ứng bóng tinh tế.
+  - Favicon thật của website được tải trực tiếp cho từng tab (không chỉ newtab), với chữ cái dự phòng khi offline.
+  - Kích thước biểu tượng nút công cụ được nâng lên (32px / icon 18px) dễ bấm và trực quan hơn.
+  - Trang Cài đặt mở toàn trang độc lập (Master-Detail layout) thay vì popup, chuyển đổi từng mục mượt mà.
   - Thanh địa chỉ Omnibox dạng Pill mềm mại hoàn toàn bo tròn (`border-radius: 9999px`), có hiệu ứng viền phát sáng (focus glow) và icon khiên bảo mật trực quan.
   - Các mục Cài đặt được tổ chức theo khối Card Group bo góc hiện đại, tự động nổi khối khi rê chuột.
 - **Chặn quảng cáo động (Dynamic Adblock & MutationObserver)**:
@@ -23,6 +28,7 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
   - Tích hợp thêm bộ lọc ABPVN, uBlock Filters và uBlock Privacy vào bộ lọc mặc định.
 
 ### Thay đổi (Change)
+- **Tên hiển thị tab rỗng**: Đổi từ chuỗi thô `about:blank` sang tên thân thiện `Thẻ mới`.
 - **Dark Mode**: Chuyển sang tông màu tối sâu (`#0d1117`), tăng độ tương phản và viền phản quang giúp dịu mắt và sang trọng hơn.
 - **Tự động khóa Kho mật khẩu**: Nâng cấp thời gian tự động khóa mặc định lên 15 phút (thay vì không bao giờ khóa) để bảo vệ tài khoản khi rời máy.
 - **Tối ưu tốc độ CI/CD**: Chạy song song độc lập giữa Frontend và Rust, tự động gom toàn bộ lỗi vào bảng thông báo trong 1 lần chạy duy nhất.

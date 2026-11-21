@@ -172,61 +172,129 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Phím tắt của ứng dụng. Webview nội dung không nhận mấy tổ hợp này
-  // vì không có bridge Tauri ở phía trang; Ctrl+T/W/L/R phải đăng ký qua plugin
-  // global-shortcut (M1 follow-up) — hiện chỉ hoạt động khi focus vào toolbar.
+  // Phím tắt của ứng dụng.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.type !== "keydown") return;
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === "t") {
+      
+      // Ctrl+T: Mở tab mới
+      if (mod && e.key.toLowerCase() === "t" && !e.shiftKey) {
         e.preventDefault();
+        e.stopPropagation();
         newTab();
-      } else if (mod && e.key.toLowerCase() === "l") {
+      } 
+      // Ctrl+W: Đóng tab hiện tại
+      else if (mod && e.key.toLowerCase() === "w") {
         e.preventDefault();
+        e.stopPropagation();
+        if (active) void cmd("close_tab", { id: String(active.id) });
+      }
+      // Ctrl+L hoặc Alt+D hoặc F6: Chọn thanh địa chỉ
+      else if ((mod && e.key.toLowerCase() === "l") || (e.altKey && e.key.toLowerCase() === "d") || e.key === "F6") {
+        e.preventDefault();
+        e.stopPropagation();
         setEditing(true);
-        (document.getElementById("address") as HTMLInputElement | null)?.focus();
-      } else if (mod && e.key.toLowerCase() === "r") {
+        const addr = document.getElementById("address") as HTMLInputElement | null;
+        if (addr) {
+          addr.focus();
+          addr.select();
+        }
+      } 
+      // F5 hoặc Ctrl+R: Tải lại trang
+      else if (e.key === "F5" || (mod && e.key.toLowerCase() === "r" && !e.shiftKey)) {
         e.preventDefault();
+        e.stopPropagation();
         void cmd("reload");
-      } else if (mod && e.shiftKey && e.key.toLowerCase() === "n") {
+      } 
+      // Ctrl+F5 hoặc Ctrl+Shift+R: Tải lại trang bỏ qua cache
+      else if ((e.ctrlKey && e.key === "F5") || (mod && e.shiftKey && e.key.toLowerCase() === "r")) {
+        e.preventDefault();
+        e.stopPropagation();
+        void cmd("reload");
+      }
+      // Ctrl+Shift+N: Mở/tắt duyệt web riêng tư
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
         void cmd("private_set", { on: state.private ? "0" : "1" });
-      } else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
+      } 
+      // Ctrl+Shift+O: Mở dấu trang
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
         setPanel("bookmarks");
-      } else if (mod && e.key.toLowerCase() === "j") {
+      } 
+      // Ctrl+J: Mở danh sách tải xuống
+      else if (mod && e.key.toLowerCase() === "j") {
         e.preventDefault();
         setPanel("downloads");
-      } else if (mod && e.key.toLowerCase() === "h") {
+      } 
+      // Ctrl+H: Mở lịch sử duyệt web
+      else if (mod && e.key.toLowerCase() === "h") {
         e.preventDefault();
         setPanel("history");
-      } else if (mod && e.key.toLowerCase() === "d") {
+      } 
+      // Ctrl+D: Thêm dấu trang
+      else if (mod && e.key.toLowerCase() === "d" && !e.altKey) {
         e.preventDefault();
         bookmarkCurrent();
-      } else if (mod && e.shiftKey && e.code === "Delete") {
+      } 
+      // Ctrl+Shift+Del: Xóa dữ liệu duyệt web (mở cài đặt quyền riêng tư)
+      else if (mod && e.shiftKey && (e.code === "Delete" || e.key === "Delete")) {
         e.preventDefault();
         openSettingsPage("settings-privacy");
-      } else if (mod && e.key.toLowerCase() === "q") {
+      } 
+      // Ctrl+1 đến Ctrl+8: Nhảy đến tab 1 -> 8
+      else if (mod && !e.shiftKey && !e.altKey && /^[1-8]$/.test(e.key)) {
         e.preventDefault();
-        void cmd("exit").catch(() => undefined);
-      } else if (e.altKey && e.key === "ArrowLeft") {
-        void cmd("back");
-      } else if (e.altKey && e.key === "ArrowRight") {
-        void cmd("forward");
-      } else if (mod && e.key === "Tab") {
+        const tabIndex = parseInt(e.key, 10) - 1;
+        if (state.tabs[tabIndex]) {
+          void cmd("activate_tab", { id: String(state.tabs[tabIndex].id) });
+        }
+      }
+      // Ctrl+9: Nhảy đến tab cuối cùng
+      else if (mod && !e.shiftKey && !e.altKey && e.key === "9") {
+        e.preventDefault();
+        if (state.tabs.length > 0) {
+          const lastTab = state.tabs[state.tabs.length - 1];
+          void cmd("activate_tab", { id: String(lastTab.id) });
+        }
+      }
+      // Ctrl+Tab / Ctrl+Shift+Tab: Chuyển tab tiếp theo / trước đó
+      else if (mod && e.key === "Tab") {
         e.preventDefault();
         void cycle(state, e.shiftKey ? -1 : 1);
-      } else if (e.key === "Escape") {
+      } 
+      // Ctrl+Q: Thoát trình duyệt
+      else if (mod && e.key.toLowerCase() === "q") {
+        e.preventDefault();
+        void cmd("exit").catch(() => undefined);
+      } 
+      // Alt+Left: Quay lại
+      else if (e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        void cmd("back");
+      } 
+      // Alt+Right: Tiến tới
+      else if (e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        void cmd("forward");
+      } 
+      // Alt+Home: Về trang chủ
+      else if (e.altKey && e.key === "Home") {
+        e.preventDefault();
+        if (active) void cmd("navigate", { id: String(active.id), input: home });
+      }
+      // Escape: Đóng panel hoặc dừng tải
+      else if (e.key === "Escape") {
         if (panel) setPanel(null);
         else void cmd("stop");
       }
     };
-    window.addEventListener("keydown", onKey);
+    // Dùng capture: true để bắt phím tắt trước các phần tử con
+    window.addEventListener("keydown", onKey, { capture: true });
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, { capture: true });
     };
-  }, [state, panel]);
+  }, [state, panel, active, home]);
 
   // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
   // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
@@ -398,7 +466,16 @@ export default function App() {
                   className="tab-fav"
                   style={{ ["--fav" as string]: favColor(tb.url + tb.id) }}
                 >
-                  {favLetter(tb)}
+                  {tb.url && tb.url !== "about:blank" && tb.url !== "about:blank/" ? (
+                    <img
+                      src={`https://www.google.com/s2/favicons?domain=${hostOf(tb.url)}&sz=32`}
+                      alt=""
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = "none";
+                      }}
+                    />
+                  ) : null}
+                  <span className="tab-fav-letter">{favLetter(tb)}</span>
                 </span>
                 <span className="tab-label">{tabTitle(tb)}</span>
                 {tb.group ? <span className="tab-group-dot" title={tb.group} /> : null}
@@ -676,7 +753,52 @@ export default function App() {
         />
       )}
 
-      {panel && (
+      {panel === "settings" ? (
+        <Panel
+          kind="settings"
+          onClose={() => setPanel(null)}
+          onOpen={(kind) => {
+            setSettingsPage("");
+            setPanel(kind);
+          }}
+          onNavigate={(url) => {
+            setPanel(null);
+            if (active) void cmd("navigate", { id: String(active.id), input: url });
+          }}
+          privateMode={state.private}
+          onHomeChange={setHome}
+          menu={{
+            url: active?.url ?? "",
+            title: active?.title ?? "",
+            zoom,
+            vertical: state.vertical,
+            settingsPage,
+            onNewTab: newTab,
+            onBookmark: bookmarkCurrent,
+            onZoom: applyZoom,
+            onVertical: (vertical) =>
+              void cmd("tab_layout", { layout: vertical ? "vertical" : "horizontal" }).catch(
+                () => undefined,
+              ),
+            onOpenSettings: openSettingsPage,
+            onExit: () => void cmd("exit").catch(() => undefined),
+            onCheckUpdate: async () => {
+              const info = (await cmd("update_check")) as {
+                version: string;
+                current: string;
+              } | null;
+              if (!info) return t("menu.updateLatest");
+              const ok = window.confirm(
+                t("menu.updateFound")
+                  .replace("{v}", info.version)
+                  .replace("{c}", info.current),
+              );
+              if (ok) await cmd("update_install");
+              return t("menu.updateInstalling");
+            },
+          }}
+        />
+      ) : panel ? (
         <div
           className="scrim"
           onMouseDown={(e) => {
@@ -728,7 +850,7 @@ export default function App() {
             }}
           />
         </div>
-      )}
+      ) : null}
 
       {prompts[0] && (
         <PermissionPrompt
@@ -752,9 +874,12 @@ function isSecure(url: string | undefined): boolean {
 }
 
 function tabTitle(tb: TabInfo): string {
-  if (tb.title) return tb.title;
-  if (tb.pinned) return tb.label || "Tab";
-  return hostOf(tb.url) || tb.url;
+  if (tb.title && tb.title !== "about:blank" && tb.title !== "about:blank/") return tb.title;
+  if (!tb.url || tb.url === "about:blank" || tb.url === "about:blank/" || tb.url === "bytwina://newtab") {
+    return "Thẻ mới";
+  }
+  if (tb.pinned) return tb.label || "Thẻ mới";
+  return hostOf(tb.url) || "Thẻ mới";
 }
 
 function hostOf(url: string): string {

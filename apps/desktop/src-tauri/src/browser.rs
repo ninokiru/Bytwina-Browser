@@ -191,7 +191,12 @@ impl BrowserState {
         let mut inner = self.lock();
         let id = inner.next_id;
         inner.next_id += 1;
-        inner.tabs.push(Tab::new(id, url, title));
+        let default_title = if title.is_empty() || title == "about:blank" {
+            "Thẻ mới".to_string()
+        } else {
+            title
+        };
+        inner.tabs.push(Tab::new(id, url, default_title));
         id
     }
 
@@ -555,7 +560,12 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
                     return;
                 };
                 if let Some(id) = tab_id_of(webview.label()) {
-                    state.set_title(id, &title);
+                    let cleaned_title = if title == "about:blank" || title.trim().is_empty() {
+                        "Thẻ mới".to_string()
+                    } else {
+                        title
+                    };
+                    state.set_title(id, &cleaned_title);
                     emit_state(&app, &state);
                 }
             }

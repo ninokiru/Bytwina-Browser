@@ -22,6 +22,7 @@ interface QuickLink {
   title: string;
   url: string;
   color: string;
+  favicon?: string;
 }
 
 interface Props {
@@ -120,7 +121,17 @@ export default function NewTab({ privateMode, onNavigate, onOpenSettings }: Prop
                 <li key={l.url}>
                   <button type="button" className="ntp-link" onClick={() => onNavigate(l.url)} title={l.url}>
                     <span className="ntp-link-icon" style={{ ["--tile" as string]: l.color }}>
-                      {letterOf(l.title || l.url)}
+                      {l.favicon ? (
+                        <img
+                          src={l.favicon}
+                          alt=""
+                          className="ntp-favicon-img"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = "none";
+                          }}
+                        />
+                      ) : null}
+                      <span className="ntp-fallback-letter">{letterOf(l.title || l.url)}</span>
                     </span>
                     <span className="ntp-link-label">{l.title || hostOf(l.url)}</span>
                   </button>
@@ -163,12 +174,13 @@ function quickLinks(marks: Bookmark[], hist: HistoryItem[]): QuickLink[] {
   const seen = new Set<string>();
   const out: QuickLink[] = [];
   const add = (title: string, url: string) => {
-    if (out.length >= 8) return;
+    if (out.length >= 10) return;
     if (!url.startsWith("https://") && !url.startsWith("http://")) return;
     const host = hostOf(url);
     if (!host || seen.has(host)) return;
     seen.add(host);
-    out.push({ title: title || host, url, color: colorOf(host) });
+    const favicon = `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
+    out.push({ title: title || host, url, color: colorOf(host), favicon });
   };
   for (const b of marks) add(b.title, b.url);
   for (const h of hist) add(h.title, h.url);
