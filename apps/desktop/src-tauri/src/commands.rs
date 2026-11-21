@@ -376,6 +376,41 @@ pub async fn browser_command(
             browser::apply_zoom(&app, &state);
             Ok(Value::Null)
         }
+        // ===== Focus Mode =====
+        "focus_mode_set" => {
+            let on = arg("on")? == "1";
+            browser::set_focus_mode(on);
+            browser::relayout(&app, &state);
+            browser::emit_state(&app, &state);
+            Ok(Value::Null)
+        }
+        "focus_mode_get" => Ok(Value::Bool(browser::is_focus_mode())),
+        // ===== Favicon Cache Service =====
+        "favicon_get" => {
+            let domain = arg("domain")?;
+            with_db(&app, move |db| db.get_favicon(&domain))
+        }
+        "favicon_fetch" => {
+            let domain = arg("domain")?;
+            let app_clone = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let fetch_url = format!("https://www.google.com/s2/favicons?domain={domain}&sz=32");
+                if let Ok(resp) = ureq::get(&fetch_url).call() {
+                    let mut reader = resp.into_reader();
+                    use std::io::Read;
+                    let mut bytes = Vec::new();
+                    if reader.read_to_end(&mut bytes).is_ok() && !bytes.is_empty() {
+                        let b64 = crate::passwords::encode(&bytes);
+                        let data_url = format!("data:image/png;base64,{b64}");
+                        let _ = with_db(&app_clone, move |db| {
+                            db.set_favicon(&domain, &data_url)?;
+                            Ok(())
+                        });
+                    }
+                }
+            });
+            Ok(Value::Null)
+        }
         // ===== M7: chẩn đoán =====
         "diagnostics" => {
             let db_available = app

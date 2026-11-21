@@ -64,6 +64,8 @@ export default function App() {
   const [starred, setStarred] = useState(false);
   // Chrome làm nhạt dải tab khi cửa sổ mất tiêu điểm.
   const [blurred, setBlurred] = useState(false);
+  // Chế độ tập trung (Focus Mode): ẩn toàn bộ thanh công cụ, chỉ để lại webview và progress bar
+  const [focusMode, setFocusMode] = useState(false);
   // Omnibox suggestions & quick calc
   const [suggestions, setSuggestions] = useState<Array<{ title: string; url: string; type: "calc" | "history" | "shortcut" }>>([]);
   const [calcResult, setCalcResult] = useState<string | null>(null);
@@ -278,6 +280,12 @@ export default function App() {
         e.preventDefault();
         void cmd("forward");
       } 
+      // F11 hoặc Ctrl+Shift+F: Bật/tắt Chế độ tập trung (Focus Mode)
+      else if (e.key === "F11" || (mod && e.shiftKey && e.key.toLowerCase() === "f")) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFocusMode();
+      }
       // Alt+Home: Về trang chủ
       else if (e.altKey && e.key === "Home") {
         e.preventDefault();
@@ -332,6 +340,12 @@ export default function App() {
     const next = !shieldOff;
     setShieldOff(next);
     void cmd("adblock_site", { host, on: next ? "1" : "0" }).catch(() => setShieldOff(!next));
+  };
+
+  const toggleFocusMode = () => {
+    const next = !focusMode;
+    setFocusMode(next);
+    void cmd("focus_mode_set", { on: next ? "1" : "0" });
   };
 
   const toggle = (kind: PanelKind) => {
@@ -421,8 +435,13 @@ export default function App() {
     <div
       className={`chrome${blurred ? " blurred" : ""}${state.vertical ? " vertical" : ""}${
         overlay ? " overlay" : ""
-      }`}
+      }${focusMode ? " focus-mode" : ""}`}
     >
+      {focusMode && (
+        <div className="focus-indicator" onClick={toggleFocusMode} title="Nhấn để thoát Chế độ tập trung (F11)">
+          <div className={`focus-progress${active?.loading ? " loading" : ""}`} />
+        </div>
+      )}
       <header className="tabbar">
         <div className={`brand${state.private ? " private" : ""}`} title="Bytwina Browser">
           <img src="/brand-mark.png" alt="" />

@@ -34,6 +34,17 @@ static TOOLBAR_FULL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 /// Khi true, thanh công cụ phủ toàn cửa sổ để hiển thị bảng nổi (đã mở rộng).
 static PANEL_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Khi true, bật Chế độ tập trung (Focus Mode): ẩn toàn bộ thanh công cụ và tabbar, nội dung chiếm 100% cửa sổ.
+static FOCUS_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_focus_mode(on: bool) {
+    FOCUS_MODE.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+pub fn is_focus_mode() -> bool {
+    FOCUS_MODE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Hình học lần bố trí gần nhất (rộng, cao, chế độ phủ) để bỏ sự kiện resize trùng.
 static LAST_LAYOUT: Mutex<Option<(u64, u64, bool)>> = Mutex::new(None);
 
@@ -51,6 +62,9 @@ pub fn toolbar_size_for(window_width: f64, window_height: f64) -> LogicalSize<f6
         || PANEL_OPEN.load(std::sync::atomic::Ordering::SeqCst);
     if full {
         LogicalSize::new(window_width, window_height)
+    } else if is_focus_mode() {
+        // Trong chế độ tập trung, giữ một thanh rất mỏng (3px) ở trên cùng cho progress bar và hover trigger
+        LogicalSize::new(window_width, 4.0)
     } else if is_vertical() {
         LogicalSize::new(SIDEBAR_WIDTH.min(window_width), window_height)
     } else {
@@ -60,7 +74,9 @@ pub fn toolbar_size_for(window_width: f64, window_height: f64) -> LogicalSize<f6
 
 /// Vùng nội dung (x, y, rộng, cao) theo cỡ cửa sổ logic.
 fn content_area(w: f64, h: f64) -> (f64, f64, f64, f64) {
-    if is_vertical() {
+    if is_focus_mode() {
+        (0.0, 4.0, w, (h - 4.0).max(0.0))
+    } else if is_vertical() {
         (SIDEBAR_WIDTH, 0.0, (w - SIDEBAR_WIDTH).max(0.0), h)
     } else {
         (0.0, TOOLBAR_HEIGHT, w, (h - TOOLBAR_HEIGHT).max(0.0))

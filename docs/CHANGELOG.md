@@ -5,6 +5,17 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
 ## 0.0.5 — 2026-11-21 (so với 0.0.4)
 
 ### Thêm (Add)
+- **Killer Feature: Focus Mode (Chế độ tập trung)**:
+  - Bấm phím tắt **`F11`** hoặc **`Ctrl+Shift+F`** để ẩn sạch toàn bộ Tab bar, thanh điều hướng và menu, trả lại 100% diện tích màn hình cho trang web.
+  - Tích hợp một thanh tiến trình đọc mỏng tinh tế (`focus-progress`) ở cạnh trên cùng cửa sổ để theo dõi trạng thái tải trang. Bấm vào thanh này sẽ thoát nhanh chế độ tập trung.
+- **Dịch vụ SQLite Favicon Cache (Rust Background Service)**:
+  - Bổ sung bảng CSDL `favicons` lưu trữ data URI base64 của biểu tượng trang web theo domain.
+  - Background service tự động tải favicon độ phân giải cao và lưu cache offline, giúp tab hiển thị tức thì mà không cần phụ thuộc vào mạng mỗi lần mở lại.
+- **Spring Physics Animation (Hiệu ứng động quán tính tự nhiên)**:
+  - Nâng cấp chuyển động của Tab và các bảng điều khiển Panel bằng hàm vật lý lò xo `cubic-bezier(0.34, 1.56, 0.64, 1)`.
+  - Hiệu ứng tab hover có độ nảy nhẹ (overshoot `translateY(-2px) scale(1.01)`), panel xuất hiện bung mở mượt mà như phong cách Arc Browser.
+- **Chuẩn hóa bộ Icon hệ thống**:
+  - Tinh chỉnh toàn bộ biểu tượng SVG trong `Icons.tsx` theo chuẩn Lucide nét 1.8px sắc nét, đồng bộ tỷ lệ và cân đối trên mọi độ phân giải.
 - **Tối ưu Adblock chuyên sâu cho YouTube, TikTok, Facebook**:
   - Bổ sung danh sách `ublock-quick-fixes` chuyên trị các chiến dịch chặn adblock của YouTube.
   - Tích hợp luật lọc thẩm mỹ (cosmetic rules) trực tiếp cho các vị trí quảng cáo feeds/video/banner trên YouTube, Facebook (bài viết Được tài trợ/Sponsored), và TikTok ad badge.

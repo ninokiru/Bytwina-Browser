@@ -174,6 +174,11 @@ const TABLES_M11: &str = "
         username TEXT NOT NULL DEFAULT '',
         secret BLOB NOT NULL,
         updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS favicons (
+        domain TEXT PRIMARY KEY,
+        data_url TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
     );";
 
 /// Thêm cột nếu chưa có (SQLite không có `ADD COLUMN IF NOT EXISTS`).
@@ -219,6 +224,11 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         // bảng này (mở lại nhiều lần) vẫn an toàn.
         conn.execute_batch(TABLES_M11)?;
         conn.execute("INSERT INTO schema_version (version) VALUES (3)", [])?;
+    }
+    if version < 4 {
+        // v4: cache favicon cho domain
+        conn.execute_batch("CREATE TABLE IF NOT EXISTS favicons (domain TEXT PRIMARY KEY, data_url TEXT NOT NULL, updated_at INTEGER NOT NULL);")?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (4)", [])?;
     }
     Ok(())
 }
@@ -427,6 +437,28 @@ impl Db {
         tx.execute("DELETE FROM session_meta", [])
             .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())
+    }
+
+    pub fn get_favicon(&self, domain: &str) -> Result<Option<String>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT data_url FROM favicons WHERE domain = ?1")
+            .map_err(|e| e.to_string())?;
+        let res = stmt
+            .query_row(params![domain], |r| r.get::<_, String>(0))
+            .ok();
+        Ok(res)
+    }
+
+    pub fn set_favicon(&self, domain: &str, data_url: &str) -> Result<(), String> {
+        let c = self.conn();
+        c.execute(
+            "INSERT INTO favicons (domain, data_url, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(domain) DO UPDATE SET data_url = excluded.data_url, updated_at = excluded.updated_at",
+            params![domain, data_url, now()],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
     }
 }
 
