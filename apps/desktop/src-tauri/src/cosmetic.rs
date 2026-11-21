@@ -29,6 +29,40 @@ pub fn stylesheet(engine: &Engine, url: &str, classes: &[String], ids: &[String]
         selectors.extend(engine.hidden_class_id_selectors(classes, ids, &exceptions(&resources)));
     }
 
+    // Các luật ẩn quảng cáo cứng chuyên dụng cho YouTube, Facebook, TikTok
+    if url.contains("youtube.com") {
+        for s in [
+            "ytd-ad-slot-renderer",
+            "ytd-in-feed-ad-layout-renderer",
+            "ytd-promoted-sparkles-web-renderer",
+            "ytd-companion-slot-renderer",
+            "#player-ads",
+            "#masthead-ad",
+            ".ytp-ad-module",
+            ".ytp-ad-overlay-container",
+            "tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)"
+        ] {
+            selectors.push(s.to_string());
+        }
+    } else if url.contains("facebook.com") {
+        for s in [
+            "div[data-pagelet*='FeedUnit']:has(span:contains('Sponsored'))",
+            "div[data-pagelet*='FeedUnit']:has(span:contains('Được tài trợ'))",
+            "div[data-pagelet='RightRail'] div:has(span:contains('Được tài trợ'))",
+            "div[data-pagelet='RightRail'] div:has(span:contains('Sponsored'))"
+        ] {
+            selectors.push(s.to_string());
+        }
+    } else if url.contains("tiktok.com") {
+        for s in [
+            "div[data-e2e='feed-ad']",
+            ".tiktok-1w9z8e4-DivAdItem",
+            ".ad-badge"
+        ] {
+            selectors.push(s.to_string());
+        }
+    }
+
     selectors.sort();
     selectors.dedup();
     if selectors.is_empty() {

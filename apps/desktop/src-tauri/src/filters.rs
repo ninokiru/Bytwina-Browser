@@ -37,6 +37,10 @@ pub const DEFAULT_LISTS: &[(&str, &str)] = &[
         "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
     ),
     (
+        "ublock-quick-fixes",
+        "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",
+    ),
+    (
         "abpvn",
         "https://raw.githubusercontent.com/abpvn/abpvn/master/filter/abpvn.txt",
     ),

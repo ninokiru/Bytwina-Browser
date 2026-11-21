@@ -190,19 +190,19 @@ fn main() {
                 match event {
                     WindowEvent::Resized(_) => browser::layout(&handle, &layout_state),
                     // M2: lưu danh sách tab và dọn dữ liệu nếu cần khi đóng cửa sổ.
-                    WindowEvent::CloseRequested { api, .. } => {
-                        if !closing_clone.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                            api.prevent_close();
-                            let h = handle.clone();
-                            let s = layout_state.clone();
-                            std::thread::spawn(move || {
-                                browser::clear_browsing_on_exit(&h, &s);
-                                browser::persist_session(&h, &s);
-                                if let Some(w) = h.get_window("main") {
-                                    let _ = w.destroy();
-                                }
-                            });
-                        }
+                    WindowEvent::CloseRequested { api, .. }
+                        if !closing_clone.swap(true, std::sync::atomic::Ordering::SeqCst) =>
+                    {
+                        api.prevent_close();
+                        let h = handle.clone();
+                        let s = layout_state.clone();
+                        std::thread::spawn(move || {
+                            browser::clear_browsing_on_exit(&h, &s);
+                            browser::persist_session(&h, &s);
+                            if let Some(w) = h.get_window("main") {
+                                let _ = w.destroy();
+                            }
+                        });
                     }
                     _ => {}
                 }

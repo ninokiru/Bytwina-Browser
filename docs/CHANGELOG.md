@@ -5,6 +5,9 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
 ## 0.0.5 — 2026-11-21 (so với 0.0.4)
 
 ### Thêm (Add)
+- **Tối ưu Adblock chuyên sâu cho YouTube, TikTok, Facebook**:
+  - Bổ sung danh sách `ublock-quick-fixes` chuyên trị các chiến dịch chặn adblock của YouTube.
+  - Tích hợp luật lọc thẩm mỹ (cosmetic rules) trực tiếp cho các vị trí quảng cáo feeds/video/banner trên YouTube, Facebook (bài viết Được tài trợ/Sponsored), và TikTok ad badge.
 - **Omnibox Thông minh (Smart Address Bar)**:
   - **Tính toán nhanh trực tiếp**: Nhập các phép toán (vd `100*5+20`, `25/5 + 10`) sẽ lập tức hiển thị kết quả ngay trong thanh gợi ý. Bấm vào để copy kết quả.
   - **Gợi ý lịch sử tức thì (Instant History Search)**: Khi nhập từ khóa, tự động truy vấn và hiển thị dropdown danh sách các trang web đã từng truy cập để mở nhanh.
