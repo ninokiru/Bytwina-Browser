@@ -10,6 +10,7 @@ import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
 import { evaluateArithmetic } from "./calc";
 import { FaviconImg } from "./favicon";
+import CommandPalette, { type PaletteAction } from "./CommandPalette";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -91,6 +92,8 @@ export default function App() {
   const [suggestIndex, setSuggestIndex] = useState(-1);
   // Ghi chú gắn URL: hiện chip trong omnibox khi mở lại trang đã có ghi chú.
   const [pageNote, setPageNote] = useState<PageNote | null>(null);
+  // Bảng lệnh Ctrl+K.
+  const [palette, setPalette] = useState(false);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -275,6 +278,19 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
+  // Ctrl+K mở/đóng bảng lệnh. Bắt ở capture để không bị ô địa chỉ nuốt phím.
+  useEffect(() => {
+    const onK = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        setPalette((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onK, { capture: true });
+    return () => window.removeEventListener("keydown", onK, { capture: true });
+  }, []);
+
   // Phím tắt của ứng dụng.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -407,7 +423,7 @@ export default function App() {
 
   // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
   // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
-  const overlay = panel != null || showNewTab;
+  const overlay = panel != null || showNewTab || palette;
   useEffect(() => {
     void cmd("panel_open", { on: overlay ? "1" : "0" }).catch(() => undefined);
   }, [overlay]);
@@ -495,6 +511,40 @@ export default function App() {
   const openSettingsPage = (page: string) => {
     setSettingsPage(page);
     setPanel("settings");
+  };
+
+  // Thực hiện lệnh từ bảng Ctrl+K; dùng lại đúng các hàm mà phím tắt và menu đang gọi.
+  const runAction = (action: PaletteAction) => {
+    switch (action) {
+      case "newTab":
+        newTab();
+        break;
+      case "closeTab":
+        if (active) void cmd("close_tab", { id: String(active.id) });
+        break;
+      case "togglePrivate":
+        void cmd("private_set", { on: state.private ? "0" : "1" });
+        break;
+      case "bookmark":
+        bookmarkCurrent();
+        break;
+      case "settings":
+        openSettingsPage("");
+        break;
+      case "history":
+      case "bookmarks":
+      case "downloads":
+        setPanel(action);
+        break;
+      case "toggleVertical":
+        void cmd("tab_layout", { layout: state.vertical ? "horizontal" : "vertical" }).catch(
+          () => undefined,
+        );
+        break;
+      case "reload":
+        void cmd("reload");
+        break;
+    }
   };
 
   if (termsOk === null || onboarded === null) return null;
@@ -973,6 +1023,18 @@ export default function App() {
         </div>
       ) : null}
 
+      <CommandPalette
+        open={palette}
+        onClose={() => setPalette(false)}
+        tabs={state.tabs}
+        activeTabId={state.activeTab}
+        privateMode={state.private}
+        onActivateTab={(id) => void cmd("activate_tab", { id: String(id) })}
+        onNavigate={(input) => {
+          if (active) void cmd("navigate", { id: String(active.id), input }).catch(() => undefined);
+        }}
+        onAction={runAction}
+      />
       {prompts[0] && (
         <PermissionPrompt
           prompt={prompts[0]}
