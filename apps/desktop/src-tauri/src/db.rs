@@ -112,6 +112,7 @@ pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     // hành vi thay tệp CSDL khi connection còn đang mở.
     crate::backup::apply_pending(&app_data_dir);
     let conn = Connection::open(app_data_dir.join("bytwina.db")).ok()?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
     // WAL thất bại vẫn dùng được (vd. thư mục nằm trên ổ đồng bộ); không vì thế
     // mà tắt toàn bộ lịch sử/dấu trang/phiên.
     let _ = conn.pragma_update(None, "journal_mode", "WAL");

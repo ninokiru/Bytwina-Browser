@@ -25,9 +25,9 @@ const KEY_LEN: usize = 32;
 /// Chuỗi cố định được mã hóa bằng khóa chủ để kiểm tra mật khẩu khi mở khóa.
 const CHECK: &[u8] = b"bytwina-vault-v1";
 /// 19 MiB, 2 vòng, 1 làn — mức khuyến nghị của OWASP cho Argon2id.
-const MEM_KIB: u32 = 19 * 1024;
-const TIME_COST: u32 = 2;
-const PARALLELISM: u32 = 1;
+const MEM_KIB: u32 = 64 * 1024;
+const TIME_COST: u32 = 3;
+const PARALLELISM: u32 = 4;
 
 pub fn new_salt() -> [u8; SALT_LEN] {
     let mut salt = [0u8; SALT_LEN];
@@ -110,14 +110,54 @@ struct Unlocked {
     last: Instant,
 }
 
+const MAX_UNLOCK_FAILURES: u8 = 5;
+const UNLOCK_COOLDOWN: Duration = Duration::from_secs(30);
+
 /// Trạng thái mở khóa của kho trong phiên chạy. `timeout_minutes = 0` là
 /// không tự khóa; khóa vẫn mất khi thoát ứng dụng.
 #[derive(Default)]
 pub struct PasswordVault {
     inner: Mutex<Option<Unlocked>>,
+    failed_unlocks: Mutex<(u8, Option<Instant>)>,
 }
 
 impl PasswordVault {
+    /// Chặn thử mật khẩu liên tục trong cùng phiên chạy để giảm brute-force online.
+    pub fn allow_unlock_attempt(&self) -> Result<(), String> {
+        let mut state = self
+            .failed_unlocks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(until) = state.1 {
+            if Instant::now() < until {
+                let seconds = until.saturating_duration_since(Instant::now()).as_secs().max(1);
+                return Err(format!("thử quá nhiều lần; hãy chờ {seconds} giây"));
+            }
+            state.1 = None;
+        }
+        Ok(())
+    }
+
+    pub fn record_unlock_failure(&self) {
+        let mut state = self
+            .failed_unlocks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        state.0 = state.0.saturating_add(1);
+        if state.0 >= MAX_UNLOCK_FAILURES {
+            state.0 = 0;
+            state.1 = Some(Instant::now() + UNLOCK_COOLDOWN);
+        }
+    }
+
+    pub fn reset_unlock_failures(&self) {
+        let mut state = self
+            .failed_unlocks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *state = (0, None);
+    }
+
     pub fn unlock(&self, key: SecretKey) {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(Unlocked {

@@ -967,7 +967,34 @@ fn source_sha256(root: &Path) -> Result<String, String> {
         hasher.update((bytes.len() as u64).to_le_bytes());
         hasher.update(&bytes);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    let digest = hasher.finalize();
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn scan_extension_assets(assets: &[(String, String, String)], allow_unsafe: bool) -> Result<(), String> {
+    if allow_unsafe {
+        return Ok(());
+    }
+    const SUSPICIOUS: &[(&str, &str)] = &[
+        ("eval(", "eval()"),
+        ("newfunction(", "Function()"),
+        ("document.cookie", "document.cookie"),
+        ("localstorage", "localStorage"),
+        ("fetch('http://localhost", "fetch localhost"),
+        ("fetch(\"http://localhost", "fetch localhost"),
+        ("xmlhttprequest", "XMLHttpRequest"),
+    ];
+    for (path, kind, source) in assets {
+        let normalized = source.to_ascii_lowercase().replace(' ', "");
+        for (needle, label) in SUSPICIOUS {
+            if normalized.contains(needle) {
+                return Err(format!(
+                    "extension chứa mã nhạy cảm {label} trong {path} ({kind}); hãy xác nhận rõ ràng trước khi cài"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub struct InstallOutcome {
@@ -1182,6 +1209,7 @@ pub fn install_source(
     extensions_dir: &Path,
     grants: &[String],
     expected_sha256: Option<&str>,
+    allow_unsafe: bool,
 ) -> Result<InstallOutcome, String> {
     let stage = stage_source(src)?;
     let actual_sha256 = source_sha256(&stage.root)?;
@@ -1260,6 +1288,7 @@ pub fn install_source(
             assets.push((rel.clone(), "css".to_string(), source));
         }
     }
+    scan_extension_assets(&assets, allow_unsafe)?;
 
     // Đổi tên trong cùng thư mục để commit gần như nguyên tử. Có rollback nếu
     // bước cuối bị chặn bởi quyền/antivirus/ổ đĩa.

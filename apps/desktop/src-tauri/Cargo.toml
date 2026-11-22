@@ -129,5 +129,9 @@ windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com"
 [profile.release]
 codegen-units = 1
 lto = true
+panic = "abort"
+debug = 0
+incremental = false
+overflow-checks = true
 # Bỏ bảng ký hiệu: giảm kích thước bộ cài và phần ảnh ánh xạ khi chạy.
 strip = true

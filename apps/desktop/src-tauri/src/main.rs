@@ -238,9 +238,27 @@ fn main() {
             let layout_state = state.clone();
             let closing = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let closing_clone = closing.clone();
+            let focus_epoch = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let focus_epoch_clone = focus_epoch.clone();
             window.on_window_event(move |event| {
                 match event {
                     WindowEvent::Resized(_) => browser::layout(&handle, &layout_state),
+                    WindowEvent::Focused(false) => {
+                        let epoch = focus_epoch_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                        let delayed_handle = handle.clone();
+                        let delayed_epoch = focus_epoch_clone.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_secs(30));
+                            if delayed_epoch.load(std::sync::atomic::Ordering::SeqCst) == epoch {
+                                if let Some(vault) = delayed_handle.try_state::<crate::passwords::PasswordVault>() {
+                                    vault.lock();
+                                }
+                            }
+                        });
+                    }
+                    WindowEvent::Focused(true) => {
+                        focus_epoch_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    }
                     // M2: lưu danh sách tab và dọn dữ liệu nếu cần khi đóng cửa sổ.
                     WindowEvent::CloseRequested { api, .. }
                         if !closing_clone.swap(true, std::sync::atomic::Ordering::SeqCst) =>

@@ -15,7 +15,7 @@
 
 ## Kho mật khẩu (M11)
 
-- Mật khẩu chủ không được lưu ở bất kỳ đâu. Khi tạo kho, ứng dụng sinh salt ngẫu nhiên 16 byte, suy khóa 32 byte bằng Argon2id (19 MiB, 2 vòng, song song 1) rồi lưu **salt** và một **bản mã kiểm tra** dạng base64 trong bảng `settings` để lần sau biết nhập đúng hay sai.
+- Mật khẩu chủ không được lưu ở bất kỳ đâu. Khi tạo kho, ứng dụng sinh salt ngẫu nhiên 16 byte, suy khóa 32 byte bằng Argon2id (64 MiB, 3 vòng, song song 4) rồi lưu **salt** và một **bản mã kiểm tra** dạng base64 trong bảng `settings` để lần sau biết nhập đúng hay sai.
 - Mỗi mục mật khẩu được mã hóa AES-256-GCM với nonce ngẫu nhiên 12 byte; mật khẩu và ghi chú nằm trong cột `secret` dạng `nonce || bản mã`. Sửa mục sẽ dùng nonce mới.
 - Khóa chỉ tồn tại trong bộ nhớ tiến trình khi kho đang mở; thoát ứng dụng là mất. Có thể khóa tay hoặc tự khóa sau 1–60 phút không thao tác.
 - Xóa toàn bộ kho không cần mật khẩu chủ để người quên vẫn thoát được trạng thái khóa; thao tác này xóa mọi bản mã và salt/check, không làm lộ dữ liệu.

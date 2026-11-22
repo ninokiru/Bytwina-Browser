@@ -454,8 +454,8 @@ pub async fn browser_command(
             let manifest = serde_json::json!({
                 "manifest_version": 1, "name": name, "version": version,
                 "content_scripts": [{ "matches": [pattern],
-                    "js": if js.trim().is_empty() { Vec::<String>::new() } else { vec!["content.js"] },
-                    "css": if css.trim().is_empty() { Vec::<String>::new() } else { vec!["content.css"] } }]
+                    "js": if js.trim().is_empty() { Vec::<String>::new() } else { vec!["content.js".to_string()] },
+                    "css": if css.trim().is_empty() { Vec::<String>::new() } else { vec!["content.css".to_string()] } }]
             });
             extensions::Manifest::from_json(&manifest.to_string())?.validate()?;
             Ok(serde_json::json!({ "valid": true }))
@@ -478,8 +478,8 @@ pub async fn browser_command(
                     "version": version,
                     "content_scripts": [{
                         "matches": [match_pattern],
-                        "js": if js.trim().is_empty() { Vec::<String>::new() } else { vec!["content.js"] },
-                        "css": if css.trim().is_empty() { Vec::<String>::new() } else { vec!["content.css"] },
+                        "js": if js.trim().is_empty() { Vec::<String>::new() } else { vec!["content.js".to_string()] },
+                        "css": if css.trim().is_empty() { Vec::<String>::new() } else { vec!["content.css".to_string()] },
                         "run_at": "document_end"
                     }]
                 });
@@ -488,7 +488,7 @@ pub async fn browser_command(
                 if !css.trim().is_empty() { std::fs::write(temp.join("content.css"), css).map_err(|e| e.to_string())?; }
                 let dir = extensions_dir(&app)?;
                 let db = db_handle(&app)?;
-                let outcome = extensions::install_source(&db, &temp, &dir, &[], None)?;
+                let outcome = extensions::install_source(&db, &temp, &dir, &[], None, false)?;
                 reload_extensions(&app, &db);
                 extensions::apply_to_tabs(&app, &state);
                 Ok::<_, String>(serde_json::json!({"id": outcome.id, "name": outcome.name, "version": outcome.version, "active": false}))
@@ -512,9 +512,14 @@ pub async fn browser_command(
                 .as_ref()
                 .and_then(|a| a.get("expectedSha256"))
                 .and_then(|v| v.as_str());
+            let allow_unsafe = args
+                .as_ref()
+                .and_then(|a| a.get("allowUnsafe"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let dir = extensions_dir(&app)?;
             let db = db_handle(&app)?;
-            let outcome = extensions::install_source(&db, std::path::Path::new(&path), &dir, &grants, expected_sha256)?;
+            let outcome = extensions::install_source(&db, std::path::Path::new(&path), &dir, &grants, expected_sha256, allow_unsafe)?;
             reload_extensions(&app, &db);
             extensions::apply_to_tabs(&app, &state);
             Ok(serde_json::json!({
@@ -536,10 +541,15 @@ pub async fn browser_command(
                 .as_ref()
                 .and_then(|a| a.get("expectedSha256"))
                 .and_then(|v| v.as_str());
+            let allow_unsafe = args
+                .as_ref()
+                .and_then(|a| a.get("allowUnsafe"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let downloaded = extensions::download_source(&url)?;
             let dir = extensions_dir(&app)?;
             let db = db_handle(&app)?;
-            let result = extensions::install_source(&db, &downloaded, &dir, &grants, expected_sha256);
+            let result = extensions::install_source(&db, &downloaded, &dir, &grants, expected_sha256, allow_unsafe);
             let _ = std::fs::remove_file(&downloaded);
             let outcome = result?;
             reload_extensions(&app, &db);
@@ -1030,6 +1040,8 @@ pub async fn browser_command(
             Ok(serde_json::json!({ "ok": true }))
         }
         "password_unlock" => {
+            let vault = app.state::<crate::passwords::PasswordVault>();
+            vault.allow_unlock_attempt()?;
             let master = zeroize::Zeroizing::new(arg("master")?);
             let db = db_handle(&app)?;
             let salt = db
@@ -1042,8 +1054,12 @@ pub async fn browser_command(
                 master.as_str(),
                 &crate::passwords::decode(&salt)?,
             )?;
-            crate::passwords::verify_check(&key, &crate::passwords::decode(&check)?)?;
-            app.state::<crate::passwords::PasswordVault>().unlock(key);
+            if let Err(error) = crate::passwords::verify_check(&key, &crate::passwords::decode(&check)?) {
+                vault.record_unlock_failure();
+                return Err(error);
+            }
+            vault.reset_unlock_failures();
+            vault.unlock(key);
             Ok(serde_json::json!({ "ok": true }))
         }
         "password_lock" => {

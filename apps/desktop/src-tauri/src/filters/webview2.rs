@@ -137,7 +137,7 @@ unsafe fn on_requested(
     }
     let source = source_url(&request);
 
-    if handle.0.should_block(&uri, &source, resource_type(context)) {
+    if dangerous_protocol(&uri) || handle.0.should_block(&uri, &source, resource_type(context)) {
         // Sự kiện này không có Cancel(): chặn nghĩa là tự trả một đáp án rỗng.
         // content = nullptr là hợp lệ theo mẫu chặn tài nguyên của Microsoft.
         let response = environment.CreateWebResourceResponse(
@@ -149,6 +149,11 @@ unsafe fn on_requested(
         args.SetResponse(&response)?;
     }
     Ok(())
+}
+
+fn dangerous_protocol(uri: &str) -> bool {
+    let scheme = uri.split_once(':').map(|(scheme, _)| scheme).unwrap_or_default();
+    matches!(scheme.to_ascii_lowercase().as_str(), "file" | "smb" | "ftp" | "jar")
 }
 
 /// `Uri(LPWSTR*)` cấp phát bằng CoTaskMem; `take_pwstr` lấy chuỗi và giải phóng.

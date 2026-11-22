@@ -41,6 +41,27 @@ interface ExtLog {
   createdAt: number;
 }
 
+const TEMPLATES = [
+  {
+    id: "focus-mode",
+    name: "Focus mode",
+    version: "1.0.0",
+    match: "https://*/*",
+    description: "Ẩn các phần tử gây xao nhãng trên trang.",
+    js: "document.querySelectorAll('aside, .sidebar, .recommended').forEach((el) => el.style.setProperty('display', 'none', 'important'));",
+    css: "video:fullscreen { outline: 2px solid #6d8cff; }",
+  },
+  {
+    id: "reading-mode",
+    name: "Reading mode",
+    version: "1.0.0",
+    match: "https://*/*",
+    description: "Tăng khả năng đọc bằng nền và cỡ chữ dễ nhìn hơn.",
+    js: "document.documentElement.dataset.bytwinaReading = '1';",
+    css: "body { line-height: 1.7 !important; } article, main { max-width: 780px !important; margin-inline: auto !important; }",
+  },
+];
+
 function capLabel(cap: string): string {
   const key = `cap.${cap}` as Key;
   const text = t(key);
@@ -267,6 +288,26 @@ export default function ExtensionsPanel() {
     }
   }
 
+  async function installTemplate(template: (typeof TEMPLATES)[number]) {
+    setBusy(true);
+    setError("");
+    try {
+      await cmd("ext_add", {
+        name: template.name,
+        version: template.version,
+        match_pattern: template.match,
+        js: template.js,
+        css: template.css,
+      });
+      setNotice(`Đã cài template “${template.name}”. Hãy bật trong danh sách.`);
+      await reload();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="ext-panel">
       <section className="ext-install">
@@ -374,6 +415,26 @@ export default function ExtensionsPanel() {
         <div className="row-inline ext-editor-grid">
           <textarea className="field ext-code" aria-label="JavaScript" placeholder="JavaScript" value={draftJs} onChange={(e) => setDraftJs(e.target.value)} />
           <textarea className="field ext-code" aria-label="CSS" placeholder="CSS" value={draftCss} onChange={(e) => setDraftCss(e.target.value)} />
+        </div>
+      </section>
+
+      <section className="ext-editor ext-templates">
+        <div className="ext-list-head">
+          <div>
+            <h3 className="ext-heading">Kho template nhanh</h3>
+            <p className="ext-hint">Cài một lần, không cần copy-paste code. Template được cài tắt để bạn kiểm tra trước.</p>
+          </div>
+        </div>
+        <div className="ext-template-grid">
+          {TEMPLATES.map((template) => (
+            <article className="ext-template" key={template.id}>
+              <strong>{template.name}</strong>
+              <p className="ext-sub">{template.description}</p>
+              <button type="button" className="btn" disabled={busy} onClick={() => void installTemplate(template)}>
+                Cài template
+              </button>
+            </article>
+          ))}
         </div>
       </section>
 

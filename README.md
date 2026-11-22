@@ -57,7 +57,7 @@
 - Chặn quảng cáo và tracker ở tầng request (adblock-rust) với EasyList, EasyPrivacy, uBlock filters, ABPvn; tắt theo từng trang bằng nút khiên.
 - Ẩn phần tử quảng cáo bằng CSS (lọc thẩm mỹ) sau khi trang tải xong.
 - Quyền trang web (camera, micro, thông báo, vị trí, clipboard, âm thanh tự phát) hỏi từng lần, lưu quyết định theo origin.
-- Kho mật khẩu mã hóa cục bộ: Argon2id suy khóa, AES-256-GCM từng mục, khóa chỉ nằm trong RAM, tự khóa theo thời gian.
+- Kho mật khẩu mã hóa từng mục bằng AES-256-GCM; khóa suy ra với Argon2id (64 MiB, 3 vòng, 4 lanes), chỉ giữ trong RAM và tự khóa theo thời gian hoặc sau 30 giây mất focus.
 - Chặn trang `http://` không mã hóa (trừ localhost) — xem [ADR-011](docs/DECISIONS.md).
 - IPC chỉ nhận từ webview toolbar; trang web không gọi được lệnh của ứng dụng.
 
@@ -95,7 +95,7 @@ Kiến trúc: vỏ ứng dụng **Rust + Tauri 2**, mỗi tab là một **WebVie
 |---|---|---|
 | Cửa sổ, nhiều webview, IPC | Tauri 2 (`tauri`, `unstable` cho `add_child`) | Quản lý cửa sổ và các tab |
 | Engine trình duyệt | WebView2 qua `wry`, `webview2-com`, `windows` | Hiển thị trang, InPrivate, tải xuống, quyền trang, lọc mạng |
-| Lưu trữ cục bộ | `rusqlite` (SQLite bundled) | Lịch sử, dấu trang, phiên, cài đặt, kho mật khẩu |
+| Lưu trữ cục bộ | `rusqlite` (SQLite bundled, WAL) | Lịch sử, dấu trang, phiên, cài đặt và dữ liệu app; chỉ payload bí mật trong kho mật khẩu được mã hóa |
 | Chặn quảng cáo / tracker | `adblock` (adblock-rust) | Khớp luật AdBlock Plus ở tầng request và lọc thẩm mỹ |
 | Tải danh sách lọc | `ureq` 3 (rustls) | Tải danh sách lúc chạy, không nhúng vào repo |
 | Tên miền gốc | `psl` | Phân biệt bên thứ nhất / thứ ba cho luật chặn |
@@ -113,9 +113,10 @@ Chi tiết và những gì **chưa** làm: [docs/SECURITY.md](docs/SECURITY.md).
 - **Ranh giới tin cậy**: chỉ webview thanh công cụ gọi được IPC; kiểm tra nhãn webview ở phía Rust, không chỉ dựa vào ACL.
 - **Điều hướng**: chặn trang `http://` không mã hóa (trừ localhost); popup thành tab nền thay vì mở cửa sổ mới.
 - **Quyền trang** (camera, micro, vị trí, thông báo…): hỏi từng lần, có thể nhớ theo origin; origin được kiểm tra định dạng trước khi lưu.
-- **Kho mật khẩu**: Argon2id + AES-256-GCM từng mục; mật khẩu chủ tối thiểu 8 ký tự và **không được lưu**; khóa chỉ nằm trong RAM và tự khóa theo thời gian. Quên mật khẩu chủ thì dữ liệu kho không khôi phục được.
+- **Kho mật khẩu**: Argon2id (64 MiB, 3 vòng, 4 lanes) + AES-256-GCM từng mục; mật khẩu chủ không được lưu; khóa chỉ nằm trong RAM. Sai 5 lần mở khóa sẽ bị chờ 30 giây. Tệp SQLite tổng thể chưa mã hóa; lịch sử, bookmark, metadata vault và các bảng khác vẫn có thể đọc được nếu lấy được file DB. Recovery Kit chưa được triển khai.
 - **Riêng tư**: chế độ riêng tư không ghi lịch sử và không ghi phiên; tab mới dùng InPrivate của WebView2.
 - **Tải xuống**: file thực thi hoặc script (`.exe`, `.ps1`, `.msi`…) được đổi đuôi thành `.download` để không chạy trực tiếp.
+- **Khóa khi rời cửa sổ**: Vault tự khóa sau 30 giây cửa sổ mất focus; cookie/cache WebView2 không bị xóa bởi hành động này.
 - **Nhật ký**: không ghi URL hay nội dung trang; tự xoay vòng.
 - **Tự cập nhật**: chỉ cài bản có chữ ký hợp lệ khớp khóa công khai; bản build đã ký từ chối mọi tệp không khớp khóa.
 - **Chưa có**: chữ ký số (SmartScreen cảnh báo khi cài), cô lập cookie bên thứ ba ở mức API WebView2, kiểm toán bảo mật độc lập.

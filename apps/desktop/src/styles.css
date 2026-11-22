@@ -2770,6 +2770,25 @@ input[type="checkbox"]:checked::after {
   text-transform: uppercase;
 }
 
+.ext-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.ext-template {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.ext-template p {
+  margin: 0;
+}
+
 .ext-heading {
   margin: 0;
   font-size: 13px;
