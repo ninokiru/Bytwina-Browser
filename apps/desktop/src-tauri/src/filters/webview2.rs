@@ -77,6 +77,7 @@ pub fn attach(webview: &Webview<tauri::Wry>, handle: BlockerHandle) {
             }
         }
 
+        let tab_label = label.clone();
         let closure: EventClosure<
             Option<ICoreWebView2>,
             Option<ICoreWebView2WebResourceRequestedEventArgs>,
@@ -84,7 +85,7 @@ pub fn attach(webview: &Webview<tauri::Wry>, handle: BlockerHandle) {
             let Some(args) = args else { return Ok(()) };
             // Callback chạy trên luồng UI: không pump message, không I/O đồng bộ.
             if let Err(e) =
-                unsafe { on_requested(&args, sender.as_ref(), &environment, &handle) }
+                unsafe { on_requested(&args, sender.as_ref(), &environment, &handle, &tab_label) }
             {
                 log::error!("bộ chặn WebView2: {e}");
             }
@@ -125,6 +126,7 @@ unsafe fn on_requested(
     sender: Option<&ICoreWebView2>,
     environment: &ICoreWebView2Environment,
     handle: &BlockerHandle,
+    tab_label: &str,
 ) -> windows::core::Result<()> {
     let _ = sender;
     let mut context: COREWEBVIEW2_WEB_RESOURCE_CONTEXT = Default::default();
@@ -137,7 +139,11 @@ unsafe fn on_requested(
     }
     let source = source_url(&request);
 
-    if dangerous_protocol(&uri) || handle.0.should_block(&uri, &source, resource_type(context)) {
+    if dangerous_protocol(&uri)
+        || handle
+            .0
+            .should_block_in_tab(&uri, &source, resource_type(context), tab_label)
+    {
         // Sự kiện này không có Cancel(): chặn nghĩa là tự trả một đáp án rỗng.
         // content = nullptr là hợp lệ theo mẫu chặn tài nguyên của Microsoft.
         let response = environment.CreateWebResourceResponse(

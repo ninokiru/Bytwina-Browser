@@ -864,6 +864,14 @@ pub async fn browser_command(
             let handle = app.state::<crate::filters::BlockerHandle>();
             to_json(handle.0.status())
         }
+        "adblock_counts" => {
+            let label = arg("label")?;
+            let handle = app.state::<crate::filters::BlockerHandle>();
+            Ok(serde_json::json!({
+                "total": handle.0.blocked_count(),
+                "page": handle.0.blocked_count_for_tab(&label),
+            }))
+        }
         "adblock_set" => {
             let on = arg("on")? == "1";
             let handle = app.state::<crate::filters::BlockerHandle>();

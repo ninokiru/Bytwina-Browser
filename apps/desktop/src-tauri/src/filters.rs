@@ -8,8 +8,9 @@
 //!   `enabled` và danh sách tên miền tắt trước khi chạm engine.
 
 use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use adblock::lists::ParseOptions;
 use adblock::request::Request;
@@ -93,6 +94,7 @@ pub struct Blocker {
     engine: RwLock<Option<Arc<Engine>>>,
     enabled: AtomicBool,
     blocked: AtomicU64,
+    blocked_by_tab: Mutex<HashMap<String, u64>>,
     disabled_sites: RwLock<Vec<String>>,
     /// Bản sao độ dài `disabled_sites` để luồng chặn bỏ qua kiểm tra theo tên miền
     /// khi người dùng chưa tắt chặn ở trang nào (đường gọi mỗi request).
@@ -106,6 +108,7 @@ impl Blocker {
             engine: RwLock::new(None),
             enabled: AtomicBool::new(true),
             blocked: AtomicU64::new(0),
+            blocked_by_tab: Mutex::new(HashMap::new()),
             disabled_sites: RwLock::new(Vec::new()),
             has_overrides: AtomicBool::new(false),
             dir,
@@ -126,6 +129,29 @@ impl Blocker {
 
     pub fn blocked_count(&self) -> u64 {
         self.blocked.load(Ordering::Relaxed)
+    }
+
+    pub fn blocked_count_for_tab(&self, label: &str) -> u64 {
+        self.blocked_by_tab
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(label)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn reset_tab_count(&self, label: &str) {
+        self.blocked_by_tab
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(label.to_string(), 0);
+    }
+
+    pub fn remove_tab_count(&self, label: &str) {
+        self.blocked_by_tab
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(label);
     }
 
     pub fn disabled_sites(&self) -> Vec<String> {
@@ -214,6 +240,16 @@ impl Blocker {
     /// Quyết định chặn cho một request. `resource_type` là loại tài nguyên WebView2
     /// (`script`, `image`, `xmlhttprequest`, `document`…).
     pub fn should_block(&self, url: &str, source_url: &str, resource_type: &str) -> bool {
+        self.should_block_in_tab(url, source_url, resource_type, "")
+    }
+
+    pub fn should_block_in_tab(
+        &self,
+        url: &str,
+        source_url: &str,
+        resource_type: &str,
+        tab_label: &str,
+    ) -> bool {
         if !self.enabled() {
             return false;
         }
@@ -249,6 +285,10 @@ impl Blocker {
         let blocked = engine.check_network_request(&request).should_block();
         if blocked {
             self.blocked.fetch_add(1, Ordering::Relaxed);
+            if !tab_label.is_empty() {
+                let mut counts = self.blocked_by_tab.lock().unwrap_or_else(|e| e.into_inner());
+                *counts.entry(tab_label.to_string()).or_default() += 1;
+            }
         }
         blocked
     }

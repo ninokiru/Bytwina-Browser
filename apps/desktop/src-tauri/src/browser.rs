@@ -657,13 +657,20 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
         .initialization_script(SHORTCUT_FORWARD_JS)
         .on_navigation({
             let app = app.clone();
+            let tab_label = label.clone();
             move |url| {
                 // Phím tắt từ trang: trang đặt location tới host giả → chặn và chuyển cho toolbar.
                 if is_shortcut_url(url) {
                     forward_shortcut(&app, url);
                     return false;
                 }
-                navigation::page_navigation_allowed(url)
+                let allowed = navigation::page_navigation_allowed(url);
+                if allowed {
+                    if let Some(blocker) = app.try_state::<crate::filters::BlockerHandle>() {
+                        blocker.0.reset_tab_count(&tab_label);
+                    }
+                }
+                allowed
             }
         })
         // Chế độ riêng tư: tab mới không giữ cookie trong profile (cần WebView2 ≥ 101.0.1210.39).
@@ -870,6 +877,10 @@ pub fn close_webview(app: &AppHandle, id: u32) {
         // Huỷ đăng ký chặn trước khi đóng để handler giải phóng cùng tab.
         #[cfg(target_os = "windows")]
         crate::filters::webview2::detach(&wv);
+        #[cfg(target_os = "windows")]
+        if let Some(blocker) = app.try_state::<crate::filters::BlockerHandle>() {
+            blocker.0.remove_tab_count(&format!("tab-{id}"));
+        }
         #[cfg(target_os = "windows")]
         crate::cosmetic::webview2::detach(&wv);
         #[cfg(target_os = "windows")]

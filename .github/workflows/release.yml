@@ -51,11 +51,10 @@ jobs:
           $package | ConvertTo-Json -Depth 20 | Set-Content $packagePath -Encoding utf8
 
           $packageLockPath = "apps/desktop/package-lock.json"
-          $packageLock = Get-Content $packageLockPath -Raw | ConvertFrom-Json
+          $packageLock = Get-Content $packageLockPath -Raw | ConvertFrom-Json -AsHashtable
           $packageLock.version = $version
-          if ($packageLock.packages -and $packageLock.packages.PSObject.Properties[""]) {
-            $packageLock.packages."".version = $version
-          }
+          $rootPackage = $packageLock.packages[""]
+          if ($null -ne $rootPackage) { $rootPackage.version = $version }
           $packageLock | ConvertTo-Json -Depth 100 | Set-Content $packageLockPath -Encoding utf8
 
           $tauriPath = "apps/desktop/src-tauri/tauri.conf.json"

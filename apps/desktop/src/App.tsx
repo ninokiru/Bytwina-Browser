@@ -78,6 +78,8 @@ export default function App() {
   // Khiên chặn quảng cáo theo tab hiện hành. `blockedBaseline` là mốc trừ dần:
   // bộ đếm trong backend là TỔNG của cả phiên, không phải của riêng trang này.
   const [shieldOff, setShieldOff] = useState(false);
+  const [shieldPanelOpen, setShieldPanelOpen] = useState(false);
+  const [adblockCounts, setAdblockCounts] = useState({ total: 0, page: 0 });
   // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
   const [termsOk, setTermsOk] = useState<boolean | null>(null);
   // null: đang đọc; false: chưa hoàn tất chào mừng lần đầu.
@@ -519,8 +521,7 @@ export default function App() {
     if (active) void cmd("navigate", { id: String(active.id), input: s.url }).catch(() => undefined);
   };
 
-  // Khiên theo tab đang mở. Bộ đếm là TỔNG của cả phiên (backend chưa phân tách
-  // theo tab) — giao diện nói đúng như vậy thay vì giả vờ là số của riêng trang.
+  // Đồng bộ trạng thái bật/tắt cho host của tab hiện hành.
   useEffect(() => {
     const host = hostOf(active?.url ?? "");
     if (!host) {
@@ -534,6 +535,43 @@ export default function App() {
       })
       .catch(() => undefined);
   }, [active?.id, active?.url]);
+
+  // Cập nhật bộ đếm cho tab đang xem; backend reset page count ở mỗi lần điều hướng.
+  useEffect(() => {
+    if (state.activeTab == null) {
+      setAdblockCounts({ total: 0, page: 0 });
+      return;
+    }
+    let disposed = false;
+    const refresh = () => {
+      void cmd("adblock_counts", { label: `tab-${state.activeTab}` })
+        .then((value) => {
+          if (disposed) return;
+          const counts = (value ?? {}) as { total?: number; page?: number };
+          setAdblockCounts({ total: counts.total ?? 0, page: counts.page ?? 0 });
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [state.activeTab]);
+
+  useEffect(() => {
+    setShieldPanelOpen(false);
+  }, [active?.id, active?.url]);
+
+  useEffect(() => {
+    if (!shieldPanelOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShieldPanelOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [shieldPanelOpen]);
 
   const toggleShield = () => {
     const host = hostOf(active?.url ?? "");
@@ -946,13 +984,56 @@ export default function App() {
           </button>
           <button
             type="button"
-            className={`omni-chip shield${shieldOff ? " off" : ""}`}
-            title={shieldOff ? t("shield.disabledHere") : t("shield.enabledHere")}
+            className={`omni-chip shield${shieldOff ? " off" : ""}${shieldPanelOpen ? " open" : ""}`}
+            title={t("shield.panelTitle")}
+            aria-label={`${t("shield.panelTitle")}: ${adblockCounts.page.toLocaleString()}`}
+            aria-haspopup="dialog"
+            aria-expanded={shieldPanelOpen}
             disabled={!hostOf(active?.url ?? "")}
-            onClick={toggleShield}
+            onClick={() => setShieldPanelOpen((open) => !open)}
           >
             <ShieldIcon />
+            <span className="shield-count" aria-hidden="true">
+              {adblockCounts.page > 999 ? "999+" : adblockCounts.page.toLocaleString()}
+            </span>
           </button>
+          {shieldPanelOpen && (
+            <section className="adblock-popover" role="dialog" aria-label={t("shield.panelTitle")}>
+              <div className="adblock-popover-head">
+                <span className="adblock-popover-icon"><ShieldIcon /></span>
+                <div className="adblock-popover-title">
+                  <strong>{t("shield.panelTitle")}</strong>
+                  <small>{shieldOff ? t("shield.disabledStatus") : t("shield.enabledStatus")}</small>
+                </div>
+                <button type="button" className="adblock-popover-close" aria-label={t("shield.close")} onClick={() => setShieldPanelOpen(false)}>
+                  <CloseIcon />
+                </button>
+              </div>
+              <div className="adblock-stats">
+                <div className="adblock-stat current">
+                  <strong aria-live="polite">{adblockCounts.page.toLocaleString()}</strong>
+                  <span>{t("shield.pageCount")}</span>
+                </div>
+                <div className="adblock-stat">
+                  <strong>{adblockCounts.total.toLocaleString()}</strong>
+                  <span>{t("shield.totalCount")}</span>
+                </div>
+              </div>
+              <div className="adblock-popover-footer">
+                <span>{hostOf(active?.url ?? "")}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!shieldOff}
+                  aria-label={shieldOff ? t("shield.toggleOn") : t("shield.toggleOff")}
+                  className={`adblock-switch${shieldOff ? " off" : ""}`}
+                  onClick={toggleShield}
+                >
+                  <span />
+                </button>
+              </div>
+            </section>
+          )}
           {active?.loading && <span className="omni-spinner" />}
         </div>
 
