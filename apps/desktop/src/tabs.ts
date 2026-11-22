@@ -24,6 +24,6 @@ export interface BrowserStatePayload {
 }
 
 // Toàn bộ IPC của trình duyệt đi qua một lệnh duy nhất, có kiểm soát (ADR-002).
-export function cmd(action: string, args?: Record<string, string>): Promise<unknown> {
+export function cmd(action: string, args?: Record<string, unknown>): Promise<unknown> {
   return invoke("browser_command", { action, args });
 }

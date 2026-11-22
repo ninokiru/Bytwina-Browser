@@ -5,9 +5,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
 
 use crate::browser::{self, BrowserState};
+use crate::extensions;
 use crate::navigation::{self, PopupQueue, NEW_TAB_URL};
 use crate::terms;
-
 /// Lệnh IPC duy nhất toolbar được gọi. Tham số đầu luôn là action string;
 /// mọi lệnh async để tránh deadlock WebView2 trên Windows (ADR-001).
 #[tauri::command]
@@ -350,6 +350,184 @@ pub async fn browser_command(
             }
             Ok(Value::String(out))
         }),
+        // ===== Hệ tiện ích (v1) =====
+        "ext_list" => with_db(&app, |db| {
+            let rows = db.list_extensions()?;
+            let mut out = Vec::new();
+            for row in rows {
+                let manifest = extensions::Manifest::from_json(&row.manifest_json).ok();
+                let requested = manifest
+                    .as_ref()
+                    .map(|m| m.requested_capabilities())
+                    .unwrap_or_default();
+                let host_permissions = manifest
+                    .as_ref()
+                    .map(|m| m.host_permissions.clone())
+                    .unwrap_or_default();
+                let granted = db.list_extension_permissions(&row.id)?;
+                let bytes = db.extension_storage_bytes(&row.id)?;
+                out.push(serde_json::json!({
+                    "id": row.id,
+                    "name": row.name,
+                    "version": row.version,
+                    "description": row.description,
+                    "author": row.author,
+                    "active": row.active,
+                    "installedAt": row.installed_at,
+                    "updatedAt": row.updated_at,
+                    "requested": requested,
+                    "granted": granted,
+                    "hostPermissions": host_permissions,
+                    "storageBytes": bytes,
+                }));
+            }
+            Ok(Value::Array(out))
+        }),
+        "ext_inspect" => {
+            let path = arg("path")?;
+            let mut info = extensions::inspect_source(std::path::Path::new(&path))?;
+            let id = info
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let installed = db_handle(&app)?.get_extension(&id)?.is_some();
+            if let Some(obj) = info.as_object_mut() {
+                obj.insert("installed".into(), Value::Bool(installed));
+                obj.insert("capabilities".into(), serde_json::json!(extensions::CAPABILITIES));
+                obj.insert(
+                    "defaultCapabilities".into(),
+                    serde_json::json!(extensions::DEFAULT_CAPABILITIES),
+                );
+            }
+            Ok(info)
+        }
+        "ext_inspect_from_url" => {
+            let url = arg("url")?;
+            let downloaded = extensions::download_source(&url)?;
+            let result = extensions::inspect_source(&downloaded);
+            let _ = std::fs::remove_file(&downloaded);
+            let mut info = result?;
+            let id = info
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let installed = db_handle(&app)?.get_extension(&id)?.is_some();
+            if let Some(obj) = info.as_object_mut() {
+                obj.insert("installed".into(), Value::Bool(installed));
+                obj.insert("capabilities".into(), serde_json::json!(extensions::CAPABILITIES));
+                obj.insert(
+                    "defaultCapabilities".into(),
+                    serde_json::json!(extensions::DEFAULT_CAPABILITIES),
+                );
+            }
+            Ok(info)
+        }
+        "ext_install" => {
+            let path = arg("path")?;
+            let grants: Vec<String> = args
+                .as_ref()
+                .and_then(|a| a.get("grants"))
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let dir = extensions_dir(&app)?;
+            let db = db_handle(&app)?;
+            let outcome = extensions::install_source(&db, std::path::Path::new(&path), &dir, &grants)?;
+            reload_extensions(&app, &db);
+            extensions::apply_to_tabs(&app, &state);
+            Ok(serde_json::json!({
+                "id": outcome.id,
+                "name": outcome.name,
+                "version": outcome.version,
+                "active": true,
+            }))
+        }
+        "ext_install_from_url" => {
+            let url = arg("url")?;
+            let grants: Vec<String> = args
+                .as_ref()
+                .and_then(|a| a.get("grants"))
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                .unwrap_or_default();
+            let downloaded = extensions::download_source(&url)?;
+            let dir = extensions_dir(&app)?;
+            let db = db_handle(&app)?;
+            let result = extensions::install_source(&db, &downloaded, &dir, &grants);
+            let _ = std::fs::remove_file(&downloaded);
+            let outcome = result?;
+            reload_extensions(&app, &db);
+            extensions::apply_to_tabs(&app, &state);
+            Ok(serde_json::json!({
+                "id": outcome.id,
+                "name": outcome.name,
+                "version": outcome.version,
+                "active": true,
+            }))
+        }
+        "ext_export" => {
+            let id = arg("id")?;
+            let dest = std::path::PathBuf::from(arg("path")?);
+            let db = db_handle(&app)?;
+            tauri::async_runtime::spawn_blocking(move || extensions::export_source(&db, &id, &dest))
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(Value::Null)
+        }
+        "ext_toggle" => {
+            let id = arg("id")?;
+            let active = matches!(arg("active").ok().as_deref(), Some("1") | Some("true"));
+            let db = db_handle(&app)?;
+            db.set_extension_active(&id, active)?;
+            reload_extensions(&app, &db);
+            extensions::apply_to_tabs(&app, &state);
+            Ok(Value::Bool(active))
+        }
+        "ext_remove" => {
+            let id = arg("id")?;
+            let db = db_handle(&app)?;
+            extensions::uninstall(&db, &id)?;
+            reload_extensions(&app, &db);
+            extensions::apply_to_tabs(&app, &state);
+            Ok(Value::Null)
+        }
+        "ext_grant" => {
+            let id = arg("id")?;
+            let capability = arg("capability")?;
+            let granted = matches!(arg("granted").ok().as_deref(), Some("1") | Some("true"));
+            if extensions::DEFAULT_CAPABILITIES.contains(&capability.as_str()) {
+                return Err("quyền mặc định không thể thu hồi".into());
+            }
+            if !extensions::CAPABILITIES.contains(&capability.as_str()) {
+                return Err("capability không hỗ trợ".into());
+            }
+            let db = db_handle(&app)?;
+            let row = db
+                .get_extension(&id)?
+                .ok_or_else(|| "không tìm thấy tiện ích".to_string())?;
+            let manifest = extensions::Manifest::from_json(&row.manifest_json)?;
+            if !manifest.permissions.contains(&capability)
+                && !manifest.optional_permissions.contains(&capability)
+            {
+                return Err("tiện ích không khai báo quyền này".into());
+            }
+            db.grant_extension_permission(&id, &capability, granted)?;
+            reload_extensions(&app, &db);
+            extensions::apply_to_tabs(&app, &state);
+            Ok(Value::Null)
+        }
+        "ext_storage_clear" => {
+            let id = arg("id")?;
+            let db = db_handle(&app)?;
+            db.extension_storage_clear(&id)?;
+            Ok(Value::Null)
+        }
         // ===== M3: tải xuống =====
         "downloads_list" => with_db(&app, |db| db.list_downloads()),
         "downloads_clear" => with_db(&app, |db| {
@@ -861,6 +1039,21 @@ fn db_handle(app: &AppHandle) -> Result<crate::db::Db, String> {
     app.try_state::<crate::db::DbState>()
         .and_then(|s| s.0.clone())
         .ok_or_else(|| "lưu trữ chưa khả dụng".to_string())
+}
+
+/// Thư mục cài tiện ích: `{app_data}/extensions`.
+fn extensions_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|d| d.join("extensions"))
+        .map_err(|e| format!("không xác định được thư mục dữ liệu: {e}"))
+}
+
+/// Nạp lại registry sau khi danh sách/quyền thay đổi.
+fn reload_extensions(app: &AppHandle, db: &crate::db::Db) {
+    if let Some(handle) = app.try_state::<extensions::ExtensionsHandle>() {
+        handle.0.reload(db);
+    }
 }
 
 /// Số phút tự khóa kho mật khẩu; 0 là không tự khóa.

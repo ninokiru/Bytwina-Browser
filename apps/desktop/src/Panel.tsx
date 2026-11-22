@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { cmd, type TabInfo } from "./tabs";
 import { t, useLang, type Key } from "./i18n";
 import Settings from "./Settings";
+import ExtensionsPanel from "./ExtensionsPanel";
 import {
   AlertIcon,
   BackupIcon,
@@ -22,6 +23,7 @@ import {
   PaletteIcon,
   PlusIcon,
   PowerIcon,
+  PuzzleIcon,
   SearchIcon,
   SettingsIcon,
   SplitIcon,
@@ -60,6 +62,7 @@ export type PanelKind =
   | "dictionary"
   | "notes"
   | "sessions"
+  | "extensions"
   | "menu";
 
 interface DownloadItem {
@@ -628,6 +631,10 @@ export default function Panel({
       );
       break;
 
+    case "extensions":
+      body = <ExtensionsPanel />;
+      break;
+
     case "menu":
       body = (
         <div className="menu-list">
@@ -698,6 +705,12 @@ export default function Panel({
           <MenuItem icon={<BookIcon />} label={t("title.reading")} onOpen={onOpen} kind="reading" />
           <MenuItem icon={<FileTextIcon />} label={t("title.notes")} onOpen={onOpen} kind="notes" />
           <MenuItem icon={<LayersIcon />} label={t("title.sessions")} onOpen={onOpen} kind="sessions" />
+          <MenuItem
+            icon={<PuzzleIcon />}
+            label={t("menu.extensions")}
+            onOpen={onOpen}
+            kind="extensions"
+          />
           <MenuItem icon={<GridIcon />} label={t("title.tabs")} onOpen={onOpen} kind="tabs" />
           <MenuItem
             icon={<BookTextIcon />}
@@ -860,6 +873,8 @@ function titleKey(kind: PanelKind): Key {
       return "title.notes";
     case "sessions":
       return "title.sessions";
+    case "extensions":
+      return "title.extensions";
     case "menu":
       return "bar.menu";
     default:
@@ -885,6 +900,8 @@ function titleIcon(kind: PanelKind): ReactNode {
       return <FileTextIcon />;
     case "sessions":
       return <LayersIcon />;
+    case "extensions":
+      return <PuzzleIcon />;
     case "menu":
       return <MoreIcon />;
     default:

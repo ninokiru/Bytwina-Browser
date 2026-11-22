@@ -11,6 +11,7 @@ tauri-build = "2"
 tauri = { version = "2", features = ["unstable"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+http = "1"
 url = "2"
 tokio = { version = "1", features = ["time"] }
 log = "0.4"
@@ -45,6 +46,8 @@ tauri-plugin-updater = "2"
 # hiểm, nên frontend chỉ hiển thị chuỗi đã làm sạch (không tự render Markdown).
 pulldown-cmark = "0.13"
 ammonia = "4"
+# Hệ tiện ích v1: cài từ tệp .zip (chỉ cần deflate; không kéo bzip2/lzma).
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 # Public Suffix List: xác định đúng registrable domain cho luật third-party của
 # bộ chặn. `adblock` có resolver riêng nhưng hàm so sánh bên ta thì không, nên
 # `co.uk`/`com.vn` từng bị đoán sai. Đã có sẵn trong Cargo.lock qua chuỗi phụ

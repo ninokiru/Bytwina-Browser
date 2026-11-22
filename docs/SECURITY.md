@@ -23,6 +23,17 @@
 - Chưa có tự động điền hoặc tự bắt mật khẩu từ trang web: người dùng phải thêm/sửa/xem/sao chép thủ công. Chưa kiểm chứng runtime trên Windows.
 - Chưa có giới hạn số lần thử mật khẩu chủ trong một phiên; Argon2id làm mỗi lần thử tốn thời gian và RAM nhưng không chặn dò ngoại tuyến nếu kẻ tấn công lấy được tệp CSDL.
 
+## Hệ tiện ích (v1)
+
+- Tiện ích chỉ được cài từ **thư mục hoặc tệp .zip** do người dùng chọn; không có marketplace, không tự tải mã từ mạng, không có chữ ký số. Chỉ cài tiện ích bạn tin cậy.
+- Đường dẫn trong manifest bị giới hạn ở dạng tương đối (không `..`, không ổ đĩa tuyệt đối). Zip được kiểm tra zip-slip, số tệp, kích thước từng tệp và tổng dung lượng trước khi giải nén; symlink trong thư mục nguồn bị từ chối.
+- Mỗi tiện ích có tối đa 5 MB storage riêng trong bảng `ext_storage`; gỡ tiện ích xóa luôn storage và quyền trong cùng giao dịch.
+- Quyền nằm trong manifest và được người dùng duyệt lúc cài: `dom:read`, `dom:write`, `storage:own`, `network:restricted`, `network:unrestricted`, `notifications`, `tabs:read`, `tabs:navigate`, `ui:inject`. Quyền mặc định (`dom:read`, `storage:own`, `notifications`) không thể thu hồi.
+- Mọi lời gọi storage/tabs/network đều quay về Rust qua WebView2 WebMessage và được kiểm tra lại token ngẫu nhiên, quyền, URL nguồn, hạn mức gọi mỗi giây và hạn mức dữ liệu. JavaScript trong trang không gọi được IPC của Tauri.
+- `network:*` chỉ cho http/https, chặn localhost, mạng nội bộ và địa chỉ IP riêng; không tự đi theo redirect. `network:restricted` chỉ được gọi host khớp `host_permissions`.
+- **Giới hạn quan trọng:** content script chạy trong **main world** của trang (WebView2 không cho Tauri tạo isolated world), nên script của trang có thể tương tác với đối tượng bridge và gọi API của tiện ích trong phạm vi trang đó. Token không lộ ra biến toàn cục, nhưng trang khớp mẫu vẫn có thể hành động thay tiện ích. Chưa có background script, popup, options page, clipboard hay native API; chưa có cơ chế cập nhật.
+- Việc bật/tắt/đổi quyền tải lại các tab đang mở để nạp lại script `document_start`; trạng thái trang (vị trí cuộn, form) sẽ mất.
+
 ## Trạng thái các biện pháp bảo mật (M15)
 
 | Biện pháp | Trạng thái |

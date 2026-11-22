@@ -68,6 +68,23 @@ pub struct SessionTab {
     pub group: Option<String>,
 }
 
+/// Tiện ích đã cài (v6). `manifest_json` giữ nguyên bản gốc để kiểm tra lại
+/// quyền và hiển thị; `dir` là thư mục chứa mã sau khi cài.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionRecord {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub author: String,
+    pub active: bool,
+    pub manifest_json: String,
+    pub dir: String,
+    pub installed_at: i64,
+    pub updated_at: i64,
+}
+
 #[derive(Default)]
 pub struct DbState(pub Option<Db>);
 
@@ -246,6 +263,41 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             );
         ")?;
         conn.execute("INSERT INTO schema_version (version) VALUES (5)", [])?;
+    }
+    if version < 6 {
+        // v6: hệ tiện ích — danh sách đã cài, quyền được cấp và storage riêng
+        // cho từng tiện ích. Dùng IF NOT EXISTS để mở lại DB nhiều lần an toàn.
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS extensions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                author TEXT NOT NULL DEFAULT '',
+                active INTEGER NOT NULL DEFAULT 0,
+                manifest_json TEXT NOT NULL,
+                dir TEXT NOT NULL,
+                installed_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS ext_permissions (
+                extension_id TEXT NOT NULL,
+                capability TEXT NOT NULL,
+                granted_at INTEGER NOT NULL,
+                granted_by TEXT NOT NULL DEFAULT 'user',
+                PRIMARY KEY (extension_id, capability)
+            );
+            CREATE TABLE IF NOT EXISTS ext_storage (
+                extension_id TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (extension_id, key)
+            );
+            ",
+        )?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (6)", [])?;
     }
     Ok(())
 }
@@ -1004,6 +1056,245 @@ impl Db {
             .execute("DELETE FROM password_entries", [])
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    // ===== Tiện ích (v6) =====
+
+    pub fn upsert_extension(&self, rec: &ExtensionRecord) -> Result<(), String> {
+        let ts = now();
+        self.conn()
+            .execute(
+                "INSERT INTO extensions
+                    (id, name, version, description, author, active, manifest_json, dir, installed_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    version = excluded.version,
+                    description = excluded.description,
+                    author = excluded.author,
+                    manifest_json = excluded.manifest_json,
+                    dir = excluded.dir,
+                    updated_at = excluded.updated_at",
+                params![
+                    rec.id,
+                    rec.name,
+                    rec.version,
+                    rec.description,
+                    rec.author,
+                    rec.active as i64,
+                    rec.manifest_json,
+                    rec.dir,
+                    if rec.installed_at == 0 { ts } else { rec.installed_at },
+                    ts
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn extension_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ExtensionRecord> {
+        Ok(ExtensionRecord {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            version: r.get(2)?,
+            description: r.get(3)?,
+            author: r.get(4)?,
+            active: r.get::<_, i64>(5)? != 0,
+            manifest_json: r.get(6)?,
+            dir: r.get(7)?,
+            installed_at: r.get(8)?,
+            updated_at: r.get(9)?,
+        })
+    }
+
+    pub fn list_extensions(&self) -> Result<Vec<ExtensionRecord>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare(
+                "SELECT id, name, version, description, author, active,
+                        manifest_json, dir, installed_at, updated_at
+                 FROM extensions ORDER BY name COLLATE NOCASE ASC, id ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], Self::extension_row)
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn get_extension(&self, id: &str) -> Result<Option<ExtensionRecord>, String> {
+        use rusqlite::OptionalExtension;
+        self.conn()
+            .query_row(
+                "SELECT id, name, version, description, author, active,
+                        manifest_json, dir, installed_at, updated_at
+                 FROM extensions WHERE id = ?1",
+                params![id],
+                Self::extension_row,
+            )
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn set_extension_active(&self, id: &str, active: bool) -> Result<(), String> {
+        let changed = self
+            .conn()
+            .execute(
+                "UPDATE extensions SET active = ?2, updated_at = ?3 WHERE id = ?1",
+                params![id, active as i64, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        if changed == 0 {
+            return Err("không tìm thấy tiện ích".into());
+        }
+        Ok(())
+    }
+
+    /// Xóa tiện ích cùng quyền và storage trong một giao dịch: không để lại
+    /// dữ liệu mồ côi nếu ứng dụng thoát giữa chừng.
+    pub fn delete_extension(&self, id: &str) -> Result<(), String> {
+        let mut c = self.conn();
+        let tx = c.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM ext_permissions WHERE extension_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM ext_storage WHERE extension_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM extensions WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())
+    }
+
+    /// Ghi đè toàn bộ quyền đã cấp của một tiện ích.
+    pub fn set_extension_permissions(
+        &self,
+        id: &str,
+        caps: &[String],
+        granted_by: &str,
+    ) -> Result<(), String> {
+        let mut c = self.conn();
+        let tx = c.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM ext_permissions WHERE extension_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        let ts = now();
+        for cap in caps {
+            tx.execute(
+                "INSERT OR IGNORE INTO ext_permissions
+                    (extension_id, capability, granted_at, granted_by)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![id, cap, ts, granted_by],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())
+    }
+
+    pub fn grant_extension_permission(
+        &self,
+        id: &str,
+        capability: &str,
+        granted: bool,
+    ) -> Result<(), String> {
+        if granted {
+            self.conn()
+                .execute(
+                    "INSERT OR IGNORE INTO ext_permissions
+                        (extension_id, capability, granted_at, granted_by)
+                     VALUES (?1, ?2, ?3, 'user')",
+                    params![id, capability, now()],
+                )
+                .map_err(|e| e.to_string())?;
+        } else {
+            self.conn()
+                .execute(
+                    "DELETE FROM ext_permissions WHERE extension_id = ?1 AND capability = ?2",
+                    params![id, capability],
+                )
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    pub fn list_extension_permissions(&self, id: &str) -> Result<Vec<String>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare(
+                "SELECT capability FROM ext_permissions
+                 WHERE extension_id = ?1 ORDER BY capability ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![id], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn extension_storage_get(&self, id: &str, key: &str) -> Result<Option<String>, String> {
+        use rusqlite::OptionalExtension;
+        self.conn()
+            .query_row(
+                "SELECT value FROM ext_storage WHERE extension_id = ?1 AND key = ?2",
+                params![id, key],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn extension_storage_set(&self, id: &str, key: &str, value: &str) -> Result<(), String> {
+        self.conn()
+            .execute(
+                "INSERT INTO ext_storage (extension_id, key, value, updated_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(extension_id, key) DO UPDATE SET
+                    value = excluded.value, updated_at = excluded.updated_at",
+                params![id, key, value, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn extension_storage_remove(&self, id: &str, key: &str) -> Result<(), String> {
+        self.conn()
+            .execute(
+                "DELETE FROM ext_storage WHERE extension_id = ?1 AND key = ?2",
+                params![id, key],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn extension_storage_clear(&self, id: &str) -> Result<(), String> {
+        self.conn()
+            .execute("DELETE FROM ext_storage WHERE extension_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn extension_storage_all(&self, id: &str) -> Result<Vec<(String, String)>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT key, value FROM ext_storage WHERE extension_id = ?1")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
+    }
+
+    /// Tổng số byte JSON đang lưu (xấp xỉ kích thước thật của value).
+    pub fn extension_storage_bytes(&self, id: &str) -> Result<i64, String> {
+        self.conn()
+            .query_row(
+                "SELECT COALESCE(SUM(LENGTH(value)), 0) FROM ext_storage WHERE extension_id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
     }
 }
 

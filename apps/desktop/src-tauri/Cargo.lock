@@ -366,6 +366,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "log",
+ "http",
  "mimalloc",
  "psl",
  "pulldown-cmark",

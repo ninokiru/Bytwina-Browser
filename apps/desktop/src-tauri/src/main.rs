@@ -13,6 +13,7 @@ mod commands;
 mod cosmetic;
 mod db;
 mod diagnostics;
+mod extensions;
 mod filters;
 mod navigation;
 mod passwords;
@@ -27,6 +28,11 @@ use navigation::PopupQueue;
 
 fn main() {
     tauri::Builder::default()
+        // Tài nguyên extension không đi qua IPC hay đường dẫn file://; protocol
+        // này chỉ đọc assets của extension đang hoạt động.
+        .register_uri_scheme_protocol("bytwina-extension", |_ctx, request| {
+            extensions::serve_asset(_ctx, request)
+        })
         // Single-instance phải đăng ký đầu tiên để các plugin khác không khởi tạo hai lần.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_window("main") {
@@ -87,6 +93,15 @@ fn main() {
                 );
             }
             app.manage(DbState(storage));
+            // Hệ tiện ích: nạp manifest của các tiện ích đang bật trước khi tạo
+            // webview đầu tiên, để document_start có sẵn script ngay lượt tải đầu.
+            let registry = extensions::ExtensionsHandle(std::sync::Arc::new(
+                extensions::Registry::new(),
+            ));
+            if let Some(db) = app.state::<DbState>().0.clone() {
+                registry.0.reload(&db);
+            }
+            app.manage(registry);
             // M4: bộ chặn quảng cáo. Nạp engine ở luồng nền vì parse hàng chục
             // nghìn luật mất vài giây trên máy cấu hình thấp.
             let filters_dir = app

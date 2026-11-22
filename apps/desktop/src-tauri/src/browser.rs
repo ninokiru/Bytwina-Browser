@@ -735,6 +735,10 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
             {
                 crate::permissions::webview2::attach(&wv, app.clone(), handle);
             }
+            // Tiện ích: bridge + script document_start + kênh WebMessage. Gắn ngay
+            // sau khi tạo webview, trước navigation đầu tiên của tab.
+            #[cfg(target_os = "windows")]
+            crate::extensions::webview2::attach(&wv, app.clone());
             // Phóng to theo cài đặt đã lưu (áp dụng cho webview mới tạo).
             let _ = wv.set_zoom(zoom_factor(app));
         }
@@ -874,6 +878,10 @@ pub fn close_webview(app: &AppHandle, id: u32) {
         {
             crate::permissions::webview2::detach(&wv, handle);
         }
+        #[cfg(target_os = "windows")]
+        if let Some(handle) = app.try_state::<crate::extensions::ExtensionsHandle>() {
+            crate::extensions::webview2::detach(&wv, handle.inner());
+        }
         let _ = wv.close();
     }
 }
@@ -960,6 +968,9 @@ pub fn on_page_load<R: tauri::Runtime>(
                 state.record_loaded(id, u);
             }
             state.set_loading(id, false);
+            // Tiện ích: chèn content script document_end/document_idle của các
+            // tiện ích khớp URL. Bridge đã có từ document_start.
+            crate::extensions::on_page_load(app, label, url);
             // M2: ghi lịch sử toàn cục khi DB khả dụng.
             // M4: chế độ riêng tư không ghi lịch sử.
             // Ghi ở luồng nền: đây là thao tác ổ đĩa, đứng trên đường vẽ trạng thái
@@ -1234,7 +1245,7 @@ fn unique_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
 }
 
 /// Tên webview do ta đặt theo quy ước `tab-<id>`; webview khác trả None.
-fn tab_id_of(label: &str) -> Option<u32> {
+pub(crate) fn tab_id_of(label: &str) -> Option<u32> {
     label.strip_prefix("tab-")?.parse().ok()
 }
 

@@ -36,6 +36,7 @@ pub fn internal_page(input: &str) -> Option<Internal> {
         "reading" => "reading",
         "dictionary" => "dictionary",
         "newtab" => "newtab",
+        "extensions" => "extensions",
         _ => return Some(Internal::Unknown),
     };
     Some(Internal::Known(page))

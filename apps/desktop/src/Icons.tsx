@@ -28,6 +28,12 @@ export const PlusIcon = (p: Props) => (
   </Icon>
 );
 
+export const PuzzleIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M9 4h2a2 2 0 1 0 4 0h2a1 1 0 0 1 1 1v3h-2a2 2 0 1 0 0 4h2v3a1 1 0 0 1-1 1h-3v-2a2 2 0 1 0-4 0v2H7a1 1 0 0 1-1-1v-3H4a2 2 0 1 0 0-4h2V8a1 1 0 0 1 1-1h2V5a1 1 0 0 1 1-1Z" />
+  </Icon>
+);
+
 export const CloseIcon = (p: Props) => (
   <Icon {...p}>
     <path d="M6 6l12 12M18 6L6 18" />

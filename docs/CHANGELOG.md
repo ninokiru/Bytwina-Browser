@@ -2,6 +2,19 @@
 
 Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Thêm · Thay đổi · Gỡ bỏ · Sửa · Bảo mật.
 
+## Chưa phát hành
+
+### Thêm (Add)
+- **Hệ tiện ích v1 (lõi chạy được)**:
+  - Cài tiện ích từ **thư mục** hoặc **tệp .zip/.bytwina-ext**; xem manifest và duyệt từng quyền trước khi cài.
+  - Quản lý trong bảng **Tiện ích** (menu ⋮ hoặc `bytwina://extensions`): bật/tắt, cấp/thu hồi quyền, xóa dữ liệu riêng, gỡ tiện ích.
+  - Manifest `manifest_version: 1` với `content_scripts` (`matches`, `exclude_matches`, `js`, `css`, `run_at` = `document_start` / `document_end` / `document_idle`), `permissions` và `host_permissions`.
+  - Content script `document_start` chạy trước script của trang bằng `AddScriptToExecuteOnDocumentCreated`; `document_end`/`document_idle` do Rust chèn khi trang tải xong.
+  - Bridge trong trang có kiểm quyền: `storage.local` (5 MB riêng mỗi tiện ích), `tabs.query/getCurrent/navigate`, `network.fetch` (chặn mạng nội bộ, giới hạn 5 MB/lần), `notifications`, `dom.*` cơ bản.
+  - Mỗi tiện ích có token ngẫu nhiên riêng theo tab; Rust kiểm tra lại token, quyền, URL nguồn và hạn mức — không tin dữ liệu từ JavaScript.
+  - Schema CSDL v6: bảng `extensions`, `ext_permissions`, `ext_storage`.
+- **Chưa có trong v1:** marketplace, chữ ký/tự cập nhật, background script, popup, options page, clipboard, `native:*`, `storage:shared`, `bytwina-extension://` assets. Content script chạy trong main world (xem `docs/SECURITY.md`).
+
 ## 0.0.5 — 2026-11-21 (so với 0.0.4)
 
 ### Thêm (Add)
