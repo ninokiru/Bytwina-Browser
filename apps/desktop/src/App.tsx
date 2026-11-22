@@ -502,6 +502,8 @@ export default function App() {
   const overlay = panel != null || showNewTab || palette || help;
   useEffect(() => {
     void cmd("panel_open", { on: overlay ? "1" : "0" }).catch(() => undefined);
+    // Bảng mở thì focus phải nằm ở thanh công cụ (webview nội dung đã bị ẩn), để Esc đóng được bảng.
+    if (overlay) void cmd("toolbar_focus").catch(() => undefined);
   }, [overlay]);
 
   const go = () => {

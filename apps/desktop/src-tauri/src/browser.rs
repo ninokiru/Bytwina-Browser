@@ -564,13 +564,13 @@ const SHORTCUT_HOST: &str = "shortcut.bytwina.invalid";
 /// Ctrl+P, Ctrl+C/V...) để WebView2 xử lý như cũ.
 const SHORTCUT_FORWARD_JS: &str = r##"
 (function () {
-  if (window.top !== window) return;
   var HOST = "shortcut.bytwina.invalid";
   var FKEYS = { F1: 1, F5: 1, F6: 1, F11: 1 };
   var NAV_KEYS = { Tab: 1, PageUp: 1, PageDown: 1, Delete: 1, Home: 1, ArrowLeft: 1, ArrowRight: 1 };
   var PLAIN_LETTERS = "TWLDJHKRQ";
   var SHIFT_LETTERS = "NOFRT";
   var EDIT_SAFE = "TWR";
+  var IS_TOP = window.top === window;
   function editable(t) {
     return !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
   }
@@ -579,7 +579,7 @@ const SHORTCUT_FORWARD_JS: &str = r##"
     if (FKEYS[k]) return true;
     if (alt && NAV_KEYS[k]) return true;
     if (!ctrl || alt) return false;
-    if (/^[0-9]$/.test(k) || k === "=" || k === "-" || k === "+") return true;
+    if (/^[0-9]$/.test(k) || k === "=" || k === "-" || k === "+" || k === "/") return true;
     if (k === "Tab" || k === "PageUp" || k === "PageDown" || k === "Delete") return true;
     if (/^[a-zA-Z]$/.test(k)) {
       var u = k.toUpperCase();
@@ -587,22 +587,37 @@ const SHORTCUT_FORWARD_JS: &str = r##"
     }
     return false;
   }
+  // Khung chính: điều hướng tới host giả để Rust bắt. Iframe: gửi cho khung cha.
+  function send(p) {
+    if (IS_TOP) {
+      location.href = "https://" + HOST + "/k?d=" + encodeURIComponent(JSON.stringify(p));
+    } else {
+      window.parent.postMessage({ bytwinaKey: p }, "*");
+    }
+  }
   window.addEventListener("keydown", function (e) {
     if (!wanted(e)) return;
     var k = e.key;
-    var isEditable = editable(e.target);
-    if (isEditable && !(FKEYS[k] || e.altKey || e.shiftKey || NAV_KEYS[k] || EDIT_SAFE.indexOf(k.toUpperCase()) >= 0)) {
+    if (editable(e.target) && !(FKEYS[k] || e.altKey || e.shiftKey || NAV_KEYS[k] || EDIT_SAFE.indexOf(k.toUpperCase()) >= 0)) {
       return;
     }
     e.preventDefault();
     e.stopPropagation();
-    var d = JSON.stringify({
-      key: k, code: e.code,
-      ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey
-    });
-    if (d.length > 400) return;
-    location.href = "https://" + HOST + "/k?d=" + encodeURIComponent(d);
+    send({ key: k, code: String(e.code || "").slice(0, 40), ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey });
   }, true);
+  if (IS_TOP) {
+    // Phím từ iframe con (chỉ con trực tiếp) đi qua đây, kiểm tra lại trước khi gửi.
+    window.addEventListener("message", function (ev) {
+      var d = ev.data;
+      if (!d || typeof d !== "object" || !d.bytwinaKey) return;
+      if (!ev.source || ev.source.parent !== window) return;
+      var p = d.bytwinaKey;
+      if (typeof p.key !== "string" || p.key.length > 20) return;
+      var fake = { key: p.key, code: String(p.code || "").slice(0, 40), ctrlKey: !!p.ctrlKey, metaKey: !!p.metaKey, shiftKey: !!p.shiftKey, altKey: !!p.altKey };
+      if (!wanted(fake)) return;
+      send(fake);
+    });
+  }
 })();
 "##;
 

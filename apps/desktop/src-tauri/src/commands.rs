@@ -441,6 +441,13 @@ pub async fn browser_command(
             app.exit(0);
             Ok(Value::Null)
         }
+        // Đưa focus về webview thanh công cụ (dùng khi mở bảng nổi/bảng lệnh).
+        "toolbar_focus" => {
+            if let Some(tb) = app.get_webview("toolbar") {
+                tb.set_focus().map_err(|e| e.to_string())?;
+            }
+            Ok(Value::Null)
+        }
         // F11: bật/tắt toàn màn hình cho cửa sổ chính.
         "fullscreen_toggle" => {
             let window = app.get_window("main").ok_or("không tìm thấy cửa sổ chính")?;
