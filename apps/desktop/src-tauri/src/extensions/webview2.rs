@@ -124,7 +124,7 @@ fn remove_registration(core: &ICoreWebView2, label: &str) {
 /// Đọc chuỗi COM được cấp phát bằng CoTaskMem và giải phóng ngay.
 fn read_pwstr(f: impl FnOnce(*mut PWSTR) -> windows::core::Result<()>) -> Option<String> {
     let mut out = PWSTR::null();
-    if unsafe { f(&mut out) }.is_err() {
+    if f(&mut out).is_err() {
         return None;
     }
     Some(take_pwstr(out))

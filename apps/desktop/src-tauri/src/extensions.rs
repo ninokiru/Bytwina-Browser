@@ -793,7 +793,7 @@ fn stage_source(src: &Path) -> Result<Stage, String> {
     }
     let mut total = 0u64;
     for i in 0..archive.len() {
-        let mut entry = archive
+        let entry = archive
             .by_index(i)
             .map_err(|e| format!("không đọc được mục zip: {e}"))?;
         let Some(rel) = entry.enclosed_name() else {
@@ -901,7 +901,7 @@ pub fn download_source(url: &str) -> Result<PathBuf, String> {
         .max_redirects_will_error(false)
         .build()
         .into();
-    let mut response = agent
+    let response = agent
         .get(url)
         .call()
         .map_err(|e| format!("không tải được tiện ích: {e}"))?;
@@ -1337,7 +1337,7 @@ async fn dispatch(
     registry: &Registry,
     label: &str,
     ext: &LoadedExt,
-    page: &Url,
+    _page: &Url,
     method: &str,
     params: Value,
 ) -> Result<Value, String> {
@@ -1645,7 +1645,7 @@ fn fetch_blocking(url: &str, method: &str, body: Option<String>) -> Result<Value
                 .map(|v| (k.as_str().to_string(), Value::String(v.to_string())))
         })
         .collect();
-    let mut body_reader = resp.body_mut().with_config().limit(MAX_NET_BYTES as u64);
+    let body_reader = resp.body_mut().with_config().limit(MAX_NET_BYTES as u64);
     let bytes = body_reader
         .read_to_vec()
         .map_err(|e| format!("không đọc được nội dung: {e}"))?;
