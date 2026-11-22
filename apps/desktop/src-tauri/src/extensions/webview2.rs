@@ -104,9 +104,10 @@ pub fn attach(webview: &Webview<tauri::Wry>, app: tauri::AppHandle) {
 
 pub fn detach(webview: &Webview<tauri::Wry>, handle: &ExtensionsHandle) {
     let label = webview.label().to_string();
+    let registration_label = label.clone();
     let _ = webview.with_webview(move |pv| {
         if let Ok(core) = unsafe { pv.controller().CoreWebView2() } {
-            remove_registration(&core, &label);
+            remove_registration(&core, &registration_label);
         }
     });
     handle.0.detach(&label);

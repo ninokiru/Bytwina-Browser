@@ -4,6 +4,7 @@ use tauri::webview::{DownloadEvent, PageLoadEvent};
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl,
 };
+use url::Url;
 
 use crate::db::DbState;
 use crate::navigation;

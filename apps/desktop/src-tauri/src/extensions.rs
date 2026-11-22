@@ -551,7 +551,7 @@ impl Registry {
                 .iter()
                 .filter(|s| s.run_at != RunAt::Start && pattern_hit(&s.matches, &s.exclude, url))
             {
-                out.push(self.end_wrapper(ext, script));
+                out.push(self.end_wrapper(&ext, script));
             }
         }
         out
@@ -895,7 +895,7 @@ pub fn download_source(url: &str) -> Result<PathBuf, String> {
     if is_private_host(target.host_str().unwrap_or_default()) {
         return Err("không cho tải tiện ích từ mạng nội bộ".into());
     }
-    let agent = ureq::Agent::config_builder()
+    let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(std::time::Duration::from_secs(30)))
         .max_redirects(0)
         .max_redirects_will_error(false)
@@ -1634,7 +1634,7 @@ fn fetch_blocking(url: &str, method: &str, body: Option<String>) -> Result<Value
         "HEAD" => agent.head(url).call(),
         other => return Err(format!("method chưa hỗ trợ: {other}")),
     };
-    let resp = resp.map_err(|e| format!("mạng lỗi: {e}"))?;
+    let mut resp = resp.map_err(|e| format!("mạng lỗi: {e}"))?;
     let status = resp.status().as_u16();
     let headers: serde_json::Map<String, Value> = resp
         .headers()
@@ -1935,22 +1935,22 @@ mod tests {
     #[test]
     fn minimal_manifest_gets_generated_id() {
         let m = manifest(MIN).unwrap();
-        let id = m.id.unwrap();
+        let id = m.id.as_ref().unwrap();
         assert!(id.starts_with("ext."), "{id}");
-        assert!(valid_id(&id));
+        assert!(valid_id(id));
         assert!(m.requested_capabilities().is_empty());
     }
 
     #[test]
     fn dangerous_or_unknown_fields_are_rejected() {
-        assert!(manifest(MIN.replace("1.0.0", "abc")).is_err());
-        assert!(manifest(MIN.replace("a.js", "../a.js")).is_err());
-        assert!(manifest(MIN.replace("a.js", "C:\\\\a.js")).is_err());
-        assert!(manifest(MIN.replace("https://example.com/*", "*://*/*")).is_err());
-        assert!(manifest(MIN.replace(
+        assert!(manifest(&MIN.replace("1.0.0", "abc")).is_err());
+        assert!(manifest(&MIN.replace("a.js", "../a.js")).is_err());
+        assert!(manifest(&MIN.replace("a.js", "C:\\\\a.js")).is_err());
+        assert!(manifest(&MIN.replace("https://example.com/*", "*://*/*")).is_err());
+        assert!(manifest(&MIN.replace(
             "\"js\": [\"a.js\"]",
             "\"js\": [\"a.js\"], \"run_at\": \"document_x\""
-        ))
+        )))
         .is_err());
     }
 
