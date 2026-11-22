@@ -1,0 +1,165 @@
+/* Màn hình chào mừng lần đầu. Dùng token từ styles.css (--surface, --accent, --border…). */
+
+.ob-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+}
+
+.ob-card {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.ob-progress {
+  height: 4px;
+  background: var(--surface-3);
+}
+
+.ob-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.ob-body {
+  padding: 32px 32px 16px;
+  animation: ob-in 0.2s ease-out;
+}
+
+.ob-body h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ob-body p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ob-logo {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+}
+
+.ob-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ob-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ob-option:hover {
+  background: var(--hover);
+}
+
+.ob-option[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
+}
+
+.ob-option b {
+  font-size: 14px;
+}
+
+.ob-option small {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.ob-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--divider);
+  cursor: pointer;
+}
+
+.ob-toggle-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.ob-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 32px 24px;
+}
+
+.ob-actions > div {
+  display: flex;
+  gap: 8px;
+}
+
+.ob-count {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+@keyframes ob-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .ob-options {
+    grid-template-columns: 1fr;
+  }
+  .ob-body {
+    padding: 24px 20px 12px;
+  }
+  .ob-actions {
+    padding: 12px 20px 20px;
+  }
+}
+
+/* Tôn trọng "Giảm chuyển động" của Windows: vô hiệu hóa animation và transition. */
+@media (prefers-reduced-motion: reduce) {
+  .ob-body,
+  .ob-progress span,
+  .ob-option {
+    animation: none;
+    transition: none;
+  }
+}

@@ -207,8 +207,8 @@ export default function Panel({
           <EmptyState icon={<StarIcon />} text={t("panel.emptyBookmarks")} />
         ) : (
           <ul className="list">
-            {bookmarks.map((b) => (
-              <li key={b.id} className="list-row">
+            {bookmarks.map((b, i) => (
+              <li key={b.id} className="list-row" style={{ ["--i" as string]: i }}>
                 <span className="row-icon">
                   <StarIcon />
                 </span>
@@ -270,8 +270,8 @@ export default function Panel({
           <EmptyState icon={<ClockIcon />} text={t("panel.emptyHistory")} />
         ) : (
           <ul className="list">
-            {history.map((h) => (
-              <li key={h.id} className="list-row">
+            {history.map((h, i) => (
+              <li key={h.id} className="list-row" style={{ ["--i" as string]: i }}>
                 <span className="row-icon">
                   <ClockIcon />
                 </span>

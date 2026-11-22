@@ -123,6 +123,13 @@ export default function Settings({
   // null: chưa kiểm tra được (plugin lỗi hoặc nền tảng không hỗ trợ).
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [resetArmed, setResetArmed] = useState(false);
+  // Toast "Đã lưu": đặt mốc thời gian khi lưu thành công, tự ẩn sau 1.6 giây.
+  const [savedAt, setSavedAt] = useState(0);
+  useEffect(() => {
+    if (savedAt === 0) return;
+    const id = setTimeout(() => setSavedAt(0), 1600);
+    return () => clearTimeout(id);
+  }, [savedAt]);
 
   const loadAdblock = () =>
     cmd("adblock_status")
@@ -220,7 +227,9 @@ export default function Settings({
   }, [initialPage]);
 
   const save = (key: string, value: string) => {
-    void cmd("settings_set", { key, value }).catch(() => undefined);
+    void cmd("settings_set", { key, value })
+      .then(() => setSavedAt(Date.now()))
+      .catch(() => undefined);
   };
 
   const changeLang = (next: Lang) => {
@@ -547,6 +556,13 @@ export default function Settings({
             <p className="hint">
               {t("settings.cookies")}: {t("settings.cookiesNote")}
             </p>
+            {/* Chỉ đọc: HTTP không mã hóa đã bị chặn theo điều khoản, không có công tắc giả. */}
+            <div className="settings-row">
+              HTTPS-First
+              <span className="settings-badge">
+                {lang === "en" ? "Always on (terms)" : "Luôn bật (theo điều khoản)"}
+              </span>
+            </div>
             <label className="settings-row">
               {t("settings.clearRange")}
               <select value={clearRange} onChange={(e) => setClearRange(e.target.value)}>
@@ -749,6 +765,11 @@ export default function Settings({
           </Section>
           </PageCtx.Provider>
         </div>
+        {savedAt !== 0 && (
+          <div key={savedAt} className="settings-toast" role="status" aria-live="polite">
+            <CheckCircleIcon /> {lang === "en" ? "Saved" : "Đã lưu"}
+          </div>
+        )}
       </main>
     </div>
   );

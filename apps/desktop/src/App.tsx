@@ -4,6 +4,7 @@ import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
 import PermissionPrompt, { type PermissionPrompt as SitePrompt } from "./PermissionPrompt";
 import NewTab from "./NewTab";
+import Onboarding from "./Onboarding";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
@@ -75,6 +76,8 @@ export default function App() {
   const [shieldOff, setShieldOff] = useState(false);
   // null: đang kiểm tra; false: phải chấp nhận điều khoản trước.
   const [termsOk, setTermsOk] = useState<boolean | null>(null);
+  // null: đang đọc; false: chưa hoàn tất chào mừng lần đầu.
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const [home, setHome] = useState(DEFAULT_HOME);
   const [starred, setStarred] = useState(false);
   // Chrome làm nhạt dải tab khi cửa sổ mất tiêu điểm.
@@ -105,6 +108,10 @@ export default function App() {
         if (typeof v === "string" && v) setHome(v);
       })
       .catch(() => undefined);
+    void cmd("settings_get", { key: "onboardingDone" })
+      .then((v) => setOnboarded(v === "1"))
+      // Không đọc được CSDL thì bỏ qua onboarding thay vì chặn người dùng.
+      .catch(() => setOnboarded(true));
     loadZoom();
   }, []);
 
@@ -489,7 +496,7 @@ export default function App() {
     setPanel("settings");
   };
 
-  if (termsOk === null) return null;
+  if (termsOk === null || onboarded === null) return null;
   if (termsOk === false) {
     return (
       <div className="terms-screen">
@@ -527,6 +534,10 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  if (onboarded === false) {
+    return <Onboarding onDone={() => setOnboarded(true)} />;
   }
 
   return (

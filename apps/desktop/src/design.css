@@ -1,0 +1,225 @@
+/* Lớp thiết kế bổ sung: thang khoảng cách 4px, bo góc, độ nổi, công tắc, và chuyển động.
+   Chỉ dùng token có sẵn trong styles.css; không đổi logic. */
+
+:root {
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+  --radius-control: 4px;
+  --radius-overlay: 8px;
+  --depth-2: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --depth-4: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.1);
+  --depth-8: 0 4px 8px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.1);
+  --depth-16: 0 8px 16px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+:root[data-theme="dark"] {
+  --depth-2: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --depth-4: 0 2px 4px rgba(0, 0, 0, 0.35), 0 0 1px rgba(255, 255, 255, 0.1);
+  --depth-8: 0 4px 8px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.12);
+  --depth-16: 0 8px 16px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* Đổi giao diện sáng/tối mượt, không nháy. */
+body,
+.settings-section,
+.settings-nav {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Trang Cài đặt: card nhóm cài đặt theo lưới 4px và depth 4; hover nâng lên depth 8. */
+.settings-section {
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  border-radius: var(--radius-overlay);
+  box-shadow: var(--depth-2);
+  animation: set-section-in 0.18s ease-out;
+}
+
+/* Một card mỗi trang, các hàng cách nhau bằng dải phân cách (không nâng khi rê). */
+.settings-section .settings-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.settings-section .settings-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Vật liệu: nền đặc, không blur (quyết định: solid color giả depth). */
+:root {
+  --toolbar: #f3f6fb;
+  --toolbar-blur: #eef2f8;
+  --surface: #ffffff;
+  --surface-2: #f2f6fc;
+  --surface-3: #e4ecf7;
+}
+
+:root[data-theme="dark"] {
+  --toolbar: #161c25;
+  --toolbar-blur: #12171f;
+  --surface: #1c2430;
+  --surface-2: #232d3b;
+  --surface-3: #2d3a4b;
+}
+
+.chrome,
+.chrome.blurred,
+.tab.active,
+.tab.active:hover,
+.omni-dropdown,
+.panel {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.settings-search {
+  border-radius: 22px;
+}
+
+/* Mục đang chọn: nền accent nhạt và dải 3px bên trái, theo Fluent. */
+.settings-nav-item.active {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Công tắc kiểu Windows 11 thay checkbox mặc định (44×24, nút tròn có spring). */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  border-radius: 12px;
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: var(--depth-4);
+  transition: transform 0.3s var(--ease-spring);
+}
+
+input[type="checkbox"]:checked {
+  background: var(--accent);
+}
+
+input[type="checkbox"]:checked::after {
+  transform: translateX(20px);
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@keyframes set-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Toast "Đã lưu" ở góc dưới phải trang Cài đặt. */
+.settings-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: var(--depth-16);
+  color: var(--text);
+  font-size: 12.5px;
+  animation: toast-in 0.25s var(--ease-spring) both;
+}
+
+.settings-toast svg {
+  width: 14px;
+  height: 14px;
+  color: var(--brand);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Stagger: mỗi hàng trễ 35ms so với hàng trước, tối đa 400ms. Panel đặt --i. */
+.list-row {
+  animation: row-in 0.22s ease-out both;
+  animation-delay: min(calc(var(--i, 0) * 35ms), 400ms);
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ob-note {
+  margin: 8px 0 0 !important;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* Giảm chuyển động của Windows (prefers-reduced-motion): tắt animation và transition. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
