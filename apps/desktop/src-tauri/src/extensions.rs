@@ -901,13 +901,13 @@ pub fn download_source(url: &str) -> Result<PathBuf, String> {
         .max_redirects_will_error(false)
         .build()
         .into();
-    let response = agent
+    let mut response = agent
         .get(url)
         .call()
         .map_err(|e| format!("không tải được tiện ích: {e}"))?;
     let temp = std::env::temp_dir().join(format!("bytwina-ext-{}.zip", uuid::Uuid::new_v4().simple()));
     let mut out = std::fs::File::create(&temp).map_err(|e| e.to_string())?;
-    let mut body = response.body_mut().with_config().limit(MAX_TOTAL_BYTES + 1);
+    let body = response.body_mut().with_config().limit(MAX_TOTAL_BYTES + 1);
     let bytes = match body.read_to_vec() {
         Ok(bytes) => bytes,
         Err(e) => {
