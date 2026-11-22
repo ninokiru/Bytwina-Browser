@@ -16,8 +16,8 @@ fn cache() -> &'static RwLock<HashMap<String, CompiledGlob>> {
 }
 
 pub fn compile(pattern: &str) -> CompiledGlob {
-    if let Ok(found) = cache().read().map(|g| g.get(pattern).cloned()) {
-        if let Some(found) = found { return found; }
+    if let Ok(Some(found)) = cache().read().map(|g| g.get(pattern).cloned()) {
+        return found;
     }
     let compiled = CompiledGlob { tokens: pattern.chars().map(|c| match c {
         '*' => Token::Star, '?' => Token::Any, other => Token::Literal(other),

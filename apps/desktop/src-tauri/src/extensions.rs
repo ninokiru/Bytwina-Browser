@@ -221,6 +221,7 @@ fn host_matches(pattern: &str, host: &str) -> bool {
 
 /// Glob tuyến tính (`*` = mọi chuỗi, `?` = một ký tự). Không đệ quy để không
 /// treo trên pattern dài.
+#[cfg(test)]
 fn wildcard(pattern: &str, text: &str) -> bool {
     let p: Vec<char> = pattern.chars().collect();
     let t: Vec<char> = text.chars().collect();
