@@ -64,12 +64,14 @@ jobs:
 
           $cargoPath = "apps/desktop/src-tauri/Cargo.toml"
           $cargo = Get-Content $cargoPath -Raw
-          $cargo = [regex]::Replace($cargo, '(?m)^(version\s*=\s*")[^"]+("\s*)$', "`$1$version`$2", 1)
+          $cargoReplacement = '${1}' + $version + '${2}'
+          $cargo = [regex]::Replace($cargo, '(?m)^(version\s*=\s*")[^"]+("\s*)$', $cargoReplacement, 1)
           Set-Content $cargoPath $cargo -Encoding utf8
 
           $lockPath = "apps/desktop/src-tauri/Cargo.lock"
           $lock = Get-Content $lockPath -Raw
-          $lock = [regex]::Replace($lock, '(?s)(\[\[package\]\]\r?\nname = "bytwina-browser"\r?\nversion = ")[^"]+', "`$1$version", 1)
+          $lockReplacement = '${1}' + $version
+          $lock = [regex]::Replace($lock, '(?s)(\[\[package\]\]\r?\nname = "bytwina-browser"\r?\nversion = ")[^"]+', $lockReplacement, 1)
           Set-Content $lockPath $lock -Encoding utf8
       - uses: Swatinem/rust-cache@v2
         with:
