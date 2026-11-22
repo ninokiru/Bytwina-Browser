@@ -22,6 +22,7 @@ use std::sync::{Mutex, RwLock};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, UriSchemeContext};
 use url::Url;
 
@@ -91,6 +92,12 @@ pub struct Manifest {
     pub icons: Option<Value>,
     #[serde(default)]
     pub metadata: Option<Value>,
+    #[serde(default)]
+    pub popup: Option<String>,
+    #[serde(default, rename = "options_page")]
+    pub options_page: Option<String>,
+    #[serde(default)]
+    pub background: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -283,6 +290,9 @@ impl Manifest {
                 return Err(format!("dependency không hợp lệ: {dep}"));
             }
         }
+        for page in [&self.popup, &self.options_page, &self.background].into_iter().flatten() {
+            safe_relative(page)?;
+        }
         if self.content_scripts.is_empty() {
             return Err("cần ít nhất một content_scripts".into());
         }
@@ -337,6 +347,15 @@ fn valid_version(v: &str) -> bool {
         && parts
             .iter()
             .all(|p| !p.is_empty() && p.len() <= 5 && p.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let av: Vec<u64> = a.split('.').map(|p| p.parse().unwrap_or(0)).collect();
+    let bv: Vec<u64> = b.split('.').map(|p| p.parse().unwrap_or(0)).collect();
+    (0..av.len().max(bv.len()))
+        .map(|i| (av.get(i).copied().unwrap_or(0), bv.get(i).copied().unwrap_or(0)))
+        .find_map(|(x, y)| (x != y).then_some(x.cmp(&y)))
+        .unwrap_or(std::cmp::Ordering::Equal)
 }
 
 /// Đường dẫn tương đối, không `..`, không tuyệt đối, không rỗng.
@@ -490,15 +509,21 @@ impl Registry {
         );
         out.push_str(");\n");
         for ext in &exts {
-            for script in ext.scripts.iter().filter(|s| s.run_at == RunAt::Start) {
-                out.push_str(&self.start_wrapper(ext, script));
+            for (script_index, script) in ext
+                .scripts
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.run_at == RunAt::Start)
+            {
+                out.push_str(&self.start_wrapper(ext, script, script_index));
             }
         }
         out
     }
 
-    fn start_wrapper(&self, ext: &LoadedExt, script: &LoadedScript) -> String {
+    fn start_wrapper(&self, ext: &LoadedExt, script: &LoadedScript, script_index: usize) -> String {
         let id = serde_json::to_string(&ext.record.id).unwrap_or_else(|_| "\"\"".into());
+        let key = js_str(&format!("{}:{}", ext.record.id, script_index));
         let matches = serde_json::to_string(
             &script
                 .matches
@@ -525,20 +550,20 @@ impl Registry {
             ));
         }
         format!(
-            "(function(){{if(window.top!==window)return;if(!window.__bytwina_matchAll({matches},location.href))return;if(window.__bytwina_matchAll({exclude},location.href))return;{body}}})();\n"
+            "(function(){{if(window.top!==window)return;var b=window.__bytwina_injected||(window.__bytwina_injected=Object.create(null));if(b[{key}])return;if(!window.__bytwina_matchAll({matches},location.href))return;if(window.__bytwina_matchAll({exclude},location.href))return;b[{key}]=1;{body}}})();\n"
         )
     }
 
     /// Script cần chèn sau khi trang tải xong (`document_end` chạy ngay,
     /// `document_idle` hoãn 500ms trong trang).
-    pub fn page_injections(&self, label: &str, url: &Url) -> Vec<String> {
+    pub fn page_injection_script(&self, label: &str, url: &Url) -> Option<String> {
         let tokens = self
             .tokens
             .lock()
             .ok()
             .and_then(|g| g.get(label).cloned())
             .unwrap_or_default();
-        let mut out = Vec::new();
+        let mut out = String::new();
         for ext in self.active() {
             if !ext.matches(url) {
                 continue;
@@ -546,19 +571,26 @@ impl Registry {
             if !tokens.contains_key(&ext.record.id) {
                 continue;
             }
-            for script in ext
+            for (script_index, script) in ext
                 .scripts
                 .iter()
-                .filter(|s| s.run_at != RunAt::Start && pattern_hit(&s.matches, &s.exclude, url))
+                .enumerate()
+                .filter(|(_, s)| s.run_at != RunAt::Start && pattern_hit(&s.matches, &s.exclude, url))
             {
-                out.push(self.end_wrapper(&ext, script));
+                out.push_str(&self.end_wrapper(&ext, script, script_index));
             }
         }
-        out
+        (!out.is_empty()).then_some(out)
     }
 
-    fn end_wrapper(&self, ext: &LoadedExt, script: &LoadedScript) -> String {
+    /// Compatibility wrapper for callers that want individual eval payloads.
+    pub fn page_injections(&self, label: &str, url: &Url) -> Vec<String> {
+        self.page_injection_script(label, url).into_iter().collect()
+    }
+
+    fn end_wrapper(&self, ext: &LoadedExt, script: &LoadedScript, script_index: usize) -> String {
         let id = serde_json::to_string(&ext.record.id).unwrap_or_else(|_| "\"\"".into());
+        let key = js_str(&format!("{}:{}", ext.record.id, script_index));
         let mut body = String::new();
         for css in &script.css {
             body.push_str(&format!("__bytwina_style({id}, {});", js_str(css)));
@@ -568,10 +600,13 @@ impl Registry {
                 "try{{(function(bytwina){{{js}\n}})(window.__bytwina__&&window.__bytwina__.get({id}));}}catch(e){{console.error('[bytwina:'+{id}+']',e);}}"
             ));
         }
+        let guarded = format!(
+            "(function(){{var b=window.__bytwina_injected||(window.__bytwina_injected=Object.create(null));if(b[{key}])return;b[{key}]=1;{body}}})();"
+        );
         if script.run_at == RunAt::Idle {
-            format!("setTimeout(function(){{{body}}},500);")
+            format!("(window.requestIdleCallback||function(f){{setTimeout(f,500);}})(function(){{{guarded}}});")
         } else {
-            format!("(function(){{{body}}})();")
+            guarded
         }
     }
 
@@ -864,6 +899,7 @@ pub fn inspect_source(src: &Path) -> Result<Value, String> {
     let stage = stage_source(src)?;
     let text = read_text_file(&stage.root.join("manifest.json"))?;
     let manifest = Manifest::from_json(&text)?.validate()?;
+    let source_sha256 = source_sha256(&stage.root)?;
     let defaults: Vec<&str> = DEFAULT_CAPABILITIES.to_vec();
     Ok(json!({
         "manifest": manifest.json_value(),
@@ -876,7 +912,42 @@ pub fn inspect_source(src: &Path) -> Result<Value, String> {
         "defaults": defaults,
         "hostPermissions": manifest.host_permissions,
         "sourceKind": if src.is_dir() { "folder" } else { "zip" },
+        "sourceSha256": source_sha256,
     }))
+}
+
+/// Tạo fingerprint ổn định cho toàn bộ mã nguồn sau khi giải nén.
+/// Hash bao gồm cả đường dẫn tương đối và nội dung để phát hiện thay đổi file.
+fn source_sha256(root: &Path) -> Result<String, String> {
+    fn collect(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+        for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+            if meta.file_type().is_symlink() {
+                return Err("không hỗ trợ symlink trong tiện ích".into());
+            }
+            if meta.is_dir() {
+                collect(root, &path, files)?;
+            } else if meta.is_file() {
+                files.push(path.strip_prefix(root).map_err(|e| e.to_string())?.to_path_buf());
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    collect(root, root, &mut files)?;
+    files.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    let mut hasher = Sha256::new();
+    for relative in files {
+        let name = relative.to_string_lossy().replace('\\', "/");
+        let bytes = std::fs::read(root.join(&relative)).map_err(|e| e.to_string())?;
+        hasher.update(name.as_bytes());
+        hasher.update([0]);
+        hasher.update((bytes.len() as u64).to_le_bytes());
+        hasher.update(&bytes);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 pub struct InstallOutcome {
@@ -1090,13 +1161,29 @@ pub fn install_source(
     src: &Path,
     extensions_dir: &Path,
     grants: &[String],
+    expected_sha256: Option<&str>,
 ) -> Result<InstallOutcome, String> {
     let stage = stage_source(src)?;
+    let actual_sha256 = source_sha256(&stage.root)?;
+    if let Some(expected) = expected_sha256 {
+        let expected = expected.trim().to_ascii_lowercase();
+        if expected.len() != 64 || !expected.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("sha256 không hợp lệ".into());
+        }
+        if expected != actual_sha256 {
+            return Err("hash tiện ích không khớp; đã từ chối cài đặt".into());
+        }
+    }
     let text = read_text_file(&stage.root.join("manifest.json"))?;
     let manifest = Manifest::from_json(&text)?.validate()?;
     let id = manifest.id.clone().ok_or_else(|| "thiếu id".to_string())?;
     std::fs::create_dir_all(extensions_dir).map_err(|e| e.to_string())?;
     let existing = db.get_extension(&id)?;
+    if let Some(old) = existing.as_ref() {
+        if version_cmp(&manifest.version, &old.version) == std::cmp::Ordering::Less {
+            return Err(format!("không thể hạ phiên bản {} xuống {}", old.version, manifest.version));
+        }
+    }
     let previous_permissions = existing
         .as_ref()
         .map(|_| db.list_extension_permissions(&id))
@@ -1913,6 +2000,8 @@ const BRIDGE_JS: &str = r##"
       (config.exts || []).forEach(function (ext) { built[ext.id] = make(ext); });
     }
   });
+  // Public alias for extension authors; the internal name remains for compatibility.
+  window.bytwina = window.__bytwina__;
   window.__bytwina_boot__ = function (config) { window.__bytwina__._install(config); };
 })();
 "##;

@@ -181,6 +181,7 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
     installed: false,
   }),
   ext_install: () => ({ id: "ext.demo-sample", name: "Tiện ích mẫu", version: "1.0.0", active: true }),
+  ext_add: () => ({ id: "ext.editor-sample", name: "Tiện ích mới", version: "1.0.0", active: true }),
   ext_inspect_from_url: () => ({
     manifest: { name: "Tiện ích mẫu" },
     id: "ext.demo-sample",

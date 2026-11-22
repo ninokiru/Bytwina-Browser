@@ -31,6 +31,7 @@ interface Inspection {
   defaults: string[];
   hostPermissions: string[];
   sourceKind: string;
+  sourceSha256: string;
   installed: boolean;
 }
 
@@ -59,6 +60,12 @@ export default function ExtensionsPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const [draftVersion, setDraftVersion] = useState("1.0.0");
+  const [draftMatch, setDraftMatch] = useState("https://example.com/*");
+  const [draftJs, setDraftJs] = useState("");
+  const [draftCss, setDraftCss] = useState("");
 
   async function reload() {
     try {
@@ -108,7 +115,9 @@ export default function ExtensionsPanel() {
       const isUrl = /^https:\/\//i.test(source);
       const out = (await cmd(
         isUrl ? "ext_install_from_url" : "ext_install",
-        isUrl ? { url: source, grants } : { path: source, grants },
+        isUrl
+          ? { url: source, grants, expectedSha256: inspected.sourceSha256 }
+          : { path: source, grants, expectedSha256: inspected.sourceSha256 },
       )) as {
         name?: string;
       };
@@ -194,6 +203,28 @@ export default function ExtensionsPanel() {
     }
   }
 
+  async function saveDraft() {
+    if (!draftName.trim() || !draftMatch.trim() || (!draftJs.trim() && !draftCss.trim())) {
+      setError("Cần nhập tên, match pattern và JavaScript hoặc CSS.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await cmd("ext_add", {
+        name: draftName.trim(), version: draftVersion.trim() || "1.0.0",
+        match_pattern: draftMatch.trim(), js: draftJs, css: draftCss,
+      });
+      setNotice(`Đã lưu tiện ích “${draftName.trim()}”.`);
+      setDraftName(""); setDraftJs(""); setDraftCss("");
+      await reload();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="ext-panel">
       <section className="ext-install">
@@ -227,6 +258,9 @@ export default function ExtensionsPanel() {
               </div>
             </div>
             {inspected.description && <p className="ext-desc">{inspected.description}</p>}
+            <p className="ext-hint">
+              SHA-256: <code>{inspected.sourceSha256}</code>
+            </p>
             {inspected.hostPermissions.length > 0 && (
               <p className="ext-hint">
                 {t("ext.hostPermissions")}: <code>{inspected.hostPermissions.join(", ")}</code>
@@ -277,6 +311,47 @@ export default function ExtensionsPanel() {
         )}
       </section>
 
+      <section className="ext-editor">
+        <div className="ext-list-head">
+          <div>
+            <h3 className="ext-heading">Tạo tiện ích</h3>
+            <p className="ext-hint">Paste mã JS/CSS và pattern URL để cài nhanh.</p>
+          </div>
+          <button type="button" className="btn primary" disabled={busy} onClick={() => void saveDraft()}>
+            Lưu
+          </button>
+        </div>
+        <div className="row-inline">
+          <input className="field" placeholder="Tên tiện ích" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
+          <input className="field" placeholder="Version" value={draftVersion} onChange={(e) => setDraftVersion(e.target.value)} />
+          <input className="field" placeholder="https://example.com/*" value={draftMatch} onChange={(e) => setDraftMatch(e.target.value)} />
+        </div>
+        <div className="row-inline ext-editor-grid">
+          <textarea className="field ext-code" aria-label="JavaScript" placeholder="JavaScript" value={draftJs} onChange={(e) => setDraftJs(e.target.value)} />
+          <textarea className="field ext-code" aria-label="CSS" placeholder="CSS" value={draftCss} onChange={(e) => setDraftCss(e.target.value)} />
+        </div>
+      </section>
+
+      {selectedId && (() => {
+        const selected = items.find((item) => item.id === selectedId);
+        if (!selected) return null;
+        return (
+          <section className="ext-editor">
+            <div className="ext-list-head">
+              <div>
+                <h3 className="ext-heading">{selected.name}</h3>
+                <p className="ext-hint">v{selected.version}{selected.author ? ` · ${selected.author}` : ""}</p>
+              </div>
+              <button type="button" className="btn" onClick={() => setSelectedId(null)}>Đóng</button>
+            </div>
+            <p className="ext-desc">{selected.description || "Không có mô tả."}</p>
+            <p className="ext-hint">Matches: {selected.hostPermissions.length ? selected.hostPermissions.join(", ") : "Không khai báo"}</p>
+            <p className="ext-hint">Storage: {bytesText(selected.storageBytes)} · Trạng thái: {selected.active ? "Bật" : "Tắt"}</p>
+            <p className="ext-sub">Log & thống kê: số lần chạy và lỗi sẽ được bổ sung khi có telemetry riêng cho extension.</p>
+          </section>
+        );
+      })()}
+
       <div className="ext-list-head">
         <h3 className="ext-heading">{t("title.extensions")}</h3>
         <button type="button" className="btn" onClick={() => void reload()} disabled={busy}>
@@ -295,7 +370,7 @@ export default function ExtensionsPanel() {
       ) : (
         <ul className="list">
           {items.map((ext) => (
-            <li key={ext.id} className="ext-item">
+            <li key={ext.id} className={`ext-item${selectedId === ext.id ? " selected" : ""}`} onClick={() => setSelectedId(ext.id)}>
               <div className="ext-item-main">
                 <span className="row-icon">
                   <PuzzleIcon />

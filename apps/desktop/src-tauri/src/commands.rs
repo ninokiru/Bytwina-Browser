@@ -424,6 +424,42 @@ pub async fn browser_command(
             }
             Ok(info)
         }
+        "ext_add" => {
+            let name = arg("name")?;
+            let version = args.as_ref().and_then(|a| a.get("version")).and_then(|v| v.as_str()).unwrap_or("1.0.0");
+            let match_pattern = arg("match_pattern")?;
+            let js = args.as_ref().and_then(|a| a.get("js")).and_then(|v| v.as_str()).unwrap_or("");
+            let css = args.as_ref().and_then(|a| a.get("css")).and_then(|v| v.as_str()).unwrap_or("");
+            if js.trim().is_empty() && css.trim().is_empty() {
+                return Err("cần nhập JavaScript hoặc CSS".into());
+            }
+            let temp = std::env::temp_dir().join(format!("bytwina-ext-editor-{}", uuid::Uuid::new_v4().simple()));
+            std::fs::create_dir_all(&temp).map_err(|e| e.to_string())?;
+            let result = (|| {
+                let manifest = serde_json::json!({
+                    "manifest_version": 1,
+                    "name": name,
+                    "version": version,
+                    "content_scripts": [{
+                        "matches": [match_pattern],
+                        "js": if js.trim().is_empty() { Vec::<String>::new() } else { vec!["content.js"] },
+                        "css": if css.trim().is_empty() { Vec::<String>::new() } else { vec!["content.css"] },
+                        "run_at": "document_end"
+                    }]
+                });
+                std::fs::write(temp.join("manifest.json"), serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+                if !js.trim().is_empty() { std::fs::write(temp.join("content.js"), js).map_err(|e| e.to_string())?; }
+                if !css.trim().is_empty() { std::fs::write(temp.join("content.css"), css).map_err(|e| e.to_string())?; }
+                let dir = extensions_dir(&app)?;
+                let db = db_handle(&app)?;
+                let outcome = extensions::install_source(&db, &temp, &dir, &[], None)?;
+                reload_extensions(&app, &db);
+                extensions::apply_to_tabs(&app, &state);
+                Ok::<_, String>(serde_json::json!({"id": outcome.id, "name": outcome.name, "version": outcome.version, "active": true}))
+            })();
+            let _ = std::fs::remove_dir_all(&temp);
+            result
+        }
         "ext_install" => {
             let path = arg("path")?;
             let grants: Vec<String> = args
@@ -436,9 +472,13 @@ pub async fn browser_command(
                         .collect()
                 })
                 .unwrap_or_default();
+            let expected_sha256 = args
+                .as_ref()
+                .and_then(|a| a.get("expectedSha256"))
+                .and_then(|v| v.as_str());
             let dir = extensions_dir(&app)?;
             let db = db_handle(&app)?;
-            let outcome = extensions::install_source(&db, std::path::Path::new(&path), &dir, &grants)?;
+            let outcome = extensions::install_source(&db, std::path::Path::new(&path), &dir, &grants, expected_sha256)?;
             reload_extensions(&app, &db);
             extensions::apply_to_tabs(&app, &state);
             Ok(serde_json::json!({
@@ -456,10 +496,14 @@ pub async fn browser_command(
                 .and_then(|v| v.as_array())
                 .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
                 .unwrap_or_default();
+            let expected_sha256 = args
+                .as_ref()
+                .and_then(|a| a.get("expectedSha256"))
+                .and_then(|v| v.as_str());
             let downloaded = extensions::download_source(&url)?;
             let dir = extensions_dir(&app)?;
             let db = db_handle(&app)?;
-            let result = extensions::install_source(&db, &downloaded, &dir, &grants);
+            let result = extensions::install_source(&db, &downloaded, &dir, &grants, expected_sha256);
             let _ = std::fs::remove_file(&downloaded);
             let outcome = result?;
             reload_extensions(&app, &db);

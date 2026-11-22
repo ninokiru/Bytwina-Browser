@@ -2713,6 +2713,29 @@ input[type="checkbox"]:checked::after {
   background: var(--surface);
 }
 
+.ext-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.ext-editor-grid {
+  align-items: stretch;
+}
+
+.ext-code {
+  min-height: 150px;
+  flex: 1 1 0;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .ext-heading {
   margin: 0;
   font-size: 13px;
@@ -2833,6 +2856,12 @@ input[type="checkbox"]:checked::after {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
+}
+
+.ext-item:hover,
+.ext-item.selected {
+  border-color: var(--accent);
+  background: var(--surface-2);
 }
 
 .ext-item-main {

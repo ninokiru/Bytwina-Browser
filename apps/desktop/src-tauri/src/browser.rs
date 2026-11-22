@@ -971,7 +971,7 @@ pub fn on_page_load<R: tauri::Runtime>(
             state.set_loading(id, false);
             // Tiện ích: chèn content script document_end/document_idle của các
             // tiện ích khớp URL. Bridge đã có từ document_start.
-            crate::extensions::on_page_load(app, label, url);
+            inject_extensions_for_url(app, label, url);
             // M2: ghi lịch sử toàn cục khi DB khả dụng.
             // M4: chế độ riêng tư không ghi lịch sử.
             // Ghi ở luồng nền: đây là thao tác ổ đĩa, đứng trên đường vẽ trạng thái
@@ -991,6 +991,17 @@ pub fn on_page_load<R: tauri::Runtime>(
         }
     }
     emit_state(app, &state);
+}
+
+/// Injection entry point for every completed navigation.
+/// The extension registry supplies the bridge and matching content scripts;
+/// this hook keeps browser navigation independent from extension details.
+pub fn inject_extensions_for_url<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    url: &url::Url,
+) {
+    crate::extensions::on_page_load(app, label, url);
 }
 
 /// Tab ngủ (cài đặt `sleepMinutes`, 0 = tắt): đóng webview của tab rảnh quá lâu.
