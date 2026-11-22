@@ -11,6 +11,7 @@ import { applyTheme } from "./theme";
 import { evaluateArithmetic } from "./calc";
 import { FaviconImg } from "./favicon";
 import CommandPalette, { type PaletteAction } from "./CommandPalette";
+import ShortcutHelp from "./ShortcutHelp";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -94,6 +95,7 @@ export default function App() {
   const [pageNote, setPageNote] = useState<PageNote | null>(null);
   // Bảng lệnh Ctrl+K.
   const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -440,9 +442,15 @@ export default function App() {
         e.preventDefault();
         if (active) void cmd("navigate", { id: String(active.id), input: home });
       }
-      // Escape: Đóng panel hoặc dừng tải
+      // F1 hoặc Ctrl+/: Bảng phím tắt
+      else if (e.key === "F1" || (mod && e.key === "/")) {
+        e.preventDefault();
+        setHelp((v) => !v);
+      }
+      // Escape: Đóng bảng phím tắt, panel, hoặc dừng tải
       else if (e.key === "Escape") {
-        if (panel) setPanel(null);
+        if (help) setHelp(false);
+        else if (panel) setPanel(null);
         else void cmd("stop");
       }
     };
@@ -451,7 +459,7 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", onKey, { capture: true });
     };
-  }, [state, panel, active, home, zoom]);
+  }, [state, panel, active, home, zoom, help]);
 
   // Phím tắt bắt từ trang nội dung (Rust chuyển qua browser://key): phát lại như keydown
   // của chính thanh công cụ để mọi nhánh ở trên xử lý giống nhau.
@@ -491,7 +499,7 @@ export default function App() {
 
   // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
   // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
-  const overlay = panel != null || showNewTab || palette;
+  const overlay = panel != null || showNewTab || palette || help;
   useEffect(() => {
     void cmd("panel_open", { on: overlay ? "1" : "0" }).catch(() => undefined);
   }, [overlay]);
@@ -850,6 +858,12 @@ export default function App() {
                 setSuggestions([]);
                 setSuggestIndex(-1);
                 if (picked) openSuggestion(picked);
+                else if ((e.ctrlKey || e.metaKey) && input.trim() && active) {
+                  // Ctrl+Enter: "abc" → https://www.abc.com
+                  const host = input.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+                  void cmd("navigate", { id: String(active.id), input: `https://www.${host}.com` }).catch(() => undefined);
+                  setEditing(false);
+                }
                 else go();
               }
               if (e.key === "Escape") {
@@ -1097,6 +1111,7 @@ export default function App() {
         </div>
       ) : null}
 
+      <ShortcutHelp open={help} onClose={() => setHelp(false)} />
       <CommandPalette
         open={palette}
         onClose={() => setPalette(false)}
