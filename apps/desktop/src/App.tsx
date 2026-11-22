@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { cmd, type BrowserStatePayload, type TabInfo } from "./tabs";
 import Panel, { type PanelKind } from "./Panel";
@@ -306,7 +306,7 @@ export default function App() {
       else if (mod && e.key.toLowerCase() === "w") {
         e.preventDefault();
         e.stopPropagation();
-        if (active) void cmd("close_tab", { id: String(active.id) });
+        if (active) closeTracked(active);
       }
       // Ctrl+L hoặc Alt+D hoặc F6: Chọn thanh địa chỉ
       else if ((mod && e.key.toLowerCase() === "l") || (e.altKey && e.key.toLowerCase() === "d") || e.key === "F6") {
@@ -382,6 +382,38 @@ export default function App() {
         e.preventDefault();
         void cycle(state, e.shiftKey ? -1 : 1);
       } 
+      // Ctrl+Shift+T: Mở lại tab vừa đóng
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        const url = closedRef.current.pop();
+        if (url) void cmd("new_tab", { url });
+      }
+      // Ctrl+PageUp / Ctrl+PageDown: Chuyển tab trước / sau
+      else if (mod && (e.key === "PageUp" || e.key === "PageDown")) {
+        e.preventDefault();
+        void cycle(state, e.key === "PageUp" ? -1 : 1);
+      }
+      // Ctrl+= / Ctrl+- / Ctrl+0: Phóng to, thu nhỏ, đặt lại 100%
+      else if (mod && (e.key === "=" || e.key === "+" || e.key === "-" || e.key === "0")) {
+        e.preventDefault();
+        if (e.key === "0") applyZoom(100);
+        else {
+          const dir = e.key === "-" ? -1 : 1;
+          const steps = ZOOM_STEPS;
+          if (dir > 0) {
+            const next = steps.find((z) => z > zoom);
+            if (next) applyZoom(next);
+          } else {
+            const prev = [...steps].reverse().find((z) => z < zoom);
+            if (prev) applyZoom(prev);
+          }
+        }
+      }
+      // F11: Toàn màn hình
+      else if (e.key === "F11") {
+        e.preventDefault();
+        void cmd("fullscreen_toggle").catch(() => undefined);
+      }
       // Ctrl+Q: Thoát trình duyệt
       else if (mod && e.key.toLowerCase() === "q") {
         e.preventDefault();
@@ -419,7 +451,43 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", onKey, { capture: true });
     };
-  }, [state, panel, active, home]);
+  }, [state, panel, active, home, zoom]);
+
+  // Phím tắt bắt từ trang nội dung (Rust chuyển qua browser://key): phát lại như keydown
+  // của chính thanh công cụ để mọi nhánh ở trên xử lý giống nhau.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen<{
+      key: string;
+      code: string;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      shiftKey: boolean;
+      altKey: boolean;
+    }>("browser://key", (ev) => {
+      const p = ev.payload;
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: p.key,
+          code: p.code,
+          ctrlKey: p.ctrlKey,
+          metaKey: p.metaKey,
+          shiftKey: p.shiftKey,
+          altKey: p.altKey,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
   // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
@@ -501,6 +569,12 @@ export default function App() {
     void cmd("bookmark_add", { title: active.title || active.url, url: active.url, folder: "" })
       .then(() => setStarred(true))
       .catch(() => setStarred(false));
+  };
+
+  const closedRef = useRef<string[]>([]);
+  const closeTracked = (tb: (typeof state.tabs)[number]) => {
+    if (tb.url) closedRef.current = [...closedRef.current.slice(-19), tb.url];
+    void cmd("close_tab", { id: String(tb.id) });
   };
 
   const applyZoom = (percent: number) => {
@@ -628,7 +702,7 @@ export default function App() {
                   .join(" ")}
                 onClick={() => void cmd("activate_tab", { id: String(tb.id) })}
                 onAuxClick={(e) => {
-                  if (e.button === 1) void cmd("close_tab", { id: String(tb.id) });
+                  if (e.button === 1) closeTracked(tb);
                 }}
                 title={tb.url}
                 role="tab"
@@ -667,7 +741,7 @@ export default function App() {
                   title={t("panel.close")}
                   onClick={(e) => {
                     e.stopPropagation();
-                    void cmd("close_tab", { id: String(tb.id) });
+                    closeTracked(tb);
                   }}
                 >
                   <CloseIcon />
@@ -1064,6 +1138,8 @@ function fuzzyScore(query: string, haystack: string): number {
   }
   return qi === q.length ? Math.max(1, 40 - gaps) : 0;
 }
+
+const ZOOM_STEPS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
 
 async function cycle(state: BrowserStatePayload, dir: number) {
   if (state.tabs.length === 0 || state.activeTab == null) return;

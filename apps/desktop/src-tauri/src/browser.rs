@@ -556,6 +556,78 @@ pub fn valid_workspace_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// Host giả để trang nội dung báo phím tắt về Rust. Không bao giờ được tải thật.
+const SHORTCUT_HOST: &str = "shortcut.bytwina.invalid";
+
+/// Script chạy trong mọi trang tab: bắt các tổ hợp phím của trình duyệt rồi
+/// chuyển sang toolbar qua điều hướng tới `SHORTCUT_HOST`. Phím còn lại (Ctrl+F,
+/// Ctrl+P, Ctrl+C/V...) để WebView2 xử lý như cũ.
+const SHORTCUT_FORWARD_JS: &str = r##"
+(function () {
+  if (window.top !== window) return;
+  var HOST = "shortcut.bytwina.invalid";
+  var FKEYS = { F1: 1, F5: 1, F6: 1, F11: 1 };
+  var NAV_KEYS = { Tab: 1, PageUp: 1, PageDown: 1, Delete: 1, Home: 1, ArrowLeft: 1, ArrowRight: 1 };
+  var PLAIN_LETTERS = "TWLDJHKRQ";
+  var SHIFT_LETTERS = "NOFRT";
+  var EDIT_SAFE = "TWR";
+  function editable(t) {
+    return !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  }
+  function wanted(e) {
+    var k = e.key, ctrl = e.ctrlKey || e.metaKey, alt = e.altKey, sh = e.shiftKey;
+    if (FKEYS[k]) return true;
+    if (alt && NAV_KEYS[k]) return true;
+    if (!ctrl || alt) return false;
+    if (/^[0-9]$/.test(k) || k === "=" || k === "-" || k === "+") return true;
+    if (k === "Tab" || k === "PageUp" || k === "PageDown" || k === "Delete") return true;
+    if (/^[a-zA-Z]$/.test(k)) {
+      var u = k.toUpperCase();
+      return sh ? SHIFT_LETTERS.indexOf(u) >= 0 : PLAIN_LETTERS.indexOf(u) >= 0;
+    }
+    return false;
+  }
+  window.addEventListener("keydown", function (e) {
+    if (!wanted(e)) return;
+    var k = e.key;
+    var isEditable = editable(e.target);
+    if (isEditable && !(FKEYS[k] || e.altKey || e.shiftKey || NAV_KEYS[k] || EDIT_SAFE.indexOf(k.toUpperCase()) >= 0)) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    var d = JSON.stringify({
+      key: k, code: e.code,
+      ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey
+    });
+    if (d.length > 400) return;
+    location.href = "https://" + HOST + "/k?d=" + encodeURIComponent(d);
+  }, true);
+})();
+"##;
+
+fn is_shortcut_url(url: &Url) -> bool {
+    url.scheme() == "https" && url.host_str() == Some(SHORTCUT_HOST)
+}
+
+/// Đọc payload phím từ URL giả và gửi cho toolbar, rồi chuyển focus về toolbar để
+/// App.tsx nhận keydown như bình thường.
+fn forward_shortcut(app: &AppHandle, url: &Url) {
+    let Some(raw) = url.query_pairs().find(|(k, _)| k == "d").map(|(_, v)| v.into_owned()) else {
+        return;
+    };
+    if raw.len() > 400 {
+        return;
+    }
+    let Ok(payload) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return;
+    };
+    let _ = app.emit_to("toolbar", "browser://key", payload);
+    if let Some(toolbar) = app.get_webview("toolbar") {
+        let _ = toolbar.set_focus();
+    }
+}
+
 /// Tạo webview nội dung cho tab nếu chưa tồn tại.
 /// BẤT ĐỒNG BỘ theo thiết kế: `Window::add_child` deadlock khi gọi đồng bộ trên
 /// Windows (ADR-001), nên lệnh này trả về ngay và kết quả báo qua `browser://state`.
@@ -566,7 +638,18 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
         return;
     }
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(BLANK_URL.parse().unwrap()))
-        .on_navigation(navigation::page_navigation_allowed)
+        .initialization_script(SHORTCUT_FORWARD_JS)
+        .on_navigation({
+            let app = app.clone();
+            move |url| {
+                // Phím tắt từ trang: trang đặt location tới host giả → chặn và chuyển cho toolbar.
+                if is_shortcut_url(url) {
+                    forward_shortcut(&app, url);
+                    return false;
+                }
+                navigation::page_navigation_allowed(url)
+            }
+        })
         // Chế độ riêng tư: tab mới không giữ cookie trong profile (cần WebView2 ≥ 101.0.1210.39).
         .incognito(state.is_private())
         .on_document_title_changed({

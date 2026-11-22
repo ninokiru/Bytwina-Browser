@@ -441,6 +441,13 @@ pub async fn browser_command(
             app.exit(0);
             Ok(Value::Null)
         }
+        // F11: bật/tắt toàn màn hình cho cửa sổ chính.
+        "fullscreen_toggle" => {
+            let window = app.get_window("main").ok_or("không tìm thấy cửa sổ chính")?;
+            let on = window.is_fullscreen().map_err(|e| e.to_string())?;
+            window.set_fullscreen(!on).map_err(|e| e.to_string())?;
+            Ok(Value::Null)
+        }
         // Bảng nổi (dấu trang, lịch sử, cài đặt…): nới webview toolbar khi mở.
         "panel_open" => {
             browser::set_panel_open(&app, &state, arg("on")? == "1");
