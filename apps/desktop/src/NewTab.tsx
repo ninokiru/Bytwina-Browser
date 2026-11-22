@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { cmd } from "./tabs";
 import { t, useLang } from "./i18n";
 import { GlassesIcon, SearchIcon, SettingsIcon, ShieldIcon } from "./Icons";
+import { FaviconImg } from "./favicon";
 
 interface Bookmark {
   id: number;
@@ -22,7 +23,6 @@ interface QuickLink {
   title: string;
   url: string;
   color: string;
-  favicon?: string;
 }
 
 interface Props {
@@ -121,16 +121,7 @@ export default function NewTab({ privateMode, onNavigate, onOpenSettings }: Prop
                 <li key={l.url}>
                   <button type="button" className="ntp-link" onClick={() => onNavigate(l.url)} title={l.url}>
                     <span className="ntp-link-icon" style={{ ["--tile" as string]: l.color }}>
-                      {l.favicon ? (
-                        <img
-                          src={l.favicon}
-                          alt=""
-                          className="ntp-favicon-img"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = "none";
-                          }}
-                        />
-                      ) : null}
+                      <FaviconImg host={hostOf(l.url)} className="ntp-favicon-img" />
                       <span className="ntp-fallback-letter">{letterOf(l.title || l.url)}</span>
                     </span>
                     <span className="ntp-link-label">{l.title || hostOf(l.url)}</span>
@@ -179,8 +170,7 @@ function quickLinks(marks: Bookmark[], hist: HistoryItem[]): QuickLink[] {
     const host = hostOf(url);
     if (!host || seen.has(host)) return;
     seen.add(host);
-    const favicon = `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
-    out.push({ title: title || host, url, color: colorOf(host), favicon });
+    out.push({ title: title || host, url, color: colorOf(host) });
   };
   for (const b of marks) add(b.title, b.url);
   for (const h of hist) add(h.title, h.url);

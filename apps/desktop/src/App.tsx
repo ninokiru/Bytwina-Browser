@@ -9,6 +9,7 @@ import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
 import { evaluateArithmetic } from "./calc";
+import { FaviconImg } from "./favicon";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -547,7 +548,7 @@ export default function App() {
       }${focusMode ? " focus-mode" : ""}`}
     >
       {focusMode && (
-        <div className="focus-indicator" onClick={toggleFocusMode} title="Nhấn để thoát Chế độ tập trung (F11)">
+        <div className="focus-indicator" onClick={toggleFocusMode} title="Nhấn để thoát Chế độ tập trung (Ctrl+Shift+F)">
           <div className={`focus-progress${active?.loading ? " loading" : ""}`} />
         </div>
       )}
@@ -595,13 +596,7 @@ export default function App() {
                   style={{ ["--fav" as string]: favColor(tb.url + tb.id) }}
                 >
                   {tb.url && tb.url !== "about:blank" && tb.url !== "about:blank/" ? (
-                    <img
-                      src={`https://www.google.com/s2/favicons?domain=${hostOf(tb.url)}&sz=32`}
-                      alt=""
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = "none";
-                      }}
-                    />
+                    <FaviconImg host={hostOf(tb.url)} />
                   ) : null}
                   <span className="tab-fav-letter">{favLetter(tb)}</span>
                 </span>
