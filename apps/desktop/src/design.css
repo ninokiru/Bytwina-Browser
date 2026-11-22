@@ -212,6 +212,39 @@ input[type="checkbox"]:disabled {
   font-size: 12.5px;
 }
 
+/* Typography Fluent 2 cho Cài đặt (chỉ đổi cỡ chữ, không đổi cấu trúc):
+   Title 28 cho tiêu đề trang (tiêu đề trong sidebar), Subtitle 20 cho tiêu đề card,
+   Body 14 cho label và nội dung, Caption 12 cho chú thích. */
+.settings-nav-head {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+}
+
+.settings-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.settings-row,
+.settings-label,
+.settings-stack,
+.settings-soon,
+.settings-section .permission-list li,
+.settings-result {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+.hint,
+.settings-section .hint {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+}
+
 /* Giảm chuyển động của Windows (prefers-reduced-motion): tắt animation và transition. */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -4,14 +4,15 @@ import { getLang } from "./i18n";
 import { applyTheme } from "./theme";
 import "./Onboarding.css";
 
-// Luồng chào mừng lần đầu (5 bước). Chỉ lưu những thiết lập đã có backend:
-// persona, adblock, clearOnExit. Nhập dữ liệu từ trình duyệt khác chưa có nên
-// bước đó chỉ thông báo, không giả vờ hoạt động.
+// Luồng chào mừng lần đầu (6 bước). Chỉ lưu những thiết lập đã có backend:
+// persona, theme, adblock, clearOnExit, tab layout. Nhập dấu trang dùng
+// bookmark_import_chrome; lịch sử và mật khẩu chưa có backend nên không có bước đó.
 
 type Persona = "work" | "fun" | "study" | "custom";
+type ThemeChoice = "light" | "dark" | "system";
 type Lang = "vi" | "en";
 
-const STEPS = 5;
+const STEPS = 6;
 
 const TEXT: Record<Lang, {
   skip: string;
@@ -25,6 +26,9 @@ const TEXT: Record<Lang, {
   personaTitle: string;
   personaBody: string;
   personas: Record<Persona, [string, string]>;
+  themeTitle: string;
+  themeBody: string;
+  themes: Record<ThemeChoice, [string, string]>;
   importTitle: string;
   importBody: string;
   importButton: string;
@@ -50,9 +54,16 @@ const TEXT: Record<Lang, {
     personaBody: "Lựa chọn này chỉ là điểm bắt đầu. Bạn có thể đổi trong Cài đặt bất cứ lúc nào.",
     personas: {
       work: ["Làm việc", "Bật tab dọc."],
-      fun: ["Giải trí", "Bật giao diện tối."],
+      fun: ["Giải trí", "Chọn sẵn giao diện tối."],
       study: ["Học tập", "Giữ cài đặt mặc định."],
       custom: ["Tùy chỉnh", "Bắt đầu với cài đặt mặc định."],
+    },
+    themeTitle: "Chọn giao diện",
+    themeBody: "Bạn có thể đổi bất cứ lúc nào trong Cài đặt.",
+    themes: {
+      light: ["Sáng", "Nền trắng, chữ tối."],
+      dark: ["Tối", "Nền tối, dễ nhìn ban đêm."],
+      system: ["Theo hệ thống", "Theo cài đặt Windows."],
     },
     importTitle: "Nhập dữ liệu từ trình duyệt khác",
     importBody:
@@ -80,9 +91,16 @@ const TEXT: Record<Lang, {
     personaBody: "This is only a starting point. You can change it any time in Settings.",
     personas: {
       work: ["Work", "Turn on vertical tabs."],
-      fun: ["Entertainment", "Turn on dark mode."],
+      fun: ["Entertainment", "Preselect dark mode."],
       study: ["Study", "Keep the default settings."],
       custom: ["Custom", "Start with the default settings."],
+    },
+    themeTitle: "Choose a look",
+    themeBody: "You can change it any time in Settings.",
+    themes: {
+      light: ["Light", "Light background, dark text."],
+      dark: ["Dark", "Dark background, easier at night."],
+      system: ["System", "Follow Windows settings."],
     },
     importTitle: "Import data from another browser",
     importBody:
@@ -104,6 +122,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
   const T = TEXT[lang];
   const [step, setStep] = useState(0);
   const [persona, setPersona] = useState<Persona>("custom");
+  const [theme, setTheme] = useState<ThemeChoice>("system");
   const [adblock, setAdblock] = useState(true);
   const [clearOnExit, setClearOnExit] = useState(false);
   const [importMsg, setImportMsg] = useState("");
@@ -118,11 +137,15 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     };
   }, []);
 
+  const pickTheme = (next: ThemeChoice) => {
+    setTheme(next);
+    // Xem trước ngay; giá trị được lưu khi hoàn tất.
+    applyTheme(next);
+  };
+
   const finish = () => {
     if (busy) return;
     setBusy(true);
-    // Persona "Giải trí" bật giao diện tối ngay, không chờ khởi động lại.
-    if (persona === "fun") applyTheme("dark");
     // onboardingDone ghi sau cùng: nếu lưu lỗi giữa chừng, lần mở sau sẽ hỏi lại.
     void Promise.allSettled([
       cmd("settings_set", { key: "persona", value: persona }),
@@ -130,7 +153,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       cmd("settings_set", { key: "clearOnExit", value: clearOnExit ? "1" : "0" }),
       // Persona "Làm việc" bật tab dọc ngay; các persona khác giữ bố cục hiện tại.
       persona === "work" ? cmd("tab_layout", { layout: "vertical" }) : Promise.resolve(null),
-      persona === "fun" ? cmd("settings_set", { key: "theme", value: "dark" }) : Promise.resolve(null),
+      cmd("settings_set", { key: "theme", value: theme }),
     ])
       .then(() => cmd("settings_set", { key: "onboardingDone", value: "1" }))
       .catch(() => undefined)
@@ -181,7 +204,10 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
                     type="button"
                     className="ob-option"
                     aria-pressed={persona === p}
-                    onClick={() => setPersona(p)}
+                    onClick={() => {
+                      setPersona(p);
+                      setTheme(p === "fun" ? "dark" : "system");
+                    }}
                   >
                     <b>{T.personas[p][0]}</b>
                     <small>{T.personas[p][1]}</small>
@@ -192,6 +218,27 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           )}
 
           {step === 2 && (
+            <>
+              <h1>{T.themeTitle}</h1>
+              <p>{T.themeBody}</p>
+              <div className="ob-options">
+                {(Object.keys(T.themes) as ThemeChoice[]).map((th) => (
+                  <button
+                    key={th}
+                    type="button"
+                    className="ob-option"
+                    aria-pressed={theme === th}
+                    onClick={() => pickTheme(th)}
+                  >
+                    <b>{T.themes[th][0]}</b>
+                    <small>{T.themes[th][1]}</small>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
             <>
               <h1>{T.importTitle}</h1>
               <p>{T.importBody}</p>
@@ -213,7 +260,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             </>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <>
               <h1>{T.privacyTitle}</h1>
               <p>{T.privacyBody}</p>
@@ -238,7 +285,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             </>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <>
               <h1>{T.doneTitle}</h1>
               <p>{T.doneBody}</p>
