@@ -27,7 +27,7 @@ jobs:
           workspaces: apps/desktop/src-tauri -> target
       - name: Install frontend deps
         working-directory: apps/desktop
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Build installer (NSIS)
         working-directory: apps/desktop
         run: npx tauri build --bundles nsis --target x86_64-pc-windows-msvc

@@ -22,8 +22,8 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
-          # Dùng npm ci khi đã có lockfile; chưa có thì npm install (xem docs/ROADMAP.md).
-          if (Test-Path package-lock.json) { npm ci } else { npm install }
+          # npm install thay npm ci: lockfile hiện lệch package.json (xem docs/ROADMAP.md).
+          npm install --no-audit --no-fund
       - name: Type check
         shell: pwsh
         run: |

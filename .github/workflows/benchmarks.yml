@@ -21,7 +21,7 @@ jobs:
         working-directory: apps/desktop
         shell: pwsh
         run: |
-          if (Test-Path package-lock.json) { npm ci } else { npm install }
+          npm install --no-audit --no-fund
       - name: Build frontend
         working-directory: apps/desktop
         run: npm run build

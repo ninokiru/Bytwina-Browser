@@ -550,7 +550,8 @@ pub async fn browser_command(
             tauri::async_runtime::spawn_blocking(move || {
                 let fetch_url = format!("https://www.google.com/s2/favicons?domain={domain}&sz=32");
                 if let Ok(resp) = ureq::get(&fetch_url).call() {
-                    let mut reader = resp.into_reader();
+                    let (_, body) = resp.into_parts();
+                    let mut reader = body.into_reader();
                     use std::io::Read;
                     let mut bytes = Vec::new();
                     if reader.read_to_end(&mut bytes).is_ok() && !bytes.is_empty() {

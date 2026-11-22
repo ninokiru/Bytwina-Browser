@@ -28,7 +28,7 @@ jobs:
         working-directory: apps/desktop
         shell: pwsh
         run: |
-          if (Test-Path package-lock.json) { npm ci } else { npm install }
+          npm install --no-audit --no-fund
       # Công cụ chụp để riêng: không thêm vào dependency của ứng dụng. Vite đã
       # được build riêng bên dưới nên script import được bản trong node_modules.
       - name: Install capture tooling

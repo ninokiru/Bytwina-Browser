@@ -48,7 +48,7 @@ jobs:
         working-directory: apps/desktop
         shell: pwsh
         run: |
-          if (Test-Path package-lock.json) { npm ci } else { npm install }
+          npm install --no-audit --no-fund
       # M14: bản cài tự cập nhật được khi có khoá ký. Khoá công khai là dữ liệu
       # không bí mật, nhưng chèn từ secret để repo không bị khoá cứng vào một
       # máy: đổi máy ký chỉ cần đổi secret. Không có secret thì build thường,
