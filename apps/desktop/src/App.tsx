@@ -12,6 +12,7 @@ import { evaluateArithmetic } from "./calc";
 import { FaviconImg } from "./favicon";
 import CommandPalette, { type PaletteAction } from "./CommandPalette";
 import ShortcutHelp from "./ShortcutHelp";
+import ReaderView from "./ReaderView";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -96,6 +97,7 @@ export default function App() {
   // Bảng lệnh Ctrl+K.
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
+  const [reader, setReader] = useState(false);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -450,6 +452,7 @@ export default function App() {
       // Escape: Đóng bảng phím tắt, panel, hoặc dừng tải
       else if (e.key === "Escape") {
         if (help) setHelp(false);
+        else if (reader) setReader(false);
         else if (panel) setPanel(null);
         else void cmd("stop");
       }
@@ -459,7 +462,7 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", onKey, { capture: true });
     };
-  }, [state, panel, active, home, zoom, help]);
+  }, [state, panel, active, home, zoom, help, reader]);
 
   // Phím tắt bắt từ trang nội dung (Rust chuyển qua browser://key): phát lại như keydown
   // của chính thanh công cụ để mọi nhánh ở trên xử lý giống nhau.
@@ -499,7 +502,7 @@ export default function App() {
 
   // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
   // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
-  const overlay = panel != null || showNewTab || palette || help;
+  const overlay = panel != null || showNewTab || palette || help || reader;
   useEffect(() => {
     void cmd("panel_open", { on: overlay ? "1" : "0" }).catch(() => undefined);
     // Bảng mở thì focus phải nằm ở thanh công cụ (webview nội dung đã bị ẩn), để Esc đóng được bảng.
@@ -627,6 +630,9 @@ export default function App() {
         break;
       case "reload":
         void cmd("reload");
+        break;
+      case "reader":
+        setReader(true);
         break;
     }
   };
@@ -1114,6 +1120,15 @@ export default function App() {
       ) : null}
 
       <ShortcutHelp open={help} onClose={() => setHelp(false)} />
+      <ReaderView
+        open={reader}
+        url={active?.url ?? ""}
+        onClose={() => setReader(false)}
+        onNavigate={(u) => {
+          setReader(false);
+          if (active) void cmd("navigate", { id: String(active.id), input: u }).catch(() => undefined);
+        }}
+      />
       <CommandPalette
         open={palette}
         onClose={() => setPalette(false)}

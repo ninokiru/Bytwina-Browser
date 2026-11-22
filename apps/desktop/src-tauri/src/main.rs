@@ -17,6 +17,7 @@ mod filters;
 mod navigation;
 mod passwords;
 mod permissions;
+mod reader;
 mod tabs;
 mod terms;
 mod update;
