@@ -299,6 +299,32 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
         conn.execute("INSERT INTO schema_version (version) VALUES (6)", [])?;
     }
+    if version < 7 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS extension_assets (
+                extension_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                source TEXT NOT NULL,
+                PRIMARY KEY (extension_id, path, kind)
+            );",
+        )?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (7)", [])?;
+    }
+    if version < 8 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS extension_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                extension_id TEXT NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_extension_logs_ext_time
+                ON extension_logs(extension_id, created_at DESC);",
+        )?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (8)", [])?;
+    }
     Ok(())
 }
 
@@ -1160,9 +1186,64 @@ impl Db {
             .map_err(|e| e.to_string())?;
         tx.execute("DELETE FROM ext_storage WHERE extension_id = ?1", params![id])
             .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM extension_assets WHERE extension_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM extension_logs WHERE extension_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
         tx.execute("DELETE FROM extensions WHERE id = ?1", params![id])
             .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())
+    }
+
+    pub fn set_extension_assets(
+        &self,
+        id: &str,
+        assets: &[(String, String, String)],
+    ) -> Result<(), String> {
+        let mut c = self.conn();
+        let tx = c.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM extension_assets WHERE extension_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        for (path, kind, source) in assets {
+            tx.execute(
+                "INSERT INTO extension_assets (extension_id, path, kind, source) VALUES (?1, ?2, ?3, ?4)",
+                params![id, path, kind, source],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())
+    }
+
+    pub fn extension_assets(&self, id: &str) -> Result<Vec<(String, String, String)>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT path, kind, source FROM extension_assets WHERE extension_id = ?1 ORDER BY path, kind")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())
+    }
+
+    pub fn log_extension(&self, id: &str, level: &str, message: &str) -> Result<(), String> {
+        self.conn()
+            .execute(
+                "INSERT INTO extension_logs (extension_id, level, message, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![id, level, message, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn extension_logs(&self, id: &str, limit: i64) -> Result<Vec<(String, String, i64)>, String> {
+        let c = self.conn();
+        let mut stmt = c
+            .prepare("SELECT level, message, created_at FROM extension_logs WHERE extension_id = ?1 ORDER BY created_at DESC, id DESC LIMIT ?2")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![id, limit.clamp(1, 500)], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())
     }
 
     /// Ghi đè toàn bộ quyền đã cấp của một tiện ích.

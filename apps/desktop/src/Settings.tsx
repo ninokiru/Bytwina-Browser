@@ -111,6 +111,8 @@ export default function Settings({
   const [message, setMessage] = useState("");
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [ab, setAb] = useState<AdblockStatus | null>(null);
+  const [customRules, setCustomRules] = useState("");
+  const [customRulesBusy, setCustomRulesBusy] = useState(false);
   const [perms, setPerms] = useState<SitePermission[]>([]);
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -135,6 +137,19 @@ export default function Settings({
     cmd("adblock_status")
       .then((s) => setAb(s as AdblockStatus))
       .catch(() => setAb(null));
+
+  const loadCustomRules = () =>
+    cmd("adblock_custom_get")
+      .then((value) => setCustomRules(typeof value === "string" ? value : ""))
+      .catch(() => setCustomRules(""));
+
+  const saveCustomRules = () => {
+    setCustomRulesBusy(true);
+    void cmd("adblock_custom_set", { rules: customRules })
+      .then(loadAdblock)
+      .catch((e) => setMessage(String(e)))
+      .finally(() => setCustomRulesBusy(false));
+  };
 
   const loadPerms = () =>
     cmd("permission_list")
@@ -630,6 +645,17 @@ export default function Settings({
             <p className="hint">{t("settings.adblockHint")}</p>
             <button type="button" className="btn block" disabled={abBusy} onClick={updateAdblock}>
               {abBusy ? t("settings.adblockUpdating") : t("settings.adblockUpdate")}
+            </button>
+            <textarea
+              className="field settings-custom-rules"
+              value={customRules}
+              onChange={(e) => setCustomRules(e.target.value)}
+              onFocus={loadCustomRules}
+              placeholder="example.com##.sponsor\n||ads.example^"
+              aria-label="Custom adblock rules"
+            />
+            <button type="button" className="btn block" disabled={customRulesBusy} onClick={saveCustomRules}>
+              {customRulesBusy ? "Đang lưu…" : "Lưu luật tùy chỉnh"}
             </button>
           </Section>
 

@@ -35,6 +35,12 @@ interface Inspection {
   installed: boolean;
 }
 
+interface ExtLog {
+  level: string;
+  message: string;
+  createdAt: number;
+}
+
 function capLabel(cap: string): string {
   const key = `cap.${cap}` as Key;
   const text = t(key);
@@ -66,6 +72,7 @@ export default function ExtensionsPanel() {
   const [draftMatch, setDraftMatch] = useState("https://example.com/*");
   const [draftJs, setDraftJs] = useState("");
   const [draftCss, setDraftCss] = useState("");
+  const [logs, setLogs] = useState<ExtLog[]>([]);
 
   async function reload() {
     try {
@@ -82,6 +89,24 @@ export default function ExtensionsPanel() {
   useEffect(() => {
     void reload();
   }, []);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setLogs([]);
+      return;
+    }
+    let cancelled = false;
+    void cmd("ext_logs", { id: selectedId, limit: "100" })
+      .then((value) => {
+        if (!cancelled) setLogs(Array.isArray(value) ? (value as ExtLog[]) : []);
+      })
+      .catch(() => {
+        if (!cancelled) setLogs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   async function inspect() {
     const p = path.trim();
@@ -225,6 +250,23 @@ export default function ExtensionsPanel() {
     }
   }
 
+  async function testDraft() {
+    setBusy(true);
+    setError("");
+    try {
+      await cmd("ext_test", {
+        name: draftName.trim() || "Draft extension",
+        version: draftVersion.trim() || "1.0.0",
+        match_pattern: draftMatch.trim(), js: draftJs, css: draftCss,
+      });
+      setNotice("Manifest và match pattern hợp lệ.");
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="ext-panel">
       <section className="ext-install">
@@ -320,6 +362,9 @@ export default function ExtensionsPanel() {
           <button type="button" className="btn primary" disabled={busy} onClick={() => void saveDraft()}>
             Lưu
           </button>
+          <button type="button" className="btn" disabled={busy} onClick={() => void testDraft()}>
+            Test
+          </button>
         </div>
         <div className="row-inline">
           <input className="field" placeholder="Tên tiện ích" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
@@ -337,6 +382,27 @@ export default function ExtensionsPanel() {
         if (!selected) return null;
         return (
           <section className="ext-editor">
+            <div className="ext-log-viewer">
+              <div className="ext-list-head">
+                <strong>Log runtime</strong>
+                <button type="button" className="btn" onClick={() => setSelectedId(selected.id)}>
+                  Tải lại
+                </button>
+              </div>
+              {logs.length === 0 ? (
+                <p className="ext-sub">Chưa có lỗi runtime.</p>
+              ) : (
+                <div className="ext-log-list">
+                  {logs.map((log, index) => (
+                    <div className="ext-log-entry" key={`${log.createdAt}-${index}`}>
+                      <code>{new Date(log.createdAt * 1000).toLocaleString()}</code>
+                      <span className="ext-log-level">{log.level}</span>
+                      <pre>{log.message}</pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="ext-list-head">
               <div>
                 <h3 className="ext-heading">{selected.name}</h3>

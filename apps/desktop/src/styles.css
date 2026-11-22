@@ -2736,6 +2736,40 @@ input[type="checkbox"]:checked::after {
   line-height: 1.45;
 }
 
+.ext-log-viewer {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.ext-log-list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.ext-log-entry {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.ext-log-entry pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ext-log-level {
+  color: var(--danger, #d44);
+  text-transform: uppercase;
+}
+
 .ext-heading {
   margin: 0;
   font-size: 13px;
@@ -2896,6 +2930,13 @@ input[type="checkbox"]:checked::after {
 .linklike:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.settings-custom-rules {
+  min-height: 90px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
 }
 
 /* Tôn trọng thiết lập giảm chuyển động của Windows. */

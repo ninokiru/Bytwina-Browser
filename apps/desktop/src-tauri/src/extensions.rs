@@ -175,6 +175,7 @@ impl MatchPattern {
             host,
             path: path.to_string(),
         };
+        crate::matcher::cache_pattern(raw);
         if pattern.is_too_broad() {
             return Err("pattern quá rộng (*://*/*); hãy giới hạn tên miền".into());
         }
@@ -196,7 +197,8 @@ impl MatchPattern {
         if !host_matches(&self.host, host) {
             return false;
         }
-        wildcard(&self.path, url.path())
+        let compiled_path = crate::matcher::compile(&self.path);
+        crate::matcher::is_match(&compiled_path, url.path())
     }
 
     fn to_js(&self) -> Value {
@@ -546,7 +548,7 @@ impl Registry {
         }
         for js in &script.js {
             body.push_str(&format!(
-                "try{{(function(bytwina){{{js}\n}})(window.__bytwina__&&window.__bytwina__.get({id}));}}catch(e){{console.error('[bytwina:'+{id}+']',e);}}"
+                "try{{(function(bytwina){{{js}\n}})(window.__bytwina__&&window.__bytwina__.get({id}));}}catch(e){{console.error('[bytwina:'+{id}+']',e);var b=window.__bytwina__&&window.__bytwina__.get({id});if(b&&b.runtime&&b.runtime.log)b.runtime.log(e&&e.stack||e);}}"
             ));
         }
         format!(
@@ -597,7 +599,7 @@ impl Registry {
         }
         for js in &script.js {
             body.push_str(&format!(
-                "try{{(function(bytwina){{{js}\n}})(window.__bytwina__&&window.__bytwina__.get({id}));}}catch(e){{console.error('[bytwina:'+{id}+']',e);}}"
+                "try{{(function(bytwina){{{js}\n}})(window.__bytwina__&&window.__bytwina__.get({id}));}}catch(e){{console.error('[bytwina:'+{id}+']',e);var b=window.__bytwina__&&window.__bytwina__.get({id});if(b&&b.runtime&&b.runtime.log)b.runtime.log(e&&e.stack||e);}}"
             ));
         }
         let guarded = format!(
@@ -742,16 +744,22 @@ fn load_one(db: &Db, row: ExtensionRecord) -> Result<LoadedExt, String> {
     if !root.is_dir() {
         return Err("thiếu thư mục tiện ích".into());
     }
+    let assets = db
+        .extension_assets(&row.id)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(path, kind, source)| ((path, kind), source))
+        .collect::<HashMap<_, _>>();
     let mut scripts = Vec::new();
     for cs in &manifest.content_scripts {
         let run_at = RunAt::parse(cs.run_at.as_deref())?;
         let mut js = Vec::new();
         for rel in &cs.js {
-            js.push(read_text_file(&safe_join(&root, rel)?)?);
+            js.push(load_asset(&assets, &root, rel, "js")?);
         }
         let mut css = Vec::new();
         for rel in &cs.css {
-            css.push(read_text_file(&safe_join(&root, rel)?)?);
+            css.push(load_asset(&assets, &root, rel, "css")?);
         }
         scripts.push(LoadedScript {
             run_at,
@@ -775,6 +783,18 @@ fn load_one(db: &Db, row: ExtensionRecord) -> Result<LoadedExt, String> {
         grants,
         scripts,
     })
+}
+
+fn load_asset(
+    assets: &HashMap<(String, String), String>,
+    root: &Path,
+    relative: &str,
+    kind: &str,
+) -> Result<String, String> {
+    if let Some(source) = assets.get(&(relative.to_string(), kind.to_string())) {
+        return Ok(source.clone());
+    }
+    read_text_file(&safe_join(root, relative)?)
 }
 
 fn read_text_file(path: &Path) -> Result<String, String> {
@@ -1188,6 +1208,10 @@ pub fn install_source(
         .as_ref()
         .map(|_| db.list_extension_permissions(&id))
         .transpose()?;
+    let previous_assets = existing
+        .as_ref()
+        .map(|_| db.extension_assets(&id))
+        .transpose()?;
     let target = extensions_dir.join(&id);
     // Sao chép vào thư mục tạm trước. Không được xoá bản đang chạy rồi mới
     // bắt đầu copy: zip lỗi/đĩa đầy giữa chừng sẽ làm mất bản cài trước đó.
@@ -1212,6 +1236,29 @@ pub fn install_source(
     if let Err(e) = std::fs::write(staging.join("manifest.json"), normalized) {
         let _ = std::fs::remove_dir_all(&staging);
         return Err(e.to_string());
+    }
+    let mut assets = Vec::new();
+    for script in &manifest.content_scripts {
+        for rel in &script.js {
+            let source = match read_text_file(&safe_join(&staging, rel)?) {
+                Ok(source) => source,
+                Err(error) => {
+                    let _ = std::fs::remove_dir_all(&staging);
+                    return Err(error);
+                }
+            };
+            assets.push((rel.clone(), "js".to_string(), source));
+        }
+        for rel in &script.css {
+            let source = match read_text_file(&safe_join(&staging, rel)?) {
+                Ok(source) => source,
+                Err(error) => {
+                    let _ = std::fs::remove_dir_all(&staging);
+                    return Err(error);
+                }
+            };
+            assets.push((rel.clone(), "css".to_string(), source));
+        }
     }
 
     // Đổi tên trong cùng thư mục để commit gần như nguyên tử. Có rollback nếu
@@ -1249,7 +1296,7 @@ pub fn install_source(
         author: manifest.author.clone().unwrap_or_default(),
         // Cài mới sau khi người dùng đã duyệt quyền thì bật ngay; cập nhật
         // giữ nguyên trạng thái bật/tắt của bản cũ.
-        active: existing.as_ref().map(|e| e.active).unwrap_or(true),
+        active: existing.as_ref().map(|e| e.active).unwrap_or(false),
         manifest_json: serde_json::to_string(&manifest).map_err(|e| e.to_string())?,
         dir: target.to_string_lossy().into_owned(),
         installed_at: existing.as_ref().map(|e| e.installed_at).unwrap_or(0),
@@ -1258,6 +1305,7 @@ pub fn install_source(
     if let Err(e) = db
         .upsert_extension(&record)
         .and_then(|_| db.set_extension_permissions(&id, &final_caps, "user"))
+        .and_then(|_| db.set_extension_assets(&id, &assets))
     {
         // Không để DB trỏ vào nửa-cài đặt: trả filesystem về bản trước nếu
         // ghi metadata hoặc quyền thất bại.
@@ -1268,6 +1316,9 @@ pub fn install_source(
                 let _ = db.upsert_extension(previous);
                 if let Some(caps) = previous_permissions.as_deref() {
                     let _ = db.set_extension_permissions(&id, caps, "user");
+                }
+                if let Some(assets) = previous_assets.as_deref() {
+                    let _ = db.set_extension_assets(&id, assets);
                 }
             }
         } else {
@@ -1397,6 +1448,9 @@ pub fn handle_web_message(app: AppHandle, label: String, raw: String, source: St
         .await;
         if let Err(e) = &result {
             log::debug!("[ext:{}] {}: {e}", ext.record.id, req.method);
+            if let Some(db) = app2.try_state::<DbState>().and_then(|s| s.0.clone()) {
+                let _ = db.log_extension(&ext.record.id, "error", &format!("{}: {e}", req.method));
+            }
         }
         reply(&app2, &label2, seq, result);
     });
@@ -1430,6 +1484,17 @@ async fn dispatch(
 ) -> Result<Value, String> {
     registry.allow(&ext.record.id, Bucket::Api)?;
     match method {
+        "runtime.log" => {
+            let message = params
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("extension error");
+            let message = message.chars().take(4000).collect::<String>();
+            if let Some(db) = app.try_state::<DbState>().and_then(|state| state.0.clone()) {
+                db.log_extension(&ext.record.id, "error", &message)?;
+            }
+            Ok(Value::Null)
+        }
         "native.openUrl" => {
             require(ext, "native:open-url")?;
             let raw = params
@@ -1889,7 +1954,8 @@ const BRIDGE_JS: &str = r##"
         },
         getURL: function (p) {
           return "bytwina-extension://" + ext.id + "/" + String(p || "").replace(/^\/+/, "");
-        }
+        },
+        log: function (message) { return call(state, "runtime.log", { message: String(message) }); }
       }),
       storage: Object.freeze({
         local: Object.freeze({

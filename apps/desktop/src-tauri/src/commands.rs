@@ -32,7 +32,12 @@ pub async fn browser_command(
             .map(str::to_string)
             .ok_or_else(|| format!("thiếu tham số '{key}' cho {action}"))
     };
-    match action.as_str() {
+    let normalized_action = match action.as_str() {
+        "ext_update" => "ext_install",
+        "ext_delete" => "ext_remove",
+        other => other,
+    };
+    match normalized_action {
         "state" => Ok(serde_json::to_value(state.snapshot()).unwrap()),
         "new_tab" => {
             if !terms::is_accepted(&app) {
@@ -383,6 +388,22 @@ pub async fn browser_command(
             }
             Ok(Value::Array(out))
         }),
+        "ext_logs" => with_db(&app, |db| {
+            let id = arg("id")?;
+            let limit = args
+                .as_ref()
+                .and_then(|a| a.get("limit"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(100);
+            let logs = db
+                .extension_logs(&id, limit)?
+                .into_iter()
+                .map(|(level, message, created_at)| serde_json::json!({
+                    "level": level, "message": message, "createdAt": created_at
+                }))
+                .collect();
+            Ok(Value::Array(logs))
+        }),
         "ext_inspect" => {
             let path = arg("path")?;
             let mut info = extensions::inspect_source(std::path::Path::new(&path))?;
@@ -424,6 +445,21 @@ pub async fn browser_command(
             }
             Ok(info)
         }
+        "ext_test" => {
+            let name = arg("name")?;
+            let version = args.as_ref().and_then(|a| a.get("version")).and_then(|v| v.as_str()).unwrap_or("1.0.0");
+            let pattern = arg("match_pattern")?;
+            let js = args.as_ref().and_then(|a| a.get("js")).and_then(|v| v.as_str()).unwrap_or("");
+            let css = args.as_ref().and_then(|a| a.get("css")).and_then(|v| v.as_str()).unwrap_or("");
+            let manifest = serde_json::json!({
+                "manifest_version": 1, "name": name, "version": version,
+                "content_scripts": [{ "matches": [pattern],
+                    "js": if js.trim().is_empty() { Vec::<String>::new() } else { vec!["content.js"] },
+                    "css": if css.trim().is_empty() { Vec::<String>::new() } else { vec!["content.css"] } }]
+            });
+            extensions::Manifest::from_json(&manifest.to_string())?.validate()?;
+            Ok(serde_json::json!({ "valid": true }))
+        }
         "ext_add" => {
             let name = arg("name")?;
             let version = args.as_ref().and_then(|a| a.get("version")).and_then(|v| v.as_str()).unwrap_or("1.0.0");
@@ -455,7 +491,7 @@ pub async fn browser_command(
                 let outcome = extensions::install_source(&db, &temp, &dir, &[], None)?;
                 reload_extensions(&app, &db);
                 extensions::apply_to_tabs(&app, &state);
-                Ok::<_, String>(serde_json::json!({"id": outcome.id, "name": outcome.name, "version": outcome.version, "active": true}))
+                Ok::<_, String>(serde_json::json!({"id": outcome.id, "name": outcome.name, "version": outcome.version, "active": false}))
             })();
             let _ = std::fs::remove_dir_all(&temp);
             result
@@ -485,7 +521,7 @@ pub async fn browser_command(
                 "id": outcome.id,
                 "name": outcome.name,
                 "version": outcome.version,
-                "active": true,
+                "active": false,
             }))
         }
         "ext_install_from_url" => {
@@ -512,7 +548,7 @@ pub async fn browser_command(
                 "id": outcome.id,
                 "name": outcome.name,
                 "version": outcome.version,
-                "active": true,
+                "active": false,
             }))
         }
         "ext_export" => {
@@ -855,6 +891,28 @@ pub async fn browser_command(
                 .state::<crate::filters::BlockerHandle>()
                 .0
                 .clone();
+            let lists = tauri::async_runtime::spawn_blocking(move || handle.reload())
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(serde_json::json!({ "lists": lists }))
+        }
+        "adblock_custom_get" => {
+            let dir = app.state::<crate::filters::BlockerHandle>().0.status().dir;
+            let path = std::path::PathBuf::from(dir).join("custom.txt");
+            Ok(Value::String(std::fs::read_to_string(path).unwrap_or_default()))
+        }
+        "adblock_custom_set" => {
+            let rules = arg("rules")?;
+            if rules.len() > 2 * 1024 * 1024 {
+                return Err("custom rules quá lớn (tối đa 2 MB)".into());
+            }
+            let dir = std::path::PathBuf::from(app.state::<crate::filters::BlockerHandle>().0.status().dir);
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            let path = dir.join("custom.txt");
+            let tmp = dir.join("custom.txt.part");
+            std::fs::write(&tmp, rules).map_err(|e| e.to_string())?;
+            std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+            let handle = app.state::<crate::filters::BlockerHandle>().0.clone();
             let lists = tauri::async_runtime::spawn_blocking(move || handle.reload())
                 .await
                 .map_err(|e| e.to_string())??;

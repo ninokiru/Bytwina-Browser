@@ -12,8 +12,8 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
   - Content script `document_start` chạy trước script của trang bằng `AddScriptToExecuteOnDocumentCreated`; `document_end`/`document_idle` do Rust chèn khi trang tải xong.
   - Bridge trong trang có kiểm quyền: `storage.local` (5 MB riêng mỗi tiện ích), `tabs.query/getCurrent/navigate`, `network.fetch` (chặn mạng nội bộ, giới hạn 5 MB/lần), `notifications`, `dom.*` cơ bản.
   - Mỗi tiện ích có token ngẫu nhiên riêng theo tab; Rust kiểm tra lại token, quyền, URL nguồn và hạn mức — không tin dữ liệu từ JavaScript.
-  - Schema CSDL v6: bảng `extensions`, `ext_permissions`, `ext_storage`.
-- **Chưa có trong v1:** marketplace, chữ ký/tự cập nhật, background script, popup, options page, clipboard, `native:*`, `storage:shared`, `bytwina-extension://` assets. Content script chạy trong main world (xem `docs/SECURITY.md`).
+  - Schema CSDL v8: thêm `extension_assets` và `extension_logs` bên cạnh `extensions`, `ext_permissions`, `ext_storage`.
+- **Giới hạn có chủ đích:** chưa có marketplace/chữ ký; `background` là simulated background theo vòng đời tab, còn `popup/options_page` được mô phỏng bằng UI của Bytwina. Content script chạy trong main world (xem `docs/SECURITY.md`).
 
 ## 0.0.5 — 2026-11-21 (so với 0.0.4)
 

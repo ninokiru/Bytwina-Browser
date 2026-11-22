@@ -16,6 +16,7 @@ mod diagnostics;
 mod extensions;
 mod filters;
 mod navigation;
+mod matcher;
 mod passwords;
 mod permissions;
 mod tabs;
@@ -129,9 +130,27 @@ fn main() {
             app.manage(blocker.clone());
             {
                 let handle = blocker.0.clone();
+                let db_for_update = app.state::<DbState>().0.clone();
                 std::thread::spawn(move || {
                     if let Err(e) = handle.load() {
                         diagnostics::log("error", &format!("bộ chặn quảng cáo: {e}"));
+                    }
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    let last = db_for_update
+                        .as_ref()
+                        .and_then(|db| db.get_setting("adblockLastUpdate").ok().flatten())
+                        .and_then(|value| value.parse::<i64>().ok())
+                        .unwrap_or(0);
+                    if now.saturating_sub(last) >= 7 * 24 * 60 * 60 {
+                        if let Ok(downloaded) = handle.update() {
+                            if let Some(db) = db_for_update {
+                                let _ = db.set_setting("adblockLastUpdate", &now.to_string());
+                            }
+                            log::info!("adblock lists updated automatically: {downloaded}");
+                        }
                     }
                 });
             }

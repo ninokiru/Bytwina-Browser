@@ -54,6 +54,12 @@ pub fn stylesheet(engine: &Engine, url: &str, classes: &[String], ids: &[String]
         }
     }
 
+    // Generic rules are deliberately restricted to known ad-heavy domains.
+    // Unknown sites keep only rules explicitly present in the downloaded list.
+    if is_high_risk(url) && !resources.generichide {
+        selectors.extend(generic_selectors(classes, ids));
+    }
+
     selectors.sort();
     selectors.dedup();
     if selectors.is_empty() {
@@ -68,6 +74,48 @@ pub fn stylesheet(engine: &Engine, url: &str, classes: &[String], ids: &[String]
         .map(|s| format!("{s}{{display:none!important;}}"))
         .collect::<Vec<_>>()
         .join("")
+}
+
+pub fn is_high_risk(url: &str) -> bool {
+    let host = url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_ascii_lowercase))
+        .unwrap_or_default();
+    [
+        "youtube.com", "facebook.com", "instagram.com", "tiktok.com",
+        "vnexpress.net", "dantri.com.vn", "tuoitre.vn", "thanhnien.vn",
+        "kenh14.vn", "cafebiz.vn", "genk.vn",
+    ]
+    .iter()
+    .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+}
+
+fn generic_selectors(classes: &[String], ids: &[String]) -> Vec<String> {
+    const SAFE: &[&str] = &["address-block", "adaptation", "adoption", "badge", "header"];
+    const TERMS: &[&str] = &["ad", "ads", "advert", "advertisement", "banner", "sponsor", "promoted"];
+    let mut out = vec![
+        "[id^='banner']:not(#banner-header)".to_string(),
+        ".sponsor:not(.sponsor-header)".to_string(),
+    ];
+    for class in classes {
+        let lower = class.to_ascii_lowercase();
+        if SAFE.contains(&lower.as_str()) || !TERMS.iter().any(|term| lower.contains(term)) {
+            continue;
+        }
+        if class.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            out.push(format!(".{class}"));
+        }
+    }
+    for id in ids {
+        let lower = id.to_ascii_lowercase();
+        if SAFE.contains(&lower.as_str()) || !TERMS.iter().any(|term| lower.contains(term)) {
+            continue;
+        }
+        if id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            out.push(format!("#{id}"));
+        }
+    }
+    out
 }
 
 fn exceptions(resources: &adblock::cosmetic_filter_cache::UrlSpecificResources) -> HashSet<String> {
@@ -211,5 +259,18 @@ mod tests {
         let e = engine("! chỉ comment\n");
         assert!(stylesheet(&e, "https://a.test/", &["x".to_string()], &[]).is_empty());
         assert_eq!(count(""), 0);
+    }
+
+    #[test]
+    fn generic_rules_are_scoped_and_whitelisted() {
+        assert!(is_high_risk("https://news.vnexpress.net/a"));
+        assert!(!is_high_risk("https://example.com/a"));
+        let selectors = generic_selectors(
+            &["ad-box".into(), "address-block".into(), "content".into()],
+            &["banner-top".into()],
+        );
+        assert!(selectors.iter().any(|s| s == ".ad-box"));
+        assert!(selectors.iter().any(|s| s == "#banner-top"));
+        assert!(!selectors.iter().any(|s| s == ".address-block"));
     }
 }

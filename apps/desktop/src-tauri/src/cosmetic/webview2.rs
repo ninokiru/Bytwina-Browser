@@ -54,7 +54,7 @@ const COLLECT_SCRIPT: &str = concat!(
 );
 
 /// CSS nhúng dưới dạng chuỗi JS an toàn (JSON-escape), ghi đè `<style>` cũ.
-fn apply_script(css: &str) -> String {
+fn apply_script(css: &str, dynamic: bool) -> String {
     let literal = serde_json::to_string(css).unwrap_or_else(|_| "\"\"".into());
     format!(
         "(() => {{\
@@ -67,6 +67,23 @@ el.type = 'text/css';\
 (document.head || document.documentElement).appendChild(el);\
 }}\
 el.textContent = {literal};\
+if ({dynamic} && !window.__bytwina_dynamic_observer__) {{\
+window.__bytwina_dynamic_observer__ = true;\
+let timer = 0;\
+const keyword = /(^|[-_])(ad|ads|advert|banner|sponsor|promoted)([-_]|$)/i;\
+const scan = (nodes) => {{ let count = 0; nodes.forEach((node) => {{\
+if (count >= 50 || !(node instanceof Element)) return;\
+const text = ((typeof node.className === 'string') ? node.className : '') + ' ' + (node.id || '');\
+if (!keyword.test(text)) return;\
+const rect = node.getBoundingClientRect();\
+if (rect.width < 80 || rect.height < 40 || rect.width > window.innerWidth * 1.2) return;\
+node.setAttribute('data-bytwina-hidden', 'dynamic'); node.style.setProperty('display', 'none', 'important'); count++;\
+}}); }};\
+window.__bytwina_dynamic_observer_instance__ = new MutationObserver((records) => {{\
+clearTimeout(timer); timer = setTimeout(() => {{ const nodes = []; records.forEach((r) => r.addedNodes.forEach((n) => nodes.push(n))); scan(nodes.slice(0, 50)); }}, 80);\
+}});\
+window.__bytwina_dynamic_observer_instance__.observe(document.documentElement || document.body, {{ childList: true, subtree: true }});\
+}}\
 if (!window.__bytwina_observer__) {{\
 window.__bytwina_observer__ = new MutationObserver(() => {{\
 if (!document.getElementById(ID) && (document.head || document.documentElement)) {{\
@@ -183,15 +200,16 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
                     if url.is_empty() || url == crate::navigation::NEW_TAB_URL {
                         return;
                     }
+                    let dynamic = crate::cosmetic::is_high_risk(&url);
                     let css = crate::cosmetic::stylesheet(&engine, &url, &classes, &ids);
-                    if css.is_empty() {
+                    if css.is_empty() && !dynamic {
                         return;
                     }
                     log::debug!(
                         "[{label_bg}] ẩn {} quy tắc thẩm mỹ",
                         crate::cosmetic::count(&css)
                     );
-                    inject(&app_bg, &label_bg, &css);
+                    inject(&app_bg, &label_bg, &css, dynamic);
                 }));
                 Ok(())
             },
@@ -204,11 +222,11 @@ fn collect_and_apply(app: &AppHandle, label: &str, handle: &BlockerHandle) {
 /// Chèn CSS. Phải quay về luồng UI vì script chạy trên webview.
 /// Dùng `Webview::eval` của Tauri (nó gọi đúng ExecuteScript bên trong) thay vì
 /// tự dựng completed handler: cùng việc, ít chỗ sai hơn nhiều.
-fn inject(app: &AppHandle, label: &str, css: &str) {
+fn inject(app: &AppHandle, label: &str, css: &str, dynamic: bool) {
     let Some(webview) = app.get_webview(label) else {
         return;
     };
-    if let Err(e) = webview.eval(apply_script(css)) {
+    if let Err(e) = webview.eval(apply_script(css, dynamic)) {
         log::debug!("[{label}] chèn CSS thẩm mỹ thất bại: {e}");
     }
 }
@@ -235,7 +253,7 @@ mod tests {
 
     #[test]
     fn apply_script_escapes_css_as_a_json_string() {
-        let script = apply_script(".a{content:\"]\"}");
+        let script = apply_script(".a{content:\"]\"}", false);
         assert!(script.contains("__bytwina_cosmetic__"), "{script}");
         assert!(script.contains(r#"\""#), "phải escape dấu nháy: {script}");
         assert!(!script.contains("tauri"), "không được lộ API ứng dụng: {script}");
