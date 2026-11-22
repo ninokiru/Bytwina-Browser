@@ -1950,7 +1950,7 @@ mod tests {
         assert!(manifest(&MIN.replace(
             "\"js\": [\"a.js\"]",
             "\"js\": [\"a.js\"], \"run_at\": \"document_x\""
-        )))
+        ))
         .is_err());
     }
 
