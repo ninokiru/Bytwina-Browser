@@ -239,6 +239,7 @@ impl Blocker {
 
     /// Quyết định chặn cho một request. `resource_type` là loại tài nguyên WebView2
     /// (`script`, `image`, `xmlhttprequest`, `document`…).
+    #[cfg(test)]
     pub fn should_block(&self, url: &str, source_url: &str, resource_type: &str) -> bool {
         self.should_block_in_tab(url, source_url, resource_type, "")
     }
