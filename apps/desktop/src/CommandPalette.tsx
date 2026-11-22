@@ -17,7 +17,8 @@ export type PaletteAction =
   | "bookmarks"
   | "downloads"
   | "toggleVertical"
-  | "reload";
+  | "reload"
+  | "reader";
 
 type Lang = "vi" | "en";
 
@@ -55,6 +56,7 @@ const TEXT: Record<
       downloads: "Mở tải xuống",
       toggleVertical: "Bật/tắt tab dọc",
       reload: "Tải lại trang",
+      reader: "Chế độ đọc (bài viết)",
     },
   },
   en: {
@@ -77,6 +79,7 @@ const TEXT: Record<
       downloads: "Open downloads",
       toggleVertical: "Toggle vertical tabs",
       reload: "Reload page",
+      reader: "Reader mode (article view)",
     },
   },
 };
@@ -85,6 +88,7 @@ const ACTION_ORDER: PaletteAction[] = [
   "newTab",
   "closeTab",
   "reload",
+  "reader",
   "bookmark",
   "togglePrivate",
   "toggleVertical",

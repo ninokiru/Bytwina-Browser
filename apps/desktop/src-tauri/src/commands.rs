@@ -441,6 +441,14 @@ pub async fn browser_command(
             app.exit(0);
             Ok(Value::Null)
         }
+        // Chế độ đọc: tách bài viết của trang (xử lý nặng nên chạy trên luồng nền).
+        "reader_extract" => {
+            let url = arg("url")?;
+            let article = tauri::async_runtime::spawn_blocking(move || crate::reader::extract(&url))
+                .await
+                .map_err(|e| e.to_string())??;
+            serde_json::to_value(article).map_err(|e| e.to_string())
+        }
         // Đưa focus về webview thanh công cụ (dùng khi mở bảng nổi/bảng lệnh).
         "toolbar_focus" => {
             if let Some(tb) = app.get_webview("toolbar") {
