@@ -270,7 +270,6 @@ impl Blocker {
             Err(e) => e.into_inner().clone(),
         }
     }
-
 }
 
 #[derive(Clone)]
