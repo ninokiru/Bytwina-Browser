@@ -220,9 +220,18 @@ impl Blocker {
         // WebView2 báo tài liệu của iframe cũng là `document`, không phân biệt được
         // khung gốc. Chỉ chặn tài liệu của bên thứ ba để không bao giờ làm trắng
         // trang người dùng đang mở.
+        // Parse host một lần cho mỗi request, và chỉ khi thật sự cần (tài liệu hoặc
+        // có trang bị tắt chặn). Request tài nguyên thường không tốn bước này.
+        let is_document = matches!(resource_type, "document" | "main_frame" | "sub_frame");
+        let overrides = self.has_overrides.load(Ordering::Relaxed);
+        let (page, target) = if is_document || overrides {
+            (source_host(source_url), host_of(url))
+        } else {
+            (None, None)
+        };
         let kind = match resource_type {
             "document" | "main_frame" | "sub_frame" => {
-                if is_third_party(url, source_url) {
+                if is_third_party_hosts(page.as_deref(), target.as_deref()) {
                     "subdocument"
                 } else {
                     return false;
@@ -232,9 +241,9 @@ impl Blocker {
         };
         // Trang người dùng tắt chặn: bỏ qua request mà đích thuộc trang đó
         // và cả request phát sinh từ trang đó. Chỉ làm khi có mục nào được tắt.
-        if self.has_overrides.load(Ordering::Relaxed)
-            && (self.is_site_disabled_of(url)
-                || source_host(source_url).is_some_and(|p| self.is_site_disabled(&p)))
+        if overrides
+            && (target.as_deref().is_some_and(|h| self.is_site_disabled(h))
+                || page.as_deref().is_some_and(|p| self.is_site_disabled(p)))
         {
             return false;
         }
@@ -262,9 +271,6 @@ impl Blocker {
         }
     }
 
-    fn is_site_disabled_of(&self, url: &str) -> bool {
-        host_of(url).is_some_and(|h| self.is_site_disabled(&h))
-    }
 }
 
 #[derive(Clone)]
@@ -272,11 +278,11 @@ pub struct BlockerHandle(pub Arc<Blocker>);
 
 /// So sánh thô hai host sau khi bỏ `www.`. Thà nhận nhầm là cùng bên (không chặn
 /// tài liệu) còn hơn chặn nhầm trang người dùng đang mở.
-fn is_third_party(url: &str, source_url: &str) -> bool {
-    let (Some(page), Some(target)) = (source_host(source_url), host_of(url)) else {
+fn is_third_party_hosts(page: Option<&str>, target: Option<&str>) -> bool {
+    let (Some(page), Some(target)) = (page, target) else {
         return false;
     };
-    registrable(&page) != registrable(&target)
+    registrable(page) != registrable(target)
 }
 
 /// Registrable domain theo Public Suffix List. Trước đây hàm này đoán bằng
