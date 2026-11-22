@@ -41,6 +41,37 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+      - name: Set release version
+        shell: pwsh
+        run: |
+          $version = $env:TAG.TrimStart("v")
+          $packagePath = "apps/desktop/package.json"
+          $package = Get-Content $packagePath -Raw | ConvertFrom-Json
+          $package.version = $version
+          $package | ConvertTo-Json -Depth 20 | Set-Content $packagePath -Encoding utf8
+
+          $packageLockPath = "apps/desktop/package-lock.json"
+          $packageLock = Get-Content $packageLockPath -Raw | ConvertFrom-Json
+          $packageLock.version = $version
+          if ($packageLock.packages -and $packageLock.packages.PSObject.Properties[""]) {
+            $packageLock.packages."".version = $version
+          }
+          $packageLock | ConvertTo-Json -Depth 100 | Set-Content $packageLockPath -Encoding utf8
+
+          $tauriPath = "apps/desktop/src-tauri/tauri.conf.json"
+          $tauri = Get-Content $tauriPath -Raw | ConvertFrom-Json
+          $tauri.version = $version
+          $tauri | ConvertTo-Json -Depth 20 | Set-Content $tauriPath -Encoding utf8
+
+          $cargoPath = "apps/desktop/src-tauri/Cargo.toml"
+          $cargo = Get-Content $cargoPath -Raw
+          $cargo = [regex]::Replace($cargo, '(?m)^(version\s*=\s*")[^"]+("\s*)$', "`$1$version`$2", 1)
+          Set-Content $cargoPath $cargo -Encoding utf8
+
+          $lockPath = "apps/desktop/src-tauri/Cargo.lock"
+          $lock = Get-Content $lockPath -Raw
+          $lock = [regex]::Replace($lock, '(?s)(\[\[package\]\]\r?\nname = "bytwina-browser"\r?\nversion = ")[^"]+', "`$1$version", 1)
+          Set-Content $lockPath $lock -Encoding utf8
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri -> target

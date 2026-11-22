@@ -5,6 +5,7 @@ import Panel, { type PanelKind } from "./Panel";
 import PermissionPrompt, { type PermissionPrompt as SitePrompt } from "./PermissionPrompt";
 import NewTab from "./NewTab";
 import Onboarding from "./Onboarding";
+import UpdateWelcome from "./UpdateWelcome";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyTheme } from "./theme";
@@ -681,6 +682,7 @@ export default function App() {
         overlay ? " overlay" : ""
       }${focusMode ? " focus-mode" : ""}`}
     >
+      <UpdateWelcome />
       {focusMode && (
         <div className="focus-indicator" onClick={toggleFocusMode} title="Nhấn để thoát Chế độ tập trung (Ctrl+Shift+F)">
           <div className={`focus-progress${active?.loading ? " loading" : ""}`} />

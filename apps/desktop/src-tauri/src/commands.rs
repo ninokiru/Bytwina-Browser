@@ -951,6 +951,10 @@ pub async fn browser_command(
             let info = crate::update::check(app.clone()).await;
             Ok(serde_json::to_value(info).unwrap_or(Value::Null))
         }
+        "update_check_startup" => {
+            let result = crate::update::check_startup(app.clone()).await;
+            Ok(serde_json::to_value(result).unwrap_or(Value::Null))
+        }
         "update_install" => {
             crate::update::install(app.clone()).await?;
             Ok(Value::Bool(true))

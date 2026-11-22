@@ -1,7 +1,7 @@
 # Phát hành
 
-1. Cập nhật `version` ở ba nơi (phải giống nhau): `apps/desktop/package.json`, `apps/desktop/src-tauri/Cargo.toml`, `apps/desktop/src-tauri/tauri.conf.json`.
-2. Đẩy tag: `git tag v0.0.2 && git push origin v0.0.2`.
+1. Chọn phiên bản theo SemVer `MAJOR.MINOR.PATCH`. Sửa lỗi và cập nhật nhỏ tăng **PATCH** (ví dụ `0.0.5` → `0.0.6`); tính năng tương thích mới tăng **MINOR**; chỉ thay đổi phá vỡ tương thích mới tăng **MAJOR**. Không cần tăng major cho mỗi bản phát hành.
+2. Chạy workflow **Release** trong GitHub Actions và nhập `vX.Y.Z`. Workflow đồng bộ phiên bản vào `package.json`, `Cargo.toml`, `Cargo.lock` và `tauri.conf.json` trước khi build. Hoặc đẩy tag tương ứng sau khi cập nhật các file phiên bản.
 3. Workflow `release.yml` build bộ cài NSIS, tạo release **công khai ngay** kèm `SHA256SUMS.txt`, rồi in danh sách tệp đã tải lên (step "Verify assets").
 4. Tải về, kiểm tra SHA256 (`Get-FileHash`) và cài thử trên Windows. Bản cài **chưa ký số** nên SmartScreen sẽ cảnh báo.
 

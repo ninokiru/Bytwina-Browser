@@ -29,6 +29,13 @@ pub struct UpdateInfo {
     pub notes: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupCheck {
+    pub status: String,
+    pub info: Option<UpdateInfo>,
+}
+
 fn configured(app: &AppHandle) -> bool {
     app.config()
         .plugins
@@ -42,17 +49,29 @@ fn configured(app: &AppHandle) -> bool {
 /// Hỏi GitHub xem có bản mới không. `None` = đã mới nhất, chưa cấu hình khoá, hoặc
 /// mạng lỗi — cả ba đều không được làm hỏng UI.
 pub async fn check(app: AppHandle) -> Option<UpdateInfo> {
+    check_startup(app).await.info
+}
+
+pub async fn check_startup(app: AppHandle) -> StartupCheck {
     if !configured(&app) {
-        return None;
+        return StartupCheck { status: "unavailable".into(), info: None };
     }
-    let update = app
+    let result = app
         .updater_builder()
         .timeout(Duration::from_secs(15))
-        .build()
-        .ok()?
+        .build();
+    let updater = match result {
+        Ok(updater) => updater,
+        Err(_) => return StartupCheck { status: "failed".into(), info: None },
+    };
+    let update = match updater
         .check()
         .await
-        .ok()??;
+    {
+        Ok(Some(update)) => update,
+        Ok(None) => return StartupCheck { status: "latest".into(), info: None },
+        Err(_) => return StartupCheck { status: "failed".into(), info: None },
+    };
     let info = UpdateInfo {
         version: update.version.clone(),
         current: update.current_version.clone(),
@@ -61,7 +80,7 @@ pub async fn check(app: AppHandle) -> Option<UpdateInfo> {
     if let Some(state) = app.try_state::<PendingUpdate>() {
         *state.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(update);
     }
-    Some(info)
+    StartupCheck { status: "available".into(), info: Some(info) }
 }
 
 /// Tải và cài bản đang chờ. Trên Windows installer tự thoát app rồi mở lại, nên

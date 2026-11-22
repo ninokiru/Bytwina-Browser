@@ -13,6 +13,10 @@ type ThemeChoice = "light" | "dark" | "system";
 type Lang = "vi" | "en";
 
 const STEPS = 6;
+const STEP_LABELS: Record<Lang, string[]> = {
+  vi: ["Chào mừng", "Cách sử dụng", "Giao diện", "Dấu trang", "Riêng tư", "Hoàn tất"],
+  en: ["Welcome", "Your browser", "Appearance", "Bookmarks", "Privacy", "Finish"],
+};
 
 const TEXT: Record<Lang, {
   skip: string;
@@ -183,13 +187,35 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         <div className="ob-progress" aria-hidden="true">
           <span style={{ width: `${((step + 1) / STEPS) * 100}%` }} />
         </div>
-
-        <div className="ob-body" key={step}>
+        <div className="ob-layout">
+          <aside className="ob-sidebar">
+            <div className="ob-brand"><img src="/brand-mark.png" alt="" /><b>Bytwina</b></div>
+            <div className="ob-sidebar-copy">
+              <span>{lang === "en" ? "QUICK SETUP" : "THIẾT LẬP NHANH"}</span>
+              <h2>{lang === "en" ? "Make it yours." : "Tùy chỉnh theo bạn."}</h2>
+              <p>{lang === "en" ? "A few choices now. You can change everything later." : "Chọn vài thiết lập ban đầu. Bạn có thể đổi lại bất cứ lúc nào."}</p>
+            </div>
+            <ol className="ob-step-list" aria-label={lang === "en" ? "Setup progress" : "Tiến trình thiết lập"}>
+              {STEP_LABELS[lang].map((label, index) => (
+                <li key={label} className={index === step ? "active" : index < step ? "complete" : ""} aria-current={index === step ? "step" : undefined}>
+                  <span>{index < step ? "✓" : index + 1}</span>{label}
+                </li>
+              ))}
+            </ol>
+            <div className="ob-sidebar-foot">{lang === "en" ? "Private by choice." : "Riêng tư theo lựa chọn của bạn."}</div>
+          </aside>
+          <div className="ob-main">
+          <div className="ob-body" key={step}>
           {step === 0 && (
             <>
               <img className="ob-logo" src="/brand-mark.png" alt="" />
               <h1>{T.welcomeTitle}</h1>
               <p>{T.welcomeBody}</p>
+              <div className="ob-welcome-highlights" aria-label={lang === "en" ? "Bytwina features" : "Tính năng Bytwina"}>
+                <span><b>✦</b>{lang === "en" ? "A calmer web" : "Duyệt web gọn hơn"}</span>
+                <span><b>◈</b>{lang === "en" ? "Privacy controls" : "Tùy chọn riêng tư"}</span>
+                <span><b>⌘</b>{lang === "en" ? "Your setup, your way" : "Thiết lập theo ý bạn"}</span>
+              </div>
             </>
           )}
 
@@ -291,11 +317,11 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
               <p>{T.doneBody}</p>
             </>
           )}
-        </div>
+          </div>
 
-        <div className="ob-actions">
-          <span className="ob-count">{T.stepOf(step + 1, STEPS)}</span>
-          <div>
+          <div className="ob-actions">
+            <span className="ob-count">{T.stepOf(step + 1, STEPS)}</span>
+            <div>
             {step > 0 && !last && (
               <button type="button" className="btn" onClick={() => setStep(step - 1)}>
                 {T.back}
@@ -319,7 +345,9 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
                 {step === 0 ? T.start : T.next}
               </button>
             )}
+            </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
