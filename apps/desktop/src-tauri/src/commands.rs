@@ -209,7 +209,8 @@ pub async fn browser_command(
                 .into_body()
                 .read_to_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
-            let readability = dom_smoothie::Readability::new(html, Some(url.as_str()), None)
+            let url_for_readability = url.clone();
+            let mut readability = dom_smoothie::Readability::new(html, Some(url_for_readability.as_str()), None)
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
             let article = readability
                 .parse()

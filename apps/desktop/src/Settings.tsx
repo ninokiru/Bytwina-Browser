@@ -127,6 +127,8 @@ export default function Settings({
   // Tên bản lưu đã xếp hàng khôi phục (chỉ áp dụng khi mở lại ứng dụng).
   const [restoreQueued, setRestoreQueued] = useState("");
   const [abBusy, setAbBusy] = useState(false);
+  // HTTPS-only: ép http:// thành https:// trước khi điều hướng.
+  const [httpsOnly, setHttpsOnly] = useState(false);
   // Master–detail như Cốc Cốc/Chrome: mục lục chọn MỘT trang để hiện, không cuộn cả loạt.
   const [page, setPage] = useState<string>(initialPage ?? SECTIONS[0].id);
   const [query, setQuery] = useState("");
@@ -235,6 +237,7 @@ export default function Settings({
     void get("radius").then((r) => {
       if (r) setRadius(r);
     });
+    void get("httpsOnly").then((v) => setHttpsOnly(v === "1")).catch(() => undefined);
     void get("reduceMotion").then((m) => setReduceMotion(m === "1"));
     void loadAdblock();
     void loadPerms();
@@ -607,6 +610,18 @@ export default function Settings({
               />
             </label>
             <p className="hint">{t("settings.homeHint")}</p>
+            <label className="settings-row">
+              {t("settings.httpsOnly")}
+              <input
+                type="checkbox"
+                checked={httpsOnly}
+                onChange={(e) => {
+                  setHttpsOnly(e.target.checked);
+                  save("httpsOnly", e.target.checked ? "1" : "0");
+                }}
+              />
+            </label>
+            <p className="hint">{t("settings.httpsOnlyHint")}</p>
           </Section>
 
           <Section id="settings-startup" title={t("settings.startup")}>

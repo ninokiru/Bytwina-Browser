@@ -34,7 +34,9 @@ import {
   LockIcon,
   MoreIcon,
   PinIcon,
+  KeyIcon,
   PlusIcon,
+  CopyIcon,
   ReloadIcon,
   SettingsIcon,
   ShieldIcon,
@@ -100,6 +102,8 @@ export default function App() {
   const [focusMode, setFocusMode] = useState(false);
   // Omnibox suggestions & quick calc
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [onlineSuggestions, setOnlineSuggestions] = useState<string[]>([]);
+  const [onlineSuggestBusy, setOnlineSuggestBusy] = useState(false);
   const [calcResult, setCalcResult] = useState<string | null>(null);
   const [suggestIndex, setSuggestIndex] = useState(-1);
   // Ghi chú gắn URL: hiện chip trong omnibox khi mở lại trang đã có ghi chú.
@@ -117,6 +121,8 @@ export default function App() {
   const [readerUrl, setReaderUrl] = useState("");
   const [readerTitle, setReaderTitle] = useState("");
   const [startupUpdateVisible, setStartupUpdateVisible] = useState(false);
+  // HTTPS-only: ép http:// thành https:// trước khi điều hướng.
+  const [httpsOnly, setHttpsOnly] = useState(false);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -152,6 +158,9 @@ export default function App() {
       .then((v) => {
         if (v === "blank" || v === "dashboard" || v === "focus") setNewTabLayout(v);
       })
+      .catch(() => undefined);
+    void cmd("settings_get", { key: "httpsOnly" })
+      .then((v) => setHttpsOnly(v === "1"))
       .catch(() => undefined);
     loadZoom();
   }, []);
@@ -651,7 +660,28 @@ export default function App() {
     if (active == null) return;
     setEditing(false);
     // bytwina://... không có thật bị từ chối ở backend: giữ lại ô địa chỉ, không log lỗi.
-    void cmd("navigate", { id: String(active.id), input }).catch(() => undefined);
+    void cmd("navigate", { id: String(active.id), input: withHttpsOnly(input, httpsOnly) }).catch(() => undefined);
+  };
+
+  // Gợi ý từ mạng qua DuckDuckGo API (chỉ khi không có kết quả local đủ tốt).
+  const fetchSuggestions = async (query: string) => {
+    setOnlineSuggestBusy(true);
+    try {
+      const res = await fetch(
+        `https://duckduckgo.com/ac/?q=${encodeURIComponent(query)}&kl=vi-vn`,
+        { signal: AbortSignal.timeout(3000) },
+      );
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setOnlineSuggestions(data.map((d: any) => d.phrase ?? d).filter(Boolean));
+      } else {
+        setOnlineSuggestions([]);
+      }
+    } catch {
+      setOnlineSuggestions([]);
+    } finally {
+      setOnlineSuggestBusy(false);
+    }
   };
 
   const openSuggestion = (s: Suggestion) => {
@@ -1018,6 +1048,13 @@ export default function App() {
             onChange={(e) => {
               setInput(e.target.value);
               setEditing(true);
+              // Gợi ý từ mạng (DuckDuckGo) nếu người dùng chưa chọn cài đặt tắt.
+              const val = e.target.value.trim();
+              if (val.length >= 2 && !/^[a-z][a-z0-9+.-]*:\/\//i.test(val)) {
+                void fetchSuggestions(val);
+              } else {
+                setOnlineSuggestions([]);
+              }
             }}
             onFocus={(e) => {
               setEditing(true);
@@ -1066,7 +1103,20 @@ export default function App() {
               }
             }}
           />
-          {editing && (calcResult || suggestions.length > 0) && (
+          <button
+            type="button"
+            className="omni-chip copy-url"
+            title={t("omnibox.copyUrl")}
+            onClick={() => {
+              const u = active ? active.url : input;
+              const clean = stripTrackingParams(u);
+              void navigator.clipboard?.writeText(clean).catch(() => undefined);
+              setInput(clean);
+            }}
+          >
+            <CopyIcon />
+          </button>
+          {editing && (calcResult || suggestions.length > 0 || onlineSuggestions.length > 0) && (
             <div className="omni-dropdown">
               {calcResult && (
 
@@ -1099,6 +1149,27 @@ export default function App() {
                   <span className="omni-drop-url">{s.url}</span>
                 </div>
               ))}
+              {onlineSuggestions.map((phrase, idx) => (
+                <div
+                  key={`online-${idx}`}
+                  className={`omni-dropdown-item${idx === suggestIndex ? " active" : ""}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setInput(phrase);
+                    setEditing(false);
+                    setOnlineSuggestions([]);
+                    if (active) void cmd("navigate", { id: String(active.id), input: withHttpsOnly(phrase, httpsOnly) }).catch(() => undefined);
+                  }}
+                >
+                  <span className="omni-drop-type">🔎 {t("omnibox.onlineSuggest")}</span>
+                  <span className="omni-drop-title">{phrase}</span>
+                </div>
+              ))}
+              {onlineSuggestBusy && (
+                <div className="omni-dropdown-item" style={{ opacity: 0.6, fontSize: 11 }}>
+                  Đang gợi ý…
+                </div>
+              )}
             </div>
           )}
           {/* Trang đã có ghi chú: chip trong omnibox, bấm để mở bảng ghi chú. */}
@@ -1401,6 +1472,29 @@ export default function App() {
       )}
     </div>
   );
+}
+
+// Lọc tham số theo dõi khi sao chép URL (utm_*, fbclid, igclid, gclid, dclid, li_fat_id, mkt_tok, ...).
+const TRACKING_PARAMS = new Set([
+  "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+  "fbclid", "igclid", "gclid", "dclid", "li_fat_id", "mkt_tok",
+  "mc_cid", "mc_eid", "_ga", "_gl", "ref", "src",
+]);
+
+function stripTrackingParams(url: string): string {
+  try {
+    const u = new URL(url);
+    for (const p of TRACKING_PARAMS) u.searchParams.delete(p);
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+// Nếu bật HTTPS-only, đổi http:// thành https:// trước khi gửi lệnh điều hướng.
+function withHttpsOnly(input: string, enabled: boolean): string {
+  if (!enabled) return input;
+  return input.replace(/^http:\/\//i, "https://");
 }
 
 // Lọc mờ cho gợi ý omnibox: khớp liền thì điểm cao, khớp theo thứ tự chữ cái
