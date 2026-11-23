@@ -16,6 +16,7 @@ mod diagnostics;
 mod extensions;
 mod fileview;
 mod filters;
+mod fingerprint;
 mod navigation;
 mod matcher;
 mod passwords;
@@ -26,6 +27,7 @@ mod update;
 
 use browser::BrowserState;
 use db::DbState;
+use fingerprint::FingerprintState;
 use navigation::PopupQueue;
 
 fn main() {
@@ -59,6 +61,8 @@ fn main() {
         .manage(fileview::FileAccess::default())
         // M11: khóa kho mật khẩu chỉ nằm trong bộ nhớ phiên chạy.
         .manage(passwords::PasswordVault::default())
+        // Chống fingerprint: trạng thái bật/tắt cho toàn bộ phiên chạy.
+        .manage(FingerprintState::default())
         // MacosLauncher bắt buộc trong chữ ký nhưng bị bỏ qua trên Windows.
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

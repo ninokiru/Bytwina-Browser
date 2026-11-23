@@ -135,6 +135,8 @@ export default function Settings({
   // null: chưa kiểm tra được (plugin lỗi hoặc nền tảng không hỗ trợ).
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [resetArmed, setResetArmed] = useState(false);
+  // Chống fingerprint: trạng thái bật/tắt cho toàn bộ phiên chạy.
+  const [fingerprintEnabled, setFingerprintEnabled] = useState(false);
   // Toast "Đã lưu": đặt mốc thời gian khi lưu thành công, tự ẩn sau 1.6 giây.
   const [savedAt, setSavedAt] = useState(0);
   useEffect(() => {
@@ -242,6 +244,12 @@ export default function Settings({
     void loadAdblock();
     void loadPerms();
     void loadBackups();
+    void cmd("fingerprint_status")
+      .then((v) => {
+        const r = (v ?? {}) as { enabled?: boolean };
+        setFingerprintEnabled(r.enabled === true);
+      })
+      .catch(() => undefined);
     // Mục "Bạn và Bytwina" hiện thông tin ngay, không cần bấm nút lấy chẩn đoán.
     void loadDiagnostics();
     void cmd("autostart_get")
@@ -671,6 +679,18 @@ export default function Settings({
             <p className="hint">
               {t("settings.cookies")}: {t("settings.cookiesNote")}
             </p>
+            <label className="settings-row">
+              {t("settings.fingerprint")}
+              <input
+                type="checkbox"
+                checked={fingerprintEnabled}
+                onChange={(e) => {
+                  setFingerprintEnabled(e.target.checked);
+                  void cmd("fingerprint_toggle").catch(() => undefined);
+                }}
+              />
+            </label>
+            <p className="hint">{t("settings.fingerprintHint")}</p>
             {/* Chỉ đọc: HTTP không mã hóa đã bị chặn theo điều khoản, không có công tắc giả. */}
             <div className="settings-row">
               HTTPS-First

@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getLang } from "./i18n";
+import { cmd } from "./tabs";
 
 // Trình xem PDF dùng pdf.js (đã có trong dependencies) thay cho iframe mặc định
-// của WebView2: có zoom, xoay, nền tối, chép chữ và tải xuống. Tệp được giải mã
-// từ base64 do Rust trả về, không đi qua file:// hay mạng.
+// của WebView2: có zoom, xoay, nền tối, chép chữ, tải xuống, và điền form.
+// Tệp được giải mã từ base64 do Rust trả về, không đi qua file:// hay mạng.
 // pdf.js được lazy-load chỉ khi mở file PDF đầu tiên để giảm kích thước bundle.
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
+
+interface FormField {
+  name: string;
+  type: string;
+  value: string;
+  defaultValue: string;
+  required: boolean;
+  options: string[];
+}
 
 function decodeBase64(base64: string): Uint8Array {
   const binary = atob(base64);
@@ -20,7 +30,6 @@ async function copyText(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // Fallback cho webview không cấp quyền clipboard.
     try {
       const area = document.createElement("textarea");
       area.value = text;
@@ -37,6 +46,19 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+async function downloadBase64Pdf(base64: string, name: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name.replace(/\.pdf$/i, "") + "_filled.pdf";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function PdfView({ base64, name }: { base64: string; name: string }) {
   const en = getLang() === "en";
   const [doc, setDoc] = useState<any>(null);
@@ -48,6 +70,10 @@ export default function PdfView({ base64, name }: { base64: string; name: string
   const [fit, setFit] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [formFields, setFormFields] = useState<FormField[]>([]);
+  const [showFormPanel, setShowFormPanel] = useState(false);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [filling, setFilling] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
@@ -61,14 +87,13 @@ export default function PdfView({ base64, name }: { base64: string; name: string
     void import("pdfjs-dist").then((mod) => {
       if (!alive) return;
       setPdfjsModule(mod);
-      // Trỏ worker đến file worker minified đi kèm pdf.js.
       try {
         mod.GlobalWorkerOptions.workerSrc = new URL(
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
         ).toString();
       } catch {
-        // Nếu không trỏ được worker, pdf.js sẽ dùng mặc định (có thể lỗi ở một số môi trường).
+        // Nếu không trỏ được worker, pdf.js sẽ dùng mặc định.
       }
     });
     return () => {
@@ -76,7 +101,7 @@ export default function PdfView({ base64, name }: { base64: string; name: string
     };
   }, []);
 
-  // Nạp tài liệu một lần cho mỗi tệp; dọn blob URL và tài liệu khi đổi tệp.
+  // Nạp tài liệu một lần cho mỗi tệp.
   useEffect(() => {
     if (!pdfjsModule) return;
     let alive = true;
@@ -86,6 +111,8 @@ export default function PdfView({ base64, name }: { base64: string; name: string
     setPageNum(1);
     setRotation(0);
     setFit(true);
+    setFormFields([]);
+    setFormValues({});
     const bytes = decodeBase64(base64);
     const url = URL.createObjectURL(
       new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" }),
@@ -104,14 +131,32 @@ export default function PdfView({ base64, name }: { base64: string; name: string
             : `Không mở được PDF: ${e instanceof Error ? e.message : String(e)}`,
         );
       });
+    // Load form fields từ Rust
+    void cmd("pdf_get_form_fields", { path: name })
+      .then((result) => {
+        if (!alive) return;
+        const r = (result ?? {}) as { fields?: FormField[] };
+        if (r.fields && r.fields.length > 0) {
+          setFormFields(r.fields);
+          const initialValues: Record<string, string> = {};
+          r.fields.forEach((f) => {
+            initialValues[f.name] = f.value || f.defaultValue || "";
+          });
+          setFormValues(initialValues);
+          setShowFormPanel(true);
+        }
+      })
+      .catch(() => {
+        // Bỏ qua lỗi form fields
+      });
     return () => {
       alive = false;
       void task.destroy();
       URL.revokeObjectURL(url);
     };
-  }, [base64, en]);
+  }, [base64, en, name]);
 
-  // Vừa khung: tính lại tỉ lệ theo bề rộng vùng xem mỗi khi đổi trang/xoay.
+  // Vừa khung: tính lại tỉ lệ theo bề rộng vùng xem.
   useEffect(() => {
     if (!doc || !fit || !stageRef.current) return;
     let alive = true;
@@ -129,7 +174,7 @@ export default function PdfView({ base64, name }: { base64: string; name: string
     };
   }, [doc, fit, pageNum, rotation]);
 
-  // Vẽ trang vào canvas và dựng lớp chữ để chọn/copy.
+  // Vẽ trang vào canvas và dựng lớp chữ.
   useEffect(() => {
     if (!doc || !canvasRef.current) return;
     let alive = true;
@@ -149,7 +194,6 @@ export default function PdfView({ base64, name }: { base64: string; name: string
         canvas.style.height = `${Math.round(viewport.height)}px`;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
-        // pdf.js v6 yêu cầu `canvas: null` khi dùng canvasContext.
         task = page.render({
           canvas: null,
           canvasContext: ctx,
@@ -159,7 +203,6 @@ export default function PdfView({ base64, name }: { base64: string; name: string
         await task.promise;
         if (!alive) return;
 
-        // Lớp chữ trong suốt phủ lên canvas: bôi đen để chọn, Ctrl+C để copy.
         const textContent = await page.getTextContent();
         if (!alive) return;
         pageText.current = textContent.items
@@ -187,12 +230,10 @@ export default function PdfView({ base64, name }: { base64: string; name: string
           });
           await textLayer.render();
         } catch {
-          // Lớp chữ lỗi không được kéo cả trình xem xuống; vẫn còn nút chép chữ.
           layer.replaceChildren();
         }
       } catch (e: unknown) {
         if (!alive) return;
-        // Hủy render do đổi trang/zoom là bình thường, không báo lỗi.
         if (e instanceof Error && e.name === "RenderingCancelledException") return;
         setError(
           en
@@ -221,9 +262,34 @@ export default function PdfView({ base64, name }: { base64: string; name: string
           ? "Page text copied."
           : "Đã chép chữ của trang."
         : en
-          ? "Could not copy text."
-          : "Không chép được chữ.",
+        ? "Could not copy text."
+        : "Không chép được chữ.",
     );
+  };
+
+  const handleFormChange = (name: string, value: string) => {
+    setFormValues((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveForm = async () => {
+    setFilling(true);
+    try {
+      const result = await cmd("pdf_fill_form", {
+        path: name,
+        fields: JSON.stringify(formValues),
+      });
+      const r = (result ?? {}) as { base64?: string; size?: number };
+      if (r.base64) {
+        await downloadBase64Pdf(r.base64, name);
+        setNotice(en ? "Filled PDF saved." : "Đã lưu PDF đã điền.");
+      } else {
+        setNotice(en ? "Failed to fill form." : "Không điền được form.");
+      }
+    } catch (e) {
+      setNotice(en ? `Error: ${e}` : `Lỗi: ${e}`);
+    } finally {
+      setFilling(false);
+    }
   };
 
   const total = doc?.numPages ?? 0;
@@ -305,6 +371,15 @@ export default function PdfView({ base64, name }: { base64: string; name: string
         <a className="btn" href={blobUrl.current} download={name}>
           {en ? "Download" : "Tải xuống"}
         </a>
+        {formFields.length > 0 && (
+          <button
+            type="button"
+            className={`btn${showFormPanel ? " primary" : ""}`}
+            onClick={() => setShowFormPanel((v) => !v)}
+          >
+            {en ? "Form" : "Form"} ({formFields.length})
+          </button>
+        )}
       </div>
 
       {notice && <p className="fv-note">{notice}</p>}
@@ -316,6 +391,65 @@ export default function PdfView({ base64, name }: { base64: string; name: string
           <div className="fv-text-layer" ref={textRef} />
         </div>
       </div>
+
+      {showFormPanel && formFields.length > 0 && (
+        <div className="fv-form-panel" role="dialog" aria-label={en ? "PDF Form Fields" : "Trường form PDF"}>
+          <div className="fv-form-header">
+            <strong>{en ? "Fill Form Fields" : "Điền trường form"}</strong>
+            <button type="button" className="btn" onClick={() => setShowFormPanel(false)}>
+              ✕
+            </button>
+          </div>
+          <div className="fv-form-list">
+            {formFields.map((field) => (
+              <div key={field.name} className="fv-form-field">
+                <label>
+                  <span className="fv-form-label">
+                    {field.name} {field.required && <span className="fv-required">*</span>}
+                    {field.type && <span className="fv-form-type">({field.type})</span>}
+                  </span>
+                  {field.type === "Ch" && field.options.length > 0 ? (
+                    <select
+                      value={formValues[field.name] || ""}
+                      onChange={(e) => handleFormChange(field.name, e.target.value)}
+                      className="fv-form-input"
+                    >
+                      <option value="">{en ? "Select..." : "Chọn..."}</option>
+                      {field.options.map((opt, i) => (
+                        <option key={i} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type === "Btn" ? "checkbox" : "text"}
+                      value={formValues[field.name] || ""}
+                      onChange={(e) => handleFormChange(field.name, e.target.checked ? "Yes" : e.target.value)}
+                      className="fv-form-input"
+                      placeholder={field.defaultValue || ""}
+                    />
+                  )}
+                </label>
+              </div>
+            ))}
+          </div>
+          <div className="fv-form-footer">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={filling}
+              onClick={handleSaveForm}
+            >
+              {filling
+                ? en
+                  ? "Saving…"
+                  : "Đang lưu…"
+                : en
+                ? "Save Filled PDF"
+                : "Lưu PDF đã điền"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

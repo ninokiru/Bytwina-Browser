@@ -753,6 +753,12 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
             crate::extensions::webview2::attach(&wv, app.clone());
             // Phóng to theo cài đặt đã lưu (áp dụng cho webview mới tạo).
             let _ = wv.set_zoom(zoom_factor(app));
+            // Chống fingerprint: inject script vào webview tab nếu bật.
+            if let Some(fp) = app.try_state::<crate::fingerprint::FingerprintState>() {
+                if fp.is_enabled() {
+                    let _ = crate::fingerprint::inject(&app, &label);
+                }
+            }
         }
         Err(e) => log::error!("không tạo được webview {label}: {e}"),
     }

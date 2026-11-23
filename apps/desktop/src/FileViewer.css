@@ -480,3 +480,99 @@ html[data-theme="dark"] .fv-shiki .shiki span {
 .fv-notice p {
   margin: 0;
 }
+
+/* ---- PDF Form Panel ---- */
+.fv-form-panel {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  bottom: 0;
+  width: min(320px, 100%);
+  background: var(--surface);
+  border-left: 1px solid var(--divider);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.fv-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--divider);
+  font-size: 13px;
+}
+
+.fv-form-header .btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.fv-form-list {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+}
+
+.fv-form-field {
+  margin-bottom: 10px;
+}
+
+.fv-form-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fv-form-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.fv-required {
+  color: var(--danger);
+  font-size: 10px;
+}
+
+.fv-form-type {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.fv-form-input {
+  height: 28px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.fv-form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.fv-form-input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.fv-form-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.fv-form-footer .btn {
+  width: 100%;
+}

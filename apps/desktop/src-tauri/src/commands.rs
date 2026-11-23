@@ -6,6 +6,7 @@ use tauri_plugin_autostart::ManagerExt as _;
 
 use crate::browser::{self, BrowserState};
 use crate::extensions;
+use crate::fingerprint::FingerprintState;
 use crate::navigation::{self, PopupQueue, NEW_TAB_URL};
 use crate::terms;
 /// Lệnh IPC duy nhất toolbar được gọi. Tham số đầu luôn là action string;
@@ -202,15 +203,15 @@ pub async fn browser_command(
         // Chế độ đọc: fetch trang, trích xuất nội dung bài viết bằng dom_smoothie.
         "reader_extract" => {
             let url = arg("url")?;
-            let response = ureq::get(url)
+            let url_for_req = url.clone();
+            let response = ureq::get(url_for_req)
                 .call()
                 .map_err(|e| format!("không tải được trang: {e}"))?;
             let html = response
                 .into_body()
                 .read_to_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
-            let url_for_readability = url.clone();
-            let mut readability = dom_smoothie::Readability::new(html, Some(url_for_readability.as_str()), None)
+            let mut readability = dom_smoothie::Readability::new(html, Some(url.as_str()), None)
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
             let article = readability
                 .parse()
@@ -434,6 +435,15 @@ pub async fn browser_command(
             let name = arg("name")?;
             with_db(&app, move |db| db.delete_named_session(&name))
         }
+        "fingerprint_status" => {
+            let fp = app.state::<FingerprintState>();
+            Ok(serde_json::json!({ "enabled": fp.is_enabled() }))
+        }
+        "fingerprint_toggle" => {
+            let fp = app.state::<FingerprintState>();
+            let next = fp.toggle();
+            Ok(serde_json::json!({ "enabled": next }))
+        }
         // ===== Ghi chú theo URL (URL-Attached Notes) =====
         "note_get" => {
             let url = arg("url")?;
@@ -492,6 +502,19 @@ pub async fn browser_command(
             let path = access.check(std::path::Path::new(&path))?;
             tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())?;
             Ok(Value::Null)
+        }
+        "pdf_get_form_fields" => {
+            let path = arg("path")?;
+            let access = app.state::<crate::fileview::FileAccess>();
+            let path = access.check(std::path::Path::new(&path))?;
+            crate::fileview::pdf_get_form_fields(&path)
+        }
+        "pdf_fill_form" => {
+            let path = arg("path")?;
+            let fields_json = arg("fields")?;
+            let access = app.state::<crate::fileview::FileAccess>();
+            let path = access.check(std::path::Path::new(&path))?;
+            crate::fileview::pdf_fill_form(&path, &fields_json)
         }
         // ===== Hệ tiện ích (v1) =====
         "ext_list" => with_db(&app, |db| {

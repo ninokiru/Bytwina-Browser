@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cmd } from "./tabs";
 import { t, useLang } from "./i18n";
-import { LayersIcon, TrashIcon, DuplicateIcon, ExportIcon, ImportIcon } from "./Icons";
+import { LayersIcon, TrashIcon, PlusIcon, FileTextIcon, MoreIcon } from "./Icons";
 
 interface SavedSession {
   name: string;

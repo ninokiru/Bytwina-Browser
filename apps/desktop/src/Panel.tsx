@@ -6,13 +6,6 @@ import Settings from "./Settings";
 import ExtensionsPanel from "./ExtensionsPanel";
 import Scratchpad from "./Scratchpad";
 import {
-  DndContext,
-  type DragEndEvent,
-  closest,
-  intersecting,
-} from "@dnd-kit/core";
-import { sortableKeyboardUtils, useSortable, useSorter, DndProvider } from "@dnd-kit/sortable";
-import {
   AlertIcon,
   BackupIcon,
   BookIcon,
@@ -343,73 +336,41 @@ export default function Panel({
           {visibleTabs.length === 0 ? (
             <EmptyState icon={<GridIcon />} text={t("panel.emptyTabs")} />
           ) : (
-            <DndContext
-              collapsible={true}
-              items={visibleTabs.map((tb) => String(tb.id))}
-              onSortEnd={async (event: DragEndEvent) => {
-                const { active, over } = event;
-                if (!active || !over) return;
-                const activeId = Number(active.id);
-                const overId = over ? Number(over.id) : null;
-                // Nếu tab được thả vào ô khác (split), chuyển tab sang pane kia
-                if (overId !== activeId && state.splitTab && overId !== state.splitTab) {
-                  // Di chuyển tab vào ô split kia
-                  void cmd("split_set", { id: overId === state.splitTab ? "" : String(overId) }).then(
-                    onClose,
-                  );
-                }
-              }}
-            >
-              <DndProvider useSortable={sortableKeyboardUtils}>
-                <ul className="list">
-                  {visibleTabs.map((tb) => {
-                    const { attributes, listeners, setNodeRef, transform, transition } =
-                      useSortable({ id: String(tb.id) });
-                    const style = { transform, transition };
-                    return (
-                      <li
-                        key={tb.id}
-                        className="list-row"
-                        ref={setNodeRef}
-                        style={style}
-                        {...attributes}
-                        {...listeners}
-                      >
-                        <span className="row-icon">
-                          <GridIcon />
-                        </span>
-                        <button
-                          type="button"
-                          className="list-main"
-                          onClick={() => {
-                            void cmd("activate_tab", { id: String(tb.id) });
-                            onClose();
-                          }}
-                        >
-                          <span className="list-title">{tb.title || tb.url}</span>
-                          <span className="list-sub">{tb.url}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`split-btn${tb.id === splitTab ? " on" : ""}`}
-                          title={
-                            tb.id === splitTab ? t("panel.splitClear") : t("panel.splitRight")
-                          }
-                          disabled={tb.id === activeTab}
-                          onClick={() => {
-                            void cmd("split_set", {
-                              id: tb.id === splitTab ? "" : String(tb.id),
-                            }).then(onClose);
-                          }}
-                        >
-                          <SplitIcon />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </DndProvider>
-            </DndContext>
+            <ul className="list">
+              {visibleTabs.map((tb) => (
+                <li key={tb.id} className="list-row">
+                  <span className="row-icon">
+                    <GridIcon />
+                  </span>
+                  <button
+                    type="button"
+                    className="list-main"
+                    onClick={() => {
+                      void cmd("activate_tab", { id: String(tb.id) });
+                      onClose();
+                    }}
+                  >
+                    <span className="list-title">{tb.title || tb.url}</span>
+                    <span className="list-sub">{tb.url}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`split-btn${tb.id === splitTab ? " on" : ""}`}
+                    title={
+                      tb.id === splitTab ? t("panel.splitClear") : t("panel.splitRight")
+                    }
+                    disabled={tb.id === activeTab}
+                    onClick={() => {
+                      void cmd("split_set", {
+                        id: tb.id === splitTab ? "" : String(tb.id),
+                      }).then(onClose);
+                    }}
+                  >
+                    <SplitIcon />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </>
       );
