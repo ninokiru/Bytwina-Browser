@@ -850,7 +850,7 @@ pub fn webview_find(
 
             if (!t || !hl) return;
 
-            var regex = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), cs ? "g" : "gi");
+            var regex = new RegExp(t.replace(/[.*+?^${{}}()|[\]\\]/g, "\\$&"), cs ? "g" : "gi");
             var count = 0;
 
             function walk(node) {{
@@ -970,7 +970,7 @@ pub fn webview_find_clear(app: &AppHandle, state: &BrowserState, id: u32) -> Res
             window.__bytwina_find_index = -1;
         })()"#;
 
-    let _ = webview.eval(&script);
+    let _ = webview.eval(script);
     Ok(())
 }
 
@@ -999,7 +999,7 @@ pub fn webview_save(app: &AppHandle, state: &BrowserState, id: u32) -> Result<()
             a.click();
             URL.revokeObjectURL(url);
         })()"#;
-    let _ = webview.eval(&script);
+    let _ = webview.eval(script);
     Ok(())
 }
 
@@ -1028,12 +1028,12 @@ pub fn webview_view_source(app: &AppHandle, state: &BrowserState, id: u32) -> Re
     // Escape backtick và ${} cho template literal.
     let script = r#"(function(){
             var src = document.documentElement.outerHTML;
-            var escaped = src.replace(/`/g, '\\`').replace(/\$\{/g, '\\${}');
+            var escaped = src.replace(/`/g, '\\`').replace(/\$\{{/g, '\\${}');
             document.open();
             document.write('<pre style="font-family:Consolas,monospace;font-size:13px;white-space:pre-wrap;margin:1em;">' + escaped + '</pre>');
             document.close();
         })()"#;
-    let _ = webview.eval(&script);
+    let _ = webview.eval(script);
     Ok(())
 }
 

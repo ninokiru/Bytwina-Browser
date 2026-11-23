@@ -203,8 +203,11 @@ pub async fn browser_command(
         // Chế độ đọc: fetch trang, trích xuất nội dung bài viết bằng dom_smoothie.
         "reader_extract" => {
             let url = arg("url")?;
-            let response = ureq::get(url)
-                .timeout(std::time::Duration::from_secs(15))
+            let agent = ureq::AgentBuilder::new()
+                .timeout_build(std::time::Duration::from_secs(15))
+                .build();
+            let response = agent
+                .get(url)
                 .set(
                     "User-Agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Bytwina Reader/0.1",
@@ -214,7 +217,7 @@ pub async fn browser_command(
             let html = response
                 .into_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
-            let extracted = dom_smoothie::extract(&html)
+            let extracted = dom_smoothie::readability::extract(&html)
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
             Ok(serde_json::json!({
                 "html": extracted.content_html,
