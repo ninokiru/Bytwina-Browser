@@ -204,14 +204,10 @@ pub async fn browser_command(
         "reader_extract" => {
             let url = arg("url")?;
             let response = ureq::get(url)
-                .set(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Bytwina Reader/0.1",
-                )
                 .call()
                 .map_err(|e| format!("không tải được trang: {e}"))?;
             let html = response
-                .into_string()
+                .to_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
             let readability = dom_smoothie::Readability::new(html, Some(url.as_str()), None)
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
@@ -219,7 +215,7 @@ pub async fn browser_command(
                 .parse()
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
             Ok(serde_json::json!({
-                "html": article.content.into_string(),
+                "html": article.content.to_string(),
                 "title": article.title,
             }))
         }

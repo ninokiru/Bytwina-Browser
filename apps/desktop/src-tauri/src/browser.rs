@@ -1004,7 +1004,7 @@ pub fn webview_save(app: &AppHandle, _state: &BrowserState, id: u32) -> Result<(
 }
 
 /// Mở DevTools cho tab (F12 / Ctrl+Shift+I).
-pub fn webview_devtools(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+pub fn webview_devtools(app: &AppHandle, _state: &BrowserState, id: u32) -> Result<(), String> {
     let label = format!("tab-{id}");
     let webview = app
         .get_webview(&label)
