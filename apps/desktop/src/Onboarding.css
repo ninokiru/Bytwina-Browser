@@ -120,7 +120,7 @@
 .ob-step-list li > span { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border: 1px solid var(--ob-side-dot); border-radius: 50%; font-size: 10px; }
 .ob-step-list li .ob-icon { width: 12px; height: 12px; }
 .ob-step-list li.active { color: var(--ob-side-fg); background: var(--ob-side-active); font-weight: 650; }
-.ob-step-list li.active > span { color: #fff; background: #4386ed; border-color: #4386ed; }
+.ob-step-list li.active > span { color: #fff; background: var(--accent); border-color: var(--accent); }
 .ob-step-list li.complete { color: var(--ob-side-complete); }
 .ob-step-list li.complete > span { color: var(--ob-side-complete); border-color: var(--ob-side-complete-dot); }
 .ob-sidebar-foot { margin-top: auto; padding-top: 22px; color: var(--ob-side-muted); font-size: 10px; }
@@ -135,6 +135,7 @@
 .ob-body > p { margin: 0 0 24px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
 .ob-logo { width: 52px; height: 52px; margin-bottom: 22px; padding: 8px; background: var(--accent-soft); border-radius: 16px; }
 .ob-muted-line { margin: 16px 0 0 !important; color: var(--faint) !important; font-size: 12px !important; }
+.ob-accent-title { margin: 22px 0 8px !important; color: var(--text) !important; font-size: 12.5px !important; font-weight: 650; }
 
 .ob-icon { width: 18px; height: 18px; flex: none; }
 .ob-feature-icon {
@@ -290,6 +291,17 @@
 
 @keyframes ob-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes ob-pop { from { opacity: 0; transform: translateY(10px) scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes ob-card-in { from { opacity: 0; transform: translateY(16px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes ob-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes ob-logo-in { from { opacity: 0; transform: scale(0.7) rotate(-8deg); } to { opacity: 1; transform: none; } }
+
+/* Màn chào mừng: card hiện ra, logo bật nhẹ, ba thẻ tính năng xuất hiện lần lượt. */
+.ob-card { animation: ob-card-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ob-logo { animation: ob-logo-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both; }
+.ob-features .ob-feature { animation: ob-rise 0.5s ease-out both; }
+.ob-features .ob-feature:nth-child(1) { animation-delay: 0.25s; }
+.ob-features .ob-feature:nth-child(2) { animation-delay: 0.36s; }
+.ob-features .ob-feature:nth-child(3) { animation-delay: 0.47s; }
 
 @media (max-width: 760px) {
   .ob-screen { padding: 14px; }

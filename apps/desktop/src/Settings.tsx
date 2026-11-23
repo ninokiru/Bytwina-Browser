@@ -2,7 +2,7 @@ import { Fragment, createContext, useContext, useEffect, useState } from "react"
 import type { ComponentType, ReactNode } from "react";
 import { cmd } from "./tabs";
 import { getLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
-import { ACCENTS, applyAccent, applyTheme } from "./theme";
+import { ACCENTS, applyAccent, applyMotion, applyRadius, applyTheme } from "./theme";
 import "./Appearance.css";
 import PasswordVault from "./PasswordVault";
 import SessionManager from "./SessionManager";
@@ -104,6 +104,8 @@ export default function Settings({
   const [zoom, setZoom] = useState("100");
   const [theme, setTheme] = useState("system");
   const [accent, setAccent] = useState("default");
+  const [radius, setRadius] = useState("default");
+  const [reduceMotion, setReduceMotion] = useState(false);
   const [tabLayout, setTabLayout] = useState("horizontal");
   const [workspace, setWorkspace] = useState("");
   const [workspaceError, setWorkspaceError] = useState("");
@@ -224,6 +226,10 @@ export default function Settings({
       if (ws) setWorkspace(ws);
       if (ac) setAccent(ac);
     });
+    void get("radius").then((r) => {
+      if (r) setRadius(r);
+    });
+    void get("reduceMotion").then((m) => setReduceMotion(m === "1"));
     void loadAdblock();
     void loadPerms();
     void loadBackups();
@@ -272,6 +278,18 @@ export default function Settings({
     setAccent(next);
     applyAccent(next);
     save("accent", next);
+  };
+
+  const changeRadius = (next: string) => {
+    setRadius(next);
+    applyRadius(next);
+    save("radius", next);
+  };
+
+  const changeMotion = (on: boolean) => {
+    setReduceMotion(on);
+    applyMotion(on);
+    save("reduceMotion", on ? "1" : "0");
   };
 
   const changeZoom = (next: string) => {
@@ -348,6 +366,10 @@ export default function Settings({
         applyTheme("system");
         applyAccent("default");
         setAccent("default");
+        applyRadius("default");
+        setRadius("default");
+        applyMotion(false);
+        setReduceMotion(false);
         setMessage(t("settings.resetDone"));
         loadAll();
       })
@@ -479,6 +501,18 @@ export default function Settings({
                 />
               ))}
             </div>
+            <label className="settings-row">
+              {lang === "en" ? "Corner radius" : "Độ bo góc"}
+              <select value={radius} onChange={(e) => changeRadius(e.target.value)}>
+                <option value="default">{lang === "en" ? "Default" : "Mặc định"}</option>
+                <option value="sharp">{lang === "en" ? "Square" : "Vuông"}</option>
+                <option value="round">{lang === "en" ? "Rounder" : "Tròn hơn"}</option>
+              </select>
+            </label>
+            <label className="settings-row">
+              {lang === "en" ? "Reduce motion" : "Giảm chuyển động"}
+              <input type="checkbox" checked={reduceMotion} onChange={(e) => changeMotion(e.target.checked)} />
+            </label>
             <label className="settings-row">
               {t("settings.zoom")}
               <select value={zoom} onChange={(e) => changeZoom(e.target.value)}>

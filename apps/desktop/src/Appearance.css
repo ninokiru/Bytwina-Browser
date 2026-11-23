@@ -35,3 +35,26 @@
     transition: none;
   }
 }
+
+/* Mở app: giao diện chính hiện mờ dần và trượt nhẹ lên; tab và thanh địa chỉ đi vào sau một chút. */
+@keyframes app-open {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes app-rise {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.chrome { animation: app-open 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.chrome .tabbar { animation: app-rise 0.36s ease-out 0.06s both; }
+.chrome .navbar { animation: app-rise 0.36s ease-out 0.12s both; }
+
+/* Người dùng bật "Giảm chuyển động" trong Cài đặt: tắt mọi animation và transition. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

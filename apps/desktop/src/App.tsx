@@ -8,7 +8,7 @@ import Onboarding from "./Onboarding";
 import UpdateWelcome from "./UpdateWelcome";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
-import { applyAccent, applyTheme } from "./theme";
+import { applyAccent, applyMotion, applyRadius, applyTheme } from "./theme";
 import { evaluateArithmetic } from "./calc";
 import { FaviconImg } from "./favicon";
 import CommandPalette, { type PaletteAction } from "./CommandPalette";
@@ -115,6 +115,12 @@ export default function App() {
       .catch(() => applyTheme("system"));
     void cmd("settings_get", { key: "accent" })
       .then((v) => applyAccent(typeof v === "string" ? v : "default"))
+      .catch(() => undefined);
+    void cmd("settings_get", { key: "radius" })
+      .then((v) => applyRadius(typeof v === "string" ? v : "default"))
+      .catch(() => undefined);
+    void cmd("settings_get", { key: "reduceMotion" })
+      .then((v) => applyMotion(v === "1"))
       .catch(() => undefined);
     void cmd("settings_get", { key: "homeUrl" })
       .then((v) => {

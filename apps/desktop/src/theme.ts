@@ -24,8 +24,36 @@ export function applyAccent(id: string): void {
   if (!found || !found.color) {
     style.removeProperty("--accent");
     style.removeProperty("--accent-soft");
+    style.removeProperty("--accent-text");
     return;
   }
   style.setProperty("--accent", found.color);
   style.setProperty("--accent-soft", `color-mix(in srgb, ${found.color} 14%, transparent)`);
+  // Chữ trên nút nhấn luôn trắng: chế độ tối của styles.css dùng chữ gần đen,
+  // đặt lên các màu mẫu ở đây sẽ thiếu tương phản.
+  style.setProperty("--accent-text", "#ffffff");
+}
+
+// Độ bo góc: nhân ba biến --radius-sm/md/lg của styles.css. "default" trả về giá trị gốc.
+export const RADIUS_SCALES: Record<string, number> = { sharp: 0.35, default: 1, round: 1.5 };
+
+export function applyRadius(id: string): void {
+  const style = document.documentElement.style;
+  const scale = RADIUS_SCALES[id] ?? 1;
+  if (scale === 1) {
+    style.removeProperty("--radius-sm");
+    style.removeProperty("--radius-md");
+    style.removeProperty("--radius-lg");
+    return;
+  }
+  style.setProperty("--radius-sm", `${Math.round(8 * scale)}px`);
+  style.setProperty("--radius-md", `${Math.round(12 * scale)}px`);
+  style.setProperty("--radius-lg", `${Math.round(16 * scale)}px`);
+}
+
+// Giảm chuyển động: gắn data-motion="reduced" để Appearance.css tắt animation và transition.
+export function applyMotion(reduced: boolean): void {
+  const root = document.documentElement;
+  if (reduced) root.dataset.motion = "reduced";
+  else delete root.dataset.motion;
 }
