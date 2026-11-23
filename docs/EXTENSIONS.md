@@ -1,5 +1,9 @@
 # Bytwina Browser extensions
 
+> **Preview:** Tiện ích tắt mặc định trong v1.0. Bật trong trang Tiện ích chỉ
+> khi bạn tin cậy mã đã cài. Content script chạy trong main world của website;
+> bridge trên `window` không cô lập extension với trang hay extension khác.
+
 ## Manifest tối thiểu
 
 ```json
@@ -59,10 +63,8 @@ lỗi của script được bắt độc lập, không làm hỏng trang hay ext
 
 ## Giới hạn WebView2
 
-`background` trong manifest là **Simulated Background**, không phải persistent
-service worker. Script chỉ sống trong vòng đời webview/tab đang chứa nó; khi tab
-đóng hoặc webview bị tạo lại thì script kết thúc. Extension có thể dùng timer và
-event listener trong content script để mô phỏng tác vụ nền.
+Trường `background` trong manifest hiện chưa được thực thi. Không có service
+worker hay tiến trình nền mô phỏng; content script chỉ sống theo trang/tab.
 
 `popup`/`options_page` không phải cửa sổ native và không hỗ trợ
 `browser.action.setPopup`. UI tương ứng phải được hiển thị dưới dạng

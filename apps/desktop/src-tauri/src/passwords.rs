@@ -24,7 +24,7 @@ const NONCE_LEN: usize = 12;
 const KEY_LEN: usize = 32;
 /// Chuỗi cố định được mã hóa bằng khóa chủ để kiểm tra mật khẩu khi mở khóa.
 const CHECK: &[u8] = b"bytwina-vault-v1";
-/// 19 MiB, 2 vòng, 1 làn — mức khuyến nghị của OWASP cho Argon2id.
+/// 64 MiB, 3 vòng, 4 luồng song song.
 const MEM_KIB: u32 = 64 * 1024;
 const TIME_COST: u32 = 3;
 const PARALLELISM: u32 = 4;

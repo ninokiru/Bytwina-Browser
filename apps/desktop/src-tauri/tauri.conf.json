@@ -19,7 +19,14 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["icons/icon.ico"],
-    "createUpdaterArtifacts": false
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "nsis": {
+        "headerImage": "windows/header.bmp",
+        "sidebarImage": "windows/sidebar.bmp",
+        "installerHooks": "windows/hooks.nsh"
+      }
+    }
   },
   "plugins": {
     "updater": {

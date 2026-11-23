@@ -94,6 +94,8 @@ export default function ExtensionsPanel() {
   const [draftJs, setDraftJs] = useState("");
   const [draftCss, setDraftCss] = useState("");
   const [logs, setLogs] = useState<ExtLog[]>([]);
+  const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   async function reload() {
     try {
@@ -109,7 +111,25 @@ export default function ExtensionsPanel() {
 
   useEffect(() => {
     void reload();
+    void cmd("settings_get", { key: "extensionsPreview" })
+      .then((value) => setPreviewEnabled(value === "1"))
+      .catch(() => setPreviewEnabled(false));
   }, []);
+
+  async function setPreview(enabled: boolean) {
+    setPreviewBusy(true);
+    setError("");
+    try {
+      await cmd("ext_preview_set", { enabled: enabled ? "1" : "0" });
+      setPreviewEnabled(enabled);
+      setNotice(enabled ? t("ext.previewEnabled") : t("ext.previewDisabled"));
+      await reload();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!selectedId) {
@@ -310,6 +330,18 @@ export default function ExtensionsPanel() {
 
   return (
     <div className="ext-panel">
+      <section className="ext-editor" role="note">
+        <div className="ext-list-head">
+          <div>
+            <h3 className="ext-heading">{t("ext.previewTitle")}</h3>
+            <p className="ext-hint">{t("ext.previewDescription")}</p>
+            <p className="ext-sub">{previewEnabled ? t("ext.previewEnabled") : t("ext.previewDisabled")}</p>
+          </div>
+          <button type="button" className={previewEnabled ? "btn" : "btn primary"} disabled={previewBusy} onClick={() => void setPreview(!previewEnabled)}>
+            {previewEnabled ? t("ext.previewTurnOff") : t("ext.previewTurnOn")}
+          </button>
+        </div>
+      </section>
       <section className="ext-install">
         <h3 className="ext-heading">{t("ext.installTitle")}</h3>
         <p className="ext-hint">{t("ext.inspectHint")}</p>

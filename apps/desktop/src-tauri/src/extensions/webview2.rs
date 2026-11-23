@@ -46,6 +46,10 @@ pub fn attach(webview: &Webview<tauri::Wry>, app: tauri::AppHandle) {
 
         if let Some(handle) = app.try_state::<ExtensionsHandle>() {
             let script = handle.0.document_start_script(&label);
+            if script.is_empty() {
+                handle.0.detach(&label);
+                return;
+            }
             let completed = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(
                 move |status: windows::core::Result<()>, _id: String| {
                     if let Err(e) = status {

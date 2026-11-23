@@ -1,60 +1,93 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { cmd } from "./tabs";
 import { getLang } from "./i18n";
 import "./UpdateWelcome.css";
 
+type UpdateInfo = { version: string; current: string; notes?: string | null };
 type CheckResult = {
-  status: "available" | "latest" | "unavailable" | "failed";
-  info?: { version: string; current: string; notes?: string | null } | null;
+  status: "available" | "latest" | "unavailable" | "failed" | "skipped";
+  info?: UpdateInfo | null;
 };
+type DownloadProgress = { downloaded: number; total: number | null };
 
-export default function UpdateWelcome() {
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(0, bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * Hộp thoại cập nhật khi mở app. Chỉ hiện khi có bản mới; còn lại (đã mới nhất,
+ * đang trong khoảng chờ 1–3 giờ, lỗi mạng, chưa cấu hình) thì im lặng.
+ */
+export default function UpdateWelcome({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
   const en = getLang() === "en";
-  const [result, setResult] = useState<CheckResult | null>(null);
-  const [busy, setBusy] = useState(true);
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [visible, setVisible] = useState(false);
   const [installing, setInstalling] = useState(false);
-  const [closed, setClosed] = useState(false);
+  const [error, setError] = useState("");
+  const [progress, setProgress] = useState<DownloadProgress>({ downloaded: 0, total: null });
   const started = useRef(false);
   const dialogRef = useRef<HTMLElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const installRef = useRef<HTMLButtonElement>(null);
 
-  const check = useCallback(async () => {
-    setBusy(true);
-    try {
-      setResult((await cmd("update_check_startup")) as CheckResult);
-    } catch {
-      setResult({ status: "failed" });
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
+  // Kiểm tra một lần mỗi lần mở app (main process đã áp khoảng chờ 1–3 giờ).
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void check();
-    closeRef.current?.focus();
-  }, [check]);
+    void (async () => {
+      try {
+        const result = (await cmd("update_check_startup")) as CheckResult;
+        if (result.status !== "available" || !result.info) return;
+        setInfo(result.info);
+        setVisible(true);
+        onOpenChange(true);
+        void cmd("panel_open", { on: "1" }).catch(() => undefined);
+      } catch {
+        // Không kiểm tra được thì bỏ qua, không làm phiền người dùng.
+      }
+    })();
+  }, [onOpenChange]);
 
   useEffect(() => {
-    if (installing) dialogRef.current?.focus();
-  }, [installing]);
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<DownloadProgress>("update://progress", (event) => setProgress(event.payload)).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
-  if (closed) return null;
+  useEffect(() => {
+    if (visible) installRef.current?.focus();
+  }, [visible]);
+
+  const skip = () => {
+    if (installing) return;
+    setVisible(false);
+    onOpenChange(false);
+    void cmd("panel_open", { on: "0" }).catch(() => undefined);
+  };
 
   const install = async () => {
     setInstalling(true);
+    setError("");
+    setProgress({ downloaded: 0, total: null });
     try {
       await cmd("update_install");
-    } catch {
+    } catch (err) {
       setInstalling(false);
-      setResult({ status: "failed" });
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const handleDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape" && !installing) {
-      setClosed(true);
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      skip();
       return;
     }
     if (event.key !== "Tab") return;
@@ -75,57 +108,66 @@ export default function UpdateWelcome() {
     }
   };
 
-  const updateInfo = result?.status === "available" ? result.info : null;
-  const available = Boolean(updateInfo);
-  const heading = busy
-    ? (en ? "Checking for updates" : "Đang kiểm tra cập nhật")
-    : available
-      ? (en ? "A new Bytwina is ready" : "Bytwina có bản cập nhật mới")
-      : result?.status === "latest"
-        ? (en ? "You’re up to date" : "Bạn đang dùng bản mới nhất")
-        : (en ? "Update check unavailable" : "Chưa kiểm tra được cập nhật");
-  const message = busy
-    ? (en ? "This usually takes a few seconds." : "Thường chỉ mất vài giây.")
-    : available
-      ? (en ? `Version ${updateInfo?.version} is ready to install.` : `Đã có phiên bản ${updateInfo?.version}.`)
-      : result?.status === "latest"
-        ? (en ? "You have the latest version installed." : "Bytwina đã được cập nhật đầy đủ.")
-        : result?.status === "unavailable"
-          ? (en ? "Automatic updates are not configured for this build." : "Bản cài này chưa bật cập nhật tự động.")
-          : (en ? "Check your connection and try again." : "Kiểm tra kết nối mạng hoặc thử lại sau.");
+  if (!visible || !info) return null;
+
+  const percent = progress.total && progress.total > 0
+    ? Math.min(100, Math.floor((progress.downloaded / progress.total) * 100))
+    : null;
 
   return (
     <div className="update-welcome-backdrop" role="presentation">
-      <section ref={dialogRef} className="update-welcome" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="update-welcome-title" onKeyDown={handleDialogKeyDown}>
-        <button ref={closeRef} className="update-welcome-close" type="button" disabled={installing} onClick={() => setClosed(true)} aria-label={en ? "Close" : "Đóng"}>×</button>
-        <div className={`update-welcome-mark${available ? " is-ready" : ""}`} aria-hidden="true">
-          {busy ? <span className="update-spinner" /> : available ? "↑" : "✦"}
-        </div>
-        <p className="update-welcome-eyebrow">BYTWINA • {en ? "STARTUP" : "KHỞI ĐỘNG"}</p>
-        <h2 id="update-welcome-title" aria-live="polite">{heading}</h2>
-        <p className="update-welcome-message">{message}</p>
-        {available && updateInfo && (
+      <section ref={dialogRef} className="update-welcome" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="update-welcome-title" onKeyDown={handleKeyDown}>
+        <aside className="update-welcome-aside">
+          <div className="update-welcome-brand"><img src="/brand-mark.png" alt="" /><b>Bytwina</b></div>
+          <div className="update-welcome-orbit" aria-hidden="true"><span /><i /></div>
+          <p className="update-welcome-aside-label">{en ? "BROWSER UPDATE" : "CẬP NHẬT TRÌNH DUYỆT"}</p>
+          <h2>{en ? "A better browser is ready." : "Đã có bản Bytwina mới."}</h2>
+          <p>{en ? "Your tabs and saved data stay on this device." : "Các tab và dữ liệu đã lưu vẫn ở trên thiết bị của bạn."}</p>
+        </aside>
+        <div className="update-welcome-main">
+          <p className="update-welcome-eyebrow">{en ? "UPDATE AVAILABLE" : "CÓ BẢN MỚI"}</p>
+          <h1 id="update-welcome-title" aria-live="polite">
+            {en ? "A new version of Bytwina is available" : "Bytwina có phiên bản mới"}
+          </h1>
+          <p className="update-welcome-message">
+            {en
+              ? "Download and install now, or skip. We will ask again in 1 to 3 hours."
+              : "Tải xuống và cài đặt ngay, hoặc bỏ qua. Bytwina sẽ hỏi lại sau 1 đến 3 giờ."}
+          </p>
           <div className="update-welcome-version-card">
-            <div><span>{en ? "Installed" : "Đang dùng"}</span><b>{updateInfo.current}</b></div>
+            <div><span>{en ? "CURRENT VERSION" : "PHIÊN BẢN HIỆN TẠI"}</span><b>{info.current}</b></div>
             <span className="update-welcome-version-arrow" aria-hidden="true">→</span>
-            <div className="update-welcome-version-new"><span>{en ? "Available" : "Bản mới"}</span><b>{updateInfo.version}</b></div>
+            <div className="update-welcome-version-new"><span>{en ? "NEW VERSION" : "PHIÊN BẢN MỚI"}</span><b>{info.version}</b></div>
           </div>
-        )}
-        {available && updateInfo?.notes && <div className="update-welcome-notes">{updateInfo.notes}</div>}
-        {installing && <div className="update-install-progress" role="status"><span />{en ? "Preparing the installer…" : "Đang chuẩn bị trình cài đặt…"}</div>}
-        <div className="update-welcome-actions">
-          {available ? (
-            <button className="btn primary" type="button" disabled={installing} onClick={() => void install()}>
-              {installing ? (en ? "Downloading and installing…" : "Đang tải và cài đặt…") : (en ? "Update and install" : "Cập nhật và cài đặt")}
+          {info.notes && (
+            <div className="update-welcome-notes"><strong>{en ? "What’s new" : "Có gì mới"}</strong><div>{info.notes}</div></div>
+          )}
+          {installing && (
+            <div className="update-install-progress" role="status">
+              <span className={`update-progress-track${percent == null ? " is-indeterminate" : ""}`}>
+                <i style={{ width: percent == null ? "35%" : `${percent}%` }} />
+              </span>
+              <span>
+                {percent == null
+                  ? progress.downloaded > 0
+                    ? `${formatBytes(progress.downloaded)} ${en ? "downloaded" : "đã tải"}`
+                    : (en ? "Preparing download…" : "Đang chuẩn bị tải…")
+                  : `${percent}% · ${formatBytes(progress.downloaded)} / ${formatBytes(progress.total ?? 0)}`}
+              </span>
+              <small>{en ? "Keep Bytwina open until the installer finishes." : "Hãy giữ Bytwina mở cho đến khi cài xong."}</small>
+            </div>
+          )}
+          {error && <p className="update-welcome-message" role="alert">{error}</p>}
+          <div className="update-welcome-actions">
+            <button ref={installRef} className="btn primary" type="button" disabled={installing} onClick={() => void install()}>
+              {installing
+                ? (en ? "Installing…" : "Đang cài đặt…")
+                : (en ? "Download and install" : "Tải xuống và cài đặt")}
             </button>
-          ) : result?.status === "failed" || result?.status === "unavailable" ? (
-            <button className="btn primary" type="button" disabled={busy} onClick={() => void check()}>
-              {en ? "Check again" : "Kiểm tra lại"}
+            <button className="btn" type="button" disabled={installing} onClick={skip}>
+              {en ? "Skip" : "Bỏ qua"}
             </button>
-          ) : null}
-          <button className="btn" type="button" disabled={busy || installing} onClick={() => setClosed(true)}>
-            {available ? (en ? "Later" : "Để sau") : (en ? "Continue" : "Tiếp tục")}
-          </button>
+          </div>
         </div>
       </section>
     </div>

@@ -1,0 +1,37 @@
+/* Nút chọn màu nhấn (dùng trong Cài đặt > Giao diện và bước giao diện của Onboarding). */
+.accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+
+.accent-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.accent-swatch:hover {
+  transform: scale(1.08);
+}
+
+.accent-swatch.on {
+  outline: 2px solid var(--text, #111);
+  outline-offset: 2px;
+}
+
+.accent-swatch:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accent-swatch {
+    transition: none;
+  }
+}

@@ -3,7 +3,7 @@ name: Release
 # Hai cách chạy:
 # 1. Đẩy tag phiên bản (ví dụ v0.0.4) — giữ nguyên cách cũ.
 # 2. Bấm "Run workflow" trên tab Actions, nhập phiên bản (ví dụ v0.0.4).
-# Release được tạo và PHÁT HÀNH NGAY; step "Verify assets" in danh sách tệp đã tải lên.
+# Release chỉ được tạo ở dạng draft sau khi CI xanh trên đúng commit.
 on:
   push:
     tags:
@@ -16,6 +16,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -35,6 +36,24 @@ jobs:
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Phiên bản không hợp lệ: '$tag' (cần dạng vX.Y.Z)" }
           echo "TAG=$tag" >> $env:GITHUB_ENV
           echo "Phát hành $tag"
+      - name: Require green CI for this commit
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $deadline = (Get-Date).AddMinutes(15)
+          do {
+            $runs = gh run list --workflow ci.yml --commit $env:GITHUB_SHA --json status,conclusion,databaseId --limit 10 | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw "Không truy vấn được CI cho commit $env:GITHUB_SHA" }
+            $run = $runs | Select-Object -First 1
+            if ($run -and $run.status -eq "completed") {
+              if ($run.conclusion -ne "success") { throw "CI run $($run.databaseId) kết thúc: $($run.conclusion)" }
+              Write-Output "CI xanh trên commit $env:GITHUB_SHA (run $($run.databaseId))"
+              break
+            }
+            if ((Get-Date) -ge $deadline) { throw "Không có CI xanh hoàn tất cho commit $env:GITHUB_SHA trong 15 phút" }
+            Start-Sleep -Seconds 15
+          } while ($true)
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -169,9 +188,9 @@ jobs:
           }
           if ($releaseNotes) {
             $releaseNotes | Out-File -FilePath release_notes.txt -Encoding utf8
-            gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --notes-file release_notes.txt --latest @files
+            gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --notes-file release_notes.txt --draft @files
           } else {
-            gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --generate-notes --latest @files
+            gh release create "$env:TAG" --title "Bytwina Browser $env:TAG" --generate-notes --draft @files
           }
       - name: Verify assets
         shell: pwsh

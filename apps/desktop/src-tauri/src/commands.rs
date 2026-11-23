@@ -221,11 +221,26 @@ pub async fn browser_command(
             db.clear_history()?;
             Ok(())
         }),
-        "settings_set" => with_db(&app, |db| {
-            db.set_setting(&arg("key")?, &arg("value")?)?;
-            Ok(Value::Null)
-        }),
+        "settings_set" => {
+            let key = arg("key")?;
+            let value = arg("value")?;
+            if key == "extensionsPreview" {
+                return Err("hãy dùng ext_preview_set để đổi chế độ preview tiện ích".into());
+            }
+            with_db(&app, |db| {
+                db.set_setting(&key, &value)?;
+                Ok(Value::Null)
+            })
+        }
         "settings_get" => with_db(&app, |db| db.get_setting(&arg("key")?)),
+        "ext_preview_set" => {
+            let enabled = matches!(arg("enabled")?.as_str(), "1" | "true");
+            let db = db_handle(&app)?;
+            db.set_setting("extensionsPreview", if enabled { "1" } else { "0" })?;
+            reload_extensions(&app, &db);
+            extensions::apply_to_tabs(&app, &state);
+            Ok(Value::Bool(enabled))
+        }
         "session_save" => {
             if state.is_private() {
                 return Ok(Value::Null);
@@ -967,6 +982,14 @@ pub async fn browser_command(
             crate::update::install(app.clone()).await?;
             Ok(Value::Bool(true))
         }
+        "release_page_open" => {
+            tauri_plugin_opener::open_url(
+                "https://github.com/ninokiru/Bytwina-Browser/releases/latest",
+                None::<&str>,
+            )
+            .map_err(|e| format!("không mở được trang tải cập nhật: {e}"))?;
+            Ok(Value::Bool(true))
+        }
         "settings_reset" => {
             with_db(&app, |db| {
                 for (key, value) in DEFAULT_SETTINGS {
@@ -979,6 +1002,10 @@ pub async fn browser_command(
             browser::apply_zoom(&app, &state);
             if let Some(blocker) = app.try_state::<crate::filters::BlockerHandle>() {
                 blocker.0.set_enabled(true);
+            }
+            if let Ok(db) = db_handle(&app) {
+                reload_extensions(&app, &db);
+                extensions::apply_to_tabs(&app, &state);
             }
             browser::relayout(&app, &state);
             browser::emit_state(&app, &state);
@@ -1257,6 +1284,7 @@ const DEFAULT_SETTINGS: &[(&str, &str)] = &[
     ("tabLayout", "horizontal"),
     ("adblockEnabled", "1"),
     ("adblockDisabledSites", ""),
+    ("extensionsPreview", "0"),
     ("vaultAutoLock", "15"),
 ];
 

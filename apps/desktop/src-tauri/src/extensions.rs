@@ -2,9 +2,8 @@
 //!
 //! Nguyên tắc:
 //! - Manifest khai báo capability; bridge chỉ mở API tương ứng.
-//! - Content script chạy trong trang nhưng chỉ nhận một object `bytwina` riêng
-//!   (không phải `window.bytwina` dùng chung) để tiện ích A không đọc được API
-//!   của tiện ích B.
+//! - Content script chạy trong main world. Bridge được công khai trên `window`;
+//!   không có ranh giới cô lập đáng tin cậy giữa trang và các tiện ích.
 //! - Mọi lời gọi storage/tabs/network quay về Rust qua WebView2 WebMessage.
 //!   Rust kiểm tra lại token, quyền, URL nguồn và hạn mức — không tin JS.
 //! - Script `document_start` được đăng ký bằng
@@ -437,9 +436,8 @@ struct Rate {
 
 pub struct Registry {
     exts: RwLock<Vec<LoadedExt>>,
-    /// Nhãn webview -> (id tiện ích -> token ngẫu nhiên). Token nằm trong closure
-    /// của content script nên trang không đọc được; dùng để chặn trang giả mạo
-    /// tiện ích rồi gọi storage của nó.
+    /// Nhãn webview -> (id tiện ích -> token ngẫu nhiên) được dùng khi xác thực
+    /// request. Bridge ở main world nên token không phải ranh giới sandbox.
     tokens: Mutex<HashMap<String, HashMap<String, String>>>,
     rates: Mutex<HashMap<String, Rate>>,
 }
@@ -460,6 +458,13 @@ impl Registry {
     }
 
     pub fn reload(&self, db: &Db) {
+        // Content scripts run in WebView2's main world, so this system is an
+        // opt-in preview and stays completely inactive unless explicitly enabled.
+        let preview_enabled = db
+            .get_setting("extensionsPreview")
+            .ok()
+            .flatten()
+            .is_some_and(|value| value == "1");
         let rows = match db.list_extensions() {
             Ok(rows) => rows,
             Err(e) => {
@@ -468,7 +473,7 @@ impl Registry {
             }
         };
         let mut loaded = Vec::new();
-        for row in rows.into_iter().filter(|r| r.active) {
+        for row in rows.into_iter().filter(|r| preview_enabled && r.active) {
             let id = row.id.clone();
             match load_one(db, row) {
                 Ok(ext) => loaded.push(ext),
@@ -488,6 +493,12 @@ impl Registry {
     /// `document_start` đang hoạt động (guard theo URL ngay trong script).
     pub fn document_start_script(&self, label: &str) -> String {
         let exts = self.active();
+        if exts.is_empty() {
+            if let Ok(mut guard) = self.tokens.lock() {
+                guard.remove(label);
+            }
+            return String::new();
+        }
         let mut tokens = HashMap::new();
         let mut config = Vec::new();
         for ext in &exts {
@@ -1171,6 +1182,14 @@ pub fn serve_asset<R: Runtime>(
     else {
         return bad(http::StatusCode::SERVICE_UNAVAILABLE);
     };
+    if !db
+        .get_setting("extensionsPreview")
+        .ok()
+        .flatten()
+        .is_some_and(|value| value == "1")
+    {
+        return bad(http::StatusCode::FORBIDDEN);
+    }
     let Ok(Some(record)) = db.get_extension(&id) else {
         return bad(http::StatusCode::NOT_FOUND);
     };

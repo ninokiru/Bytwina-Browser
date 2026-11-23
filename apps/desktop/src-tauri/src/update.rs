@@ -11,10 +11,33 @@
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::browser::{self, BrowserState};
+use crate::db::DbState;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Khoảng chờ giữa hai lần kiểm tra tự động khi mở app: 1 đến 3 giờ.
+const COOLDOWN_MIN_SECS: u64 = 60 * 60;
+const COOLDOWN_MAX_SECS: u64 = 3 * 60 * 60;
+const NEXT_CHECK_KEY: &str = "updateNextCheck";
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Chọn ngẫu nhiên trong khoảng 1–3 giờ (lấy phần nano giây của đồng hồ, không cần crate RNG).
+fn next_cooldown() -> u64 {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| u64::from(d.subsec_nanos()))
+        .unwrap_or(0);
+    COOLDOWN_MIN_SECS + nanos % (COOLDOWN_MAX_SECS - COOLDOWN_MIN_SECS + 1)
+}
 
 /// Bản mới đang chờ, nếu người dùng vừa bấm "cập nhật". Phải hỏi xong mới biết
 /// bản nào để tải, và câu trả lời giữ ở đây giữa hai lệnh check/install.
@@ -48,11 +71,35 @@ fn configured(app: &AppHandle) -> bool {
 
 /// Hỏi GitHub xem có bản mới không. `None` = đã mới nhất, chưa cấu hình khoá, hoặc
 /// mạng lỗi — cả ba đều không được làm hỏng UI.
+/// Kiểm tra thủ công (ví dụ từ menu): không bị khoảng chờ chặn.
 pub async fn check(app: AppHandle) -> Option<UpdateInfo> {
-    check_startup(app).await.info
+    check_now(app).await.info
 }
 
+/// Kiểm tra khi mở app: trả về "skipped" nếu còn trong khoảng chờ 1–3 giờ.
+/// Sau mỗi lần thật sự hỏi máy chủ (kể cả lỗi mạng) thì đặt mốc lần kiểm tra kế tiếp.
 pub async fn check_startup(app: AppHandle) -> StartupCheck {
+    if !configured(&app) {
+        return StartupCheck { status: "unavailable".into(), info: None };
+    }
+    let now = now_secs();
+    let next = app
+        .try_state::<DbState>()
+        .and_then(|s| s.0.clone())
+        .and_then(|db| db.get_setting(NEXT_CHECK_KEY).ok().flatten())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0);
+    if now < next {
+        return StartupCheck { status: "skipped".into(), info: None };
+    }
+    let result = check_now(app.clone()).await;
+    if let Some(db) = app.try_state::<DbState>().and_then(|s| s.0.clone()) {
+        let _ = db.set_setting(NEXT_CHECK_KEY, &(now_secs() + next_cooldown()).to_string());
+    }
+    result
+}
+
+async fn check_now(app: AppHandle) -> StartupCheck {
     if !configured(&app) {
         return StartupCheck { status: "unavailable".into(), info: None };
     }
@@ -95,8 +142,23 @@ pub async fn install(app: AppHandle) -> Result<(), String> {
     if let Some(state) = app.try_state::<BrowserState>() {
         browser::persist_session(&app, &state);
     }
+    let progress_app = app.clone();
+    let mut downloaded_bytes = 0u64;
     pending
-        .download_and_install(|_, _| {}, || {})
+        .download_and_install(
+            move |chunk_length, content_length| {
+                downloaded_bytes = downloaded_bytes.saturating_add(chunk_length as u64);
+                let _ = progress_app.emit_to(
+                    "toolbar",
+                    "update://progress",
+                    serde_json::json!({
+                        "downloaded": downloaded_bytes,
+                        "total": content_length,
+                    }),
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|e| format!("cập nhật thất bại: {e}"))
 }

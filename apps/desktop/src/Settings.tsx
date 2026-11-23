@@ -2,7 +2,8 @@ import { Fragment, createContext, useContext, useEffect, useState } from "react"
 import type { ComponentType, ReactNode } from "react";
 import { cmd } from "./tabs";
 import { getLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
-import { applyTheme } from "./theme";
+import { ACCENTS, applyAccent, applyTheme } from "./theme";
+import "./Appearance.css";
 import PasswordVault from "./PasswordVault";
 import SessionManager from "./SessionManager";
 import {
@@ -102,6 +103,7 @@ export default function Settings({
   const [downloadDir, setDownloadDir] = useState("");
   const [zoom, setZoom] = useState("100");
   const [theme, setTheme] = useState("system");
+  const [accent, setAccent] = useState("default");
   const [tabLayout, setTabLayout] = useState("horizontal");
   const [workspace, setWorkspace] = useState("");
   const [workspaceError, setWorkspaceError] = useState("");
@@ -208,7 +210,8 @@ export default function Settings({
       get("sleepMinutes"),
       get("tabLayout"),
       get("workspace"),
-    ]).then(([h, e, s, d, z, th, c, sl, tl, ws]) => {
+      get("accent"),
+    ]).then(([h, e, s, d, z, th, c, sl, tl, ws, ac]) => {
       if (h) setHome(h);
       if (e) setEngine(e);
       if (s) setStartup(s);
@@ -219,6 +222,7 @@ export default function Settings({
       if (sl) setSleep(sl);
       if (tl) setTabLayout(tl);
       if (ws) setWorkspace(ws);
+      if (ac) setAccent(ac);
     });
     void loadAdblock();
     void loadPerms();
@@ -262,6 +266,12 @@ export default function Settings({
     setTheme(next);
     applyTheme(next);
     save("theme", next);
+  };
+
+  const changeAccent = (next: string) => {
+    setAccent(next);
+    applyAccent(next);
+    save("accent", next);
   };
 
   const changeZoom = (next: string) => {
@@ -336,6 +346,8 @@ export default function Settings({
     void cmd("settings_reset")
       .then(() => {
         applyTheme("system");
+        applyAccent("default");
+        setAccent("default");
         setMessage(t("settings.resetDone"));
         loadAll();
       })
@@ -451,6 +463,22 @@ export default function Settings({
                 <option value="dark">{t("settings.themeDark")}</option>
               </select>
             </label>
+            <p className="settings-label">{lang === "en" ? "Accent color" : "Màu nhấn"}</p>
+            <div className="accent-row" role="radiogroup" aria-label={lang === "en" ? "Accent color" : "Màu nhấn"}>
+              {ACCENTS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={accent === a.id}
+                  aria-label={lang === "en" ? a.labelEn : a.label}
+                  title={lang === "en" ? a.labelEn : a.label}
+                  className={`accent-swatch${accent === a.id ? " on" : ""}`}
+                  style={{ background: a.color || "var(--text)" }}
+                  onClick={() => changeAccent(a.id)}
+                />
+              ))}
+            </div>
             <label className="settings-row">
               {t("settings.zoom")}
               <select value={zoom} onChange={(e) => changeZoom(e.target.value)}>

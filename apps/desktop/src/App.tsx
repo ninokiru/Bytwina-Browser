@@ -8,7 +8,7 @@ import Onboarding from "./Onboarding";
 import UpdateWelcome from "./UpdateWelcome";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
-import { applyTheme } from "./theme";
+import { applyAccent, applyTheme } from "./theme";
 import { evaluateArithmetic } from "./calc";
 import { FaviconImg } from "./favicon";
 import CommandPalette, { type PaletteAction } from "./CommandPalette";
@@ -99,6 +99,7 @@ export default function App() {
   // Bảng lệnh Ctrl+K.
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
+  const [startupUpdateVisible, setStartupUpdateVisible] = useState(false);
 
   useEffect(() => {
     void cmd("terms_status")
@@ -112,6 +113,9 @@ export default function App() {
     void cmd("settings_get", { key: "theme" })
       .then((v) => applyTheme(typeof v === "string" ? v : "system"))
       .catch(() => applyTheme("system"));
+    void cmd("settings_get", { key: "accent" })
+      .then((v) => applyAccent(typeof v === "string" ? v : "default"))
+      .catch(() => undefined);
     void cmd("settings_get", { key: "homeUrl" })
       .then((v) => {
         if (typeof v === "string" && v) setHome(v);
@@ -502,7 +506,7 @@ export default function App() {
 
   // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
   // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
-  const overlay = panel != null || showNewTab || palette || help;
+  const overlay = panel != null || showNewTab || palette || help || startupUpdateVisible;
   useEffect(() => {
     void cmd("panel_open", { on: overlay ? "1" : "0" }).catch(() => undefined);
     // Bảng mở thì focus phải nằm ở thanh công cụ (webview nội dung đã bị ẩn), để Esc đóng được bảng.
@@ -720,7 +724,7 @@ export default function App() {
         overlay ? " overlay" : ""
       }${focusMode ? " focus-mode" : ""}`}
     >
-      <UpdateWelcome />
+      <UpdateWelcome onOpenChange={setStartupUpdateVisible} />
       {focusMode && (
         <div className="focus-indicator" onClick={toggleFocusMode} title="Nhấn để thoát Chế độ tập trung (Ctrl+Shift+F)">
           <div className={`focus-progress${active?.loading ? " loading" : ""}`} />
