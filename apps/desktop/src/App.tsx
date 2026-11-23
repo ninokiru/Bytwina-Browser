@@ -1222,6 +1222,14 @@ export default function App() {
             <SplitIcon />
           </button>
           <button
+            type="button"
+            className="icon-btn"
+            title={t("menu.passwords")}
+            onClick={() => setPanel("settings")}
+          >
+            <KeyIcon />
+          </button>
+          <button
             className="icon-btn"
             title={t("bar.home")}
             onClick={() => {

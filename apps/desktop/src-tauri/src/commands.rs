@@ -206,7 +206,8 @@ pub async fn browser_command(
                 .call()
                 .map_err(|e| format!("không tải được trang: {e}"))?;
             let html = response
-                .into_string()
+                .into_body()
+                .read_to_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
             let readability = dom_smoothie::Readability::new(html, Some(url.as_str()), None)
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
