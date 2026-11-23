@@ -1,0 +1,215 @@
+/* Color Picker — hiện đại, bo góc, màu nhẹ */
+.cp-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 10, 16, 0.35);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.cp-panel {
+  width: 100%;
+  max-width: 400px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: qr-panel-in 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface-2);
+}
+
+.cp-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cp-close {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+}
+.cp-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.cp-body {
+  padding: 16px;
+}
+
+.cp-error {
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-size: 13px;
+  text-align: center;
+}
+
+.cp-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cp-pick-btn {
+  width: 100%;
+  height: 48px;
+  color: var(--text);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.cp-pick-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.cp-pick-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.cp-pick-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.cp-pick-btn.picking {
+  background: var(--warning);
+}
+
+.cp-color-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cp-swatch {
+  width: 100%;
+  height: 80px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.cp-formats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cp-format {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.cp-format label {
+  color: var(--muted);
+  font-weight: 500;
+  min-width: 40px;
+}
+
+.cp-format button {
+  flex: 1;
+  text-align: right;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+.cp-format button:hover {
+  color: var(--accent);
+}
+
+.cp-external {
+  width: 100%;
+  height: 36px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.cp-external:hover {
+  background: var(--surface-3);
+}
+
+.cp-history {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.cp-history h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cp-history-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  gap: 6px;
+}
+
+.cp-history-item {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.cp-history-item:hover {
+  transform: scale(1.1);
+  box-shadow: var(--shadow-md);
+  z-index: 1;
+}
+
+.cp-foot {
+  padding: 10px 16px;
+  border-top: 1px solid var(--divider);
+  font-size: 11px;
+  color: var(--faint);
+  text-align: center;
+}
+
+.cp-foot kbd {
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}

@@ -37,6 +37,7 @@ pub fn internal_page(input: &str) -> Option<Internal> {
         "dictionary" => "dictionary",
         "newtab" => "newtab",
         "extensions" => "extensions",
+        "scratch" => "scratch",
         _ => return Some(Internal::Unknown),
     };
     Some(Internal::Known(page))
@@ -148,6 +149,9 @@ pub fn engine_prefix(key: &str) -> &'static str {
         "google" => "https://www.google.com/search?q=",
         "bing" => "https://www.bing.com/search?q=",
         "brave" => "https://search.brave.com/search?q=",
+        "ecosia" => "https://www.ecosia.org/search?q=",
+        "startpage" => "https://www.startpage.com/sp/search?query=",
+        "yahoo" => "https://search.yahoo.com/search?p=",
         _ => SEARCH_ENGINE,
     }
 }

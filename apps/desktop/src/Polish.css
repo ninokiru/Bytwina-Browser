@@ -1,0 +1,61 @@
+/* Tinh chỉnh giao diện: thanh công cụ, trang tab mới, Cài đặt, hộp thoại cập nhật.
+   Chỉ thêm trạng thái và khoảng cách, không đổi bố cục gốc. Dùng biến có sẵn trong styles.css. */
+
+/* ---- Thanh công cụ ---- */
+.tab.active {
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-sm);
+}
+
+.omnibox:focus-within {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.navbar .icon-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+/* ---- Trang tab mới ---- */
+.ntp-search:focus-within {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.ntp-links ul {
+  gap: 12px;
+}
+
+.ntp-link {
+  border-radius: var(--radius-md);
+}
+
+/* ---- Cửa sổ Cài đặt ---- */
+.settings-nav-item.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.settings-title {
+  letter-spacing: -0.02em;
+}
+
+.settings-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+/* ---- Hộp thoại cập nhật ---- */
+.update-welcome-actions .btn.primary {
+  color: var(--accent-text);
+  background: var(--accent);
+  font-weight: 650;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.update-welcome-notes {
+  font-size: 12px;
+  line-height: 1.6;
+}

@@ -64,35 +64,8 @@ body,
   white-space: nowrap;
 }
 
-/* Vật liệu: nền đặc, không blur (quyết định: solid color giả depth). */
-:root {
-  --toolbar: #f3f6fb;
-  --toolbar-blur: #eef2f8;
-  --surface: #ffffff;
-  --surface-2: #f2f6fc;
-  --surface-3: #e4ecf7;
-}
-
-:root[data-theme="dark"] {
-  --toolbar: #161c25;
-  --toolbar-blur: #12171f;
-  --surface: #1c2430;
-  --surface-2: #232d3b;
-  --surface-3: #2d3a4b;
-}
-
-.chrome,
-.chrome.blurred,
-.tab.active,
-.tab.active:hover,
-.omni-dropdown,
-.panel {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 .settings-search {
-  border-radius: 22px;
+  border-radius: var(--radius-full);
 }
 
 /* Mục đang chọn: nền accent nhạt và dải 3px bên trái, theo Fluent. */

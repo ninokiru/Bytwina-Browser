@@ -25,16 +25,20 @@ interface QuickLink {
   color: string;
 }
 
+type NewTabLayout = "blank" | "dashboard" | "focus";
+
 interface Props {
   privateMode: boolean;
   onNavigate: (input: string) => void;
   onOpenSettings: () => void;
+  layout: NewTabLayout;
 }
 
 // Trang tab mới: bố cục một cột giữa màn hình như trang chủ của các công cụ
 // tìm kiếm (Brave/DuckDuckGo/Google), thêm quick link lấy từ dấu trang và
 // lịch sử. Chỉ dùng IPC đã có, không cần thay đổi backend.
-export default function NewTab({ privateMode, onNavigate, onOpenSettings }: Props) {
+// Layout: "blank" (trắng), "dashboard" (đồng hồ + quick links), "focus" (quote + search).
+export default function NewTab({ privateMode, onNavigate, onOpenSettings, layout }: Props) {
   useLang();
   const [query, setQuery] = useState("");
   const [links, setLinks] = useState<QuickLink[]>([]);
@@ -74,86 +78,89 @@ export default function NewTab({ privateMode, onNavigate, onOpenSettings }: Prop
     if (q) onNavigate(q);
   };
 
-  return (
-    <main className="newtab-page">
-      <div className="newtab-inner">
-        {privateMode && (
-          <span className="newtab-private">
-            <GlassesIcon /> {t("app.private")}
-          </span>
-        )}
-
-        <div className="newtab-brand">
-          <img src="/brand-mark.png" alt="" />
-          <b>Bytwina</b>
+  // Layout: Blank - chỉ ô tìm kiếm
+  if (layout === "blank") {
+    return (
+      <main className="newtab-page newtab-blank">
+        <div className="newtab-inner">
+          {privateMode && (
+            <span className="newtab-private"><GlassesIcon /> {t("app.private")}</span>
+          )}
+          <form className="ntp-search" onSubmit={submit} role="search">
+            <SearchIcon />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("newtab.placeholder")} aria-label={t("newtab.placeholder")} spellCheck={false} autoComplete="off" />
+            <button type="submit" className="ntp-go" disabled={!query.trim()}>{t("newtab.search")}</button>
+          </form>
         </div>
+      </main>
+    );
+  }
 
-        <p className="newtab-greeting">{greeting}</p>
+  // Layout: Focus - quote + search
+  if (layout === "focus") {
+    const quotes = [
+      "Cách tốt nhất để dự đoán tương lai là tự tạo ra nó. — Peter Drucker",
+      "Đơn giản hóa, sau đó mới tối ưu hóa. — Elon Musk",
+      "Code sạch là code dễ đọc, dễ hiểu, dễ sửa. — Robert Martin",
+      "Đừng chờ hoàn hảo, hãy bắt đầu và hoàn thiện dần. — James Clear",
+      "Thành công là kết quả của thói quen hàng ngày. — James Clear",
+    ];
+    const quote = quotes[Math.floor(Date.now() / 86400000) % quotes.length];
+
+    return (
+      <main className="newtab-page newtab-focus">
+        <div className="newtab-inner">
+          {privateMode && <span className="newtab-private"><GlassesIcon /> {t("app.private")}</span>}
+          <blockquote className="ntp-quote">{quote}</blockquote>
+          <form className="ntp-search" onSubmit={submit} role="search">
+            <SearchIcon />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("newtab.placeholder")} aria-label={t("newtab.placeholder")} spellCheck={false} autoComplete="off" />
+            <button type="submit" className="ntp-go" disabled={!query.trim()}>{t("newtab.search")}</button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // Layout: Dashboard (mặc định) - greeting + search + quick links + clock
+  const time = useMemo(() => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), []);
+  const date = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }), []);
+
+  return (
+    <main className="newtab-page newtab-dashboard">
+      <div className="newtab-inner">
+        {privateMode && <span className="newtab-private"><GlassesIcon /> {t("app.private")}</span>}
+        <div className="ntp-top">
+          <div className="ntp-clock">
+            <time>{time}</time>
+            <span>{date}</span>
+          </div>
+          <div className="newtab-brand"><img src="/brand-mark.png" alt="" /><b>Bytwina</b></div>
+          <p className="newtab-greeting">{greeting}</p>
+        </div>
 
         <form className="ntp-search" onSubmit={submit} role="search">
           <SearchIcon />
-          <input
-            // Tự focus khi mở tab mới, giống Chrome: gõ được ngay, không cần bấm.
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("newtab.placeholder")}
-            aria-label={t("newtab.placeholder")}
-            spellCheck={false}
-            autoComplete="off"
-          />
-          <button type="submit" className="ntp-go" disabled={!query.trim()}>
-            {t("newtab.search")}
-          </button>
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("newtab.placeholder")} aria-label={t("newtab.placeholder")} spellCheck={false} autoComplete="off" />
+          <button type="submit" className="ntp-go" disabled={!query.trim()}>{t("newtab.search")}</button>
         </form>
 
         {links.length > 0 && (
           <section className="ntp-links">
             <header className="ntp-links-head">
               <h2>{t("newtab.shortcuts")}</h2>
-              <button type="button" className="ntp-manage" onClick={onOpenSettings} title={t("bar.settings")}>
-                <SettingsIcon />
-                <span>{t("newtab.customize")}</span>
-              </button>
+              <button type="button" className="ntp-manage" onClick={onOpenSettings} title={t("bar.settings")}><SettingsIcon /><span>{t("newtab.customize")}</span></button>
             </header>
-            <ul>
-              {links.map((l) => (
-                <li key={l.url}>
-                  <button type="button" className="ntp-link" onClick={() => onNavigate(l.url)} title={l.url}>
-                    <span className="ntp-link-icon" style={{ ["--tile" as string]: l.color }}>
-                      <FaviconImg host={hostOf(l.url)} className="ntp-favicon-img" />
-                      <span className="ntp-fallback-letter">{letterOf(l.title || l.url)}</span>
-                    </span>
-                    <span className="ntp-link-label">{l.title || hostOf(l.url)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <ul>{links.map((l) => (<li key={l.url}><button type="button" className="ntp-link" onClick={() => onNavigate(l.url)} title={l.url}><span className="ntp-link-icon" style={{ ["--tile" as string]: l.color }}><FaviconImg host={hostOf(l.url)} className="ntp-favicon-img" /><span className="ntp-fallback-letter">{letterOf(l.title || l.url)}</span></span><span className="ntp-link-label">{l.title || hostOf(l.url)}</span></button></li>))}</ul>
           </section>
         )}
 
         {loaded && links.length === 0 && (
-          <div className="ntp-suggest">
-            <span>{t("newtab.tryThese")}</span>
-            <div className="ntp-suggest-row">
-              {(["news", "weather", "rate", "calendar"] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className="ntp-suggest-chip"
-                  onClick={() => onNavigate(t(`newtab.suggest.${key}`))}
-                >
-                  {t(`newtab.suggest.${key}`)}
-                </button>
-              ))}
-            </div>
-          </div>
+          <div className="ntp-suggest"><span>{t("newtab.tryThese")}</span><div className="ntp-suggest-row">{(["news", "weather", "rate", "calendar"] as const).map((key) => (<button key={key} type="button" className="ntp-suggest-chip" onClick={() => onNavigate(t(`newtab.suggest.${key}`))}>{t(`newtab.suggest.${key}`)}</button>))}</div></div>
         )}
 
         <p className="ntp-hint">{t("newtab.hint")}</p>
-        <p className="ntp-privacy">
-          <ShieldIcon /> {t("newtab.privacy")}
-        </p>
+        <p className="ntp-privacy"><ShieldIcon /> {t("newtab.privacy")}</p>
       </div>
     </main>
   );

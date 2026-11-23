@@ -1,0 +1,118 @@
+/* Thanh dấu trang (Bookmarks Bar) — hiện đại, bo góc, màu mềm */
+.bm-bar {
+  width: 100%;
+  height: 34px;
+  overflow: hidden;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.bm-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+.bm-inner::-webkit-scrollbar {
+  height: 6px;
+}
+.bm-inner::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 3px;
+}
+
+.bm-empty {
+  padding: 6px 10px;
+  color: var(--faint);
+}
+
+.bm-list {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  height: 100%;
+}
+
+.bm-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 100ms ease;
+}
+.bm-item:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  text-decoration: underline;
+  transform: translateY(-1px);
+}
+.bm-item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.bm-icon {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bm-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: #fff;
+  padding: 1px;
+}
+
+.bm-letter {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.bm-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+@media (max-width: 1000px) {
+  .bm-bar {
+    height: 30px;
+  }
+  .bm-item {
+    height: 26px;
+    padding: 0 7px;
+  }
+  .bm-label {
+    max-width: 100px;
+  }
+}

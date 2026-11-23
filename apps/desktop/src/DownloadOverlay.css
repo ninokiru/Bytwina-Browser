@@ -1,0 +1,140 @@
+/* Download Overlay — hiện đại, bo góc, góc dưới phải */
+.dl-overlay {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.dl-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 280px;
+  max-width: 420px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: dl-slide-in 0.25s ease-out;
+  backdrop-filter: blur(12px);
+}
+
+@keyframes dl-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+.dl-toast.exiting {
+  animation: dl-slide-out 0.25s ease-in forwards;
+}
+
+@keyframes dl-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(100%) translateY(20px);
+  }
+}
+
+.dl-icon {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.dl-toast:not(:has(.dl-icon:contains("✓"))) .dl-icon {
+  color: var(--danger);
+}
+
+.dl-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dl-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dl-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dl-link {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.dl-link:hover { text-decoration: underline; }
+
+.dl-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.dl-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.dl-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.dl-btn.close:hover {
+  background: var(--danger);
+  color: white;
+}
+
+/* Responsive: màn hình nhỏ thu gọn */
+@media (max-width: 480px) {
+  .dl-overlay {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+  .dl-toast {
+    min-width: 0;
+    max-width: none;
+  }
+  .dl-link { max-width: 120px; }
+}

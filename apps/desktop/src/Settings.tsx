@@ -80,6 +80,9 @@ const ENGINES: { id: string; label: string; desc: Key }[] = [
   { id: "google", label: "Google", desc: "settings.engineGoogleDesc" },
   { id: "bing", label: "Bing", desc: "settings.engineBingDesc" },
   { id: "brave", label: "Brave Search", desc: "settings.engineBraveDesc" },
+  { id: "ecosia", label: "Ecosia", desc: "settings.engineEcosiaDesc" },
+  { id: "startpage", label: "Startpage", desc: "settings.engineStartpageDesc" },
+  { id: "yahoo", label: "Yahoo", desc: "settings.engineYahooDesc" },
 ];
 
 // Mỗi mục đều được backend đọc từ CSDL (settings_get/settings_set) và có tác dụng thật.
@@ -107,6 +110,7 @@ export default function Settings({
   const [radius, setRadius] = useState("default");
   const [reduceMotion, setReduceMotion] = useState(false);
   const [tabLayout, setTabLayout] = useState("horizontal");
+  const [newTabLayout, setNewTabLayout] = useState("dashboard");
   const [workspace, setWorkspace] = useState("");
   const [workspaceError, setWorkspaceError] = useState("");
   const [clearOnExit, setClearOnExit] = useState(false);
@@ -211,9 +215,10 @@ export default function Settings({
       get("clearOnExit"),
       get("sleepMinutes"),
       get("tabLayout"),
+      get("newTabLayout"),
       get("workspace"),
       get("accent"),
-    ]).then(([h, e, s, d, z, th, c, sl, tl, ws, ac]) => {
+    ]).then(([h, e, s, d, z, th, c, sl, tl, ntl, ws, ac]) => {
       if (h) setHome(h);
       if (e) setEngine(e);
       if (s) setStartup(s);
@@ -223,6 +228,7 @@ export default function Settings({
       setClearOnExit(c === "1");
       if (sl) setSleep(sl);
       if (tl) setTabLayout(tl);
+      if (ntl) setNewTabLayout(ntl);
       if (ws) setWorkspace(ws);
       if (ac) setAccent(ac);
     });
@@ -300,6 +306,11 @@ export default function Settings({
   const changeTabLayout = (next: string) => {
     setTabLayout(next);
     void cmd("tab_layout", { layout: next }).catch(() => undefined);
+  };
+
+  const changeNewTabLayout = (next: string) => {
+    setNewTabLayout(next);
+    void cmd("settings_set", { key: "newTabLayout", value: next }).catch(() => undefined);
   };
 
   // Workspace chỉ áp dụng khi tạo webview mới, nên backend tải lại tab đang mở.
@@ -550,6 +561,18 @@ export default function Settings({
                 <AlertIcon /> {workspaceError}
               </p>
             )}
+          </Section>
+
+          <Section id="settings-newtab" title={t("settings.newTabPage")}>
+            <label className="settings-row">
+              {t("settings.newTabLayout")}
+              <select value={newTabLayout} onChange={(e) => changeNewTabLayout(e.target.value)}>
+                <option value="blank">{t("settings.newTabBlank")}</option>
+                <option value="dashboard">{t("settings.newTabDashboard")}</option>
+                <option value="focus">{t("settings.newTabFocus")}</option>
+              </select>
+            </label>
+            <p className="hint">{t("settings.newTabHint")}</p>
           </Section>
 
           <Section id="settings-search" title={t("settings.search")}>

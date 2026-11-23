@@ -4,6 +4,49 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
 
 ## Chưa phát hành
 
+## 0.0.1 — 2026-11-23
+
+### Phiên bản đầu tiên phát hành (tóm tắt)
+
+#### Duyệt web
+- Đa tab WebView2 thật, tab dọc/ngang, ghim tab, nhóm tab, chia màn hình (split view).
+- Thanh địa chỉ nhận tên miền, `localhost:3000`, `host:port`; từ khóa đi qua công cụ tìm kiếm (DuckDuckGo/Google).
+- Trang nội bộ `bytwina://settings`, `bytwina://history`, `bytwina://downloads`…
+
+#### Riêng tư và bảo mật
+- Chế độ riêng tư InPrivate thật của WebView2; không ghi lịch sử, không ghi phiên.
+- Chặn quảng cáo/tracker ở tầng request (EasyList, EasyPrivacy, uBlock, ABPvn); nút khiên tắt theo từng trang.
+- Quyền trang web (camera, micro, vị trí, thông báo…) hỏi từng lần, lưu theo origin.
+- Kho mật khẩu mã hóa AES-256-GCM, khóa suy ra bằng Argon2id.
+- Chặn trang `http://` không mã hóa (trừ localhost).
+
+#### Xem tệp cục bộ (Ctrl+O)
+- Hộp thoại native chọn tệp; Rust đọc và trả nội dung qua IPC, không nạp `file://` vào tab.
+- Ảnh (PNG/JPG/GIF/WebP/BMP/ICO/AVIF), văn bản/code (hơn 90 đuôi), Markdown (Xem trước/Nguồn), PDF (pdf.js: phân trang, zoom, xoay, nền tối, chọn/copy chữ).
+- JSON tự định dạng, XML nút Định dạng/Nguồn, ảnh zoom bằng con lăn.
+- Giới hạn: ảnh 20 MB, văn bản 2 MB, PDF 25 MB; Word/Excel/PowerPoint chưa đọc được, mời mở ngoài.
+
+#### Công cụ mới
+- **Ctrl+F**: Tìm trong trang (tô màu, cuộn đến kết quả).
+- **Ctrl+P**: In trang. **Ctrl+S**: Lưu trang dưới dạng HTML.
+- **Ctrl+Shift+Q**: Mã QR trang hiện tại (chép/tải/mở tab mới).
+- **Ctrl+Shift+C**: Color Picker (lấy màu từ trang).
+- **Ctrl+Shift+R**: Chế độ đọc (Reader View, nền kem/sáng/tốt, chỉnh font).
+- **Ctrl+Shift+B**: Hiện/ẩn thanh dấu trang.
+- **F3 / Shift+F3**: Tìm tiếp theo/trước đó trong trang.
+- **Ctrl+Shift+D**: Đánh dấu tất cả tab đang mở.
+- **F12 / Ctrl+Shift+I**: DevTools. **Ctrl+Shift+J**: Console. **Ctrl+U**: Xem mã nguồn.
+
+#### Giao diện
+- Sáng/tối/theo hệ thống, chọn ngôn Việt/Anh.
+- Thanh dấu trang (Bookmarks Bar) ngay dưới ô địa chỉ.
+- Trang tab mới: Blank / Dashboard (đồng hồ + quick links) / Focus (quote).
+- Cài đặt kiểu master-detail, ô tìm kiếm trong cài đặt.
+
+---
+
+## 0.0.5 — 2026-11-21 (so với 0.0.4)
+
 ### Thêm (Add)
 - **Hệ tiện ích v1 (lõi chạy được)**:
   - Cài tiện ích từ **thư mục** hoặc **tệp .zip/.bytwina-ext**; xem manifest và duyệt từng quyền trước khi cài.
@@ -14,6 +57,16 @@ Mỗi phiên bản liệt kê thay đổi **so với bản trước**. Nhóm: Th
   - Mỗi tiện ích có token ngẫu nhiên riêng theo tab; Rust kiểm tra lại token, quyền, URL nguồn và hạn mức — không tin dữ liệu từ JavaScript.
   - Schema CSDL v8: thêm `extension_assets` và `extension_logs` bên cạnh `extensions`, `ext_permissions`, `ext_storage`.
 - **Giới hạn có chủ đích:** chưa có marketplace/chữ ký; `background` là simulated background theo vòng đời tab, còn `popup/options_page` được mô phỏng bằng UI của Bytwina. Content script chạy trong main world (xem `docs/SECURITY.md`).
+- **Xem tệp cục bộ (Ctrl+O)**:
+  - Nút **Mở tệp** dùng hộp thoại hệ thống; Rust đọc tệp rồi trả nội dung cho khung xem riêng. Không nạp `file://` vào tab nên trang web không truy cập được đĩa.
+  - Hỗ trợ ảnh (PNG, JPG, GIF, WebP, BMP, ICO, AVIF), văn bản/code (hơn 90 đuôi), Markdown (chuyển **Xem trước** / **Nguồn**) và PDF.
+  - **PDF viewer bằng pdf.js**: phân trang, zoom, xoay, **vừa khung**, **nền tối**, chọn/copy chữ trong trang và tải xuống; không dùng iframe mặc định của WebView2.
+  - **Highlight code bằng Shiki**: tô màu cú pháp theo chủ đề sáng/tối, số dòng, ngắt dòng; hỗ trợ hơn 80 ngôn ngữ theo đuôi tệp.
+  - **JSON/XML**: tự định dạng JSON hợp lệ, nút Định dạng/Nguồn cho XML, kiểm tra lỗi và **Chép thu gọn**.
+  - **Ảnh**: zoom bằng con lăn hoặc nút, kéo để di chuyển khi phóng to, nháy đúp để phóng/thu, tải xuống.
+  - Ảnh tối đa 20 MB, văn bản 2 MB (phần dư bị cắt và báo rõ), PDF 25 MB. Tệp Word/Excel/PowerPoint chưa đọc được; UI mời **Mở ngoài** bằng ứng dụng khác.
+  - Rust chỉ đọc tệp người dùng đã chọn qua hộp thoại trong phiên hiện tại: đường dẫn được canonicalize và đối chiếu allowlist trước mỗi lần đọc.
+  - CSP thêm `worker-src 'self' blob:`, `'wasm-unsafe-eval'` cho pdf.js/Shiki và `blob:` cho ảnh/font; chưa kiểm chứng runtime Windows.
 
 ## 0.0.5 — 2026-11-21 (so với 0.0.4)
 

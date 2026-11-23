@@ -1,0 +1,482 @@
+/* Khung xem tệp (Ctrl+O). Dùng token màu có sẵn trong styles.css. */
+.fv-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+}
+
+.fv-panel {
+  display: flex;
+  width: min(1040px, 100%);
+  height: min(84vh, 820px);
+  flex-direction: column;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.fv-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.fv-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.fv-title b {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fv-title small {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.fv-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+/* PDF tự quản lý cuộn và khoảng đệm bên trong. */
+.fv-body-flush {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+}
+
+.fv-empty,
+.fv-error,
+.fv-note {
+  margin: 24px 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.fv-error {
+  color: var(--danger);
+}
+
+.fv-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+/* ---- Ảnh ---- */
+.fv-image {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.fv-image-stage {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  overflow: hidden;
+  cursor: default;
+  touch-action: none;
+}
+
+.fv-image-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center;
+  transition: transform 80ms ease-out;
+  user-select: none;
+}
+
+.fv-image-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--divider);
+}
+
+/* ---- PDF ---- */
+.fv-pdf {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.fv-pdf-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--divider);
+}
+
+.fv-pdf-bar .btn {
+  height: 28px;
+  padding: 0 9px;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.fv-pdf-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fv-pdf-count input {
+  width: 52px;
+  height: 28px;
+  padding: 0 6px;
+  color: var(--text);
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.fv-pdf-zoom {
+  min-width: 44px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.fv-pdf-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--divider);
+}
+
+.fv-pdf-stage {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+  background: var(--surface-2);
+}
+
+.fv-pdf-page {
+  position: relative;
+  flex: 0 0 auto;
+  background: #fff;
+  box-shadow: var(--shadow-lg);
+}
+
+.fv-pdf-page canvas {
+  display: block;
+}
+
+/* Nền tối: đảo màu trang giấy như nhiều trình đọc PDF. */
+.fv-pdf-dark {
+  background: #111;
+}
+
+.fv-pdf-dark canvas {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.95);
+}
+
+/* Lớp chữ trong suốt của pdf.js: chọn và copy được như văn bản thường. */
+.fv-text-layer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  position: absolute;
+  inset: 0;
+  color-scheme: only light;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 1;
+}
+
+.fv-text-layer span,
+.fv-text-layer br {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.fv-text-layer > :not(.markedContent),
+.fv-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.fv-text-layer .markedContent {
+  display: contents;
+}
+
+.fv-text-layer ::selection {
+  background: rgba(0, 110, 255, 0.28);
+}
+
+/* ---- Văn bản / code ---- */
+.fv-codebox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fv-code-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.fv-code-tools .btn {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.fv-code-meta {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.fv-code {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+}
+
+.fv-code.fv-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Shiki xuất <pre class="shiki"> + từng dòng; màu theo chủ đề sáng/tối. */
+.fv-shiki {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+}
+
+.fv-shiki .shiki {
+  margin: 0;
+  padding: 12px 14px 12px 0;
+  background: transparent !important;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.fv-shiki .shiki code {
+  display: block;
+  counter-reset: fv-line;
+}
+
+.fv-shiki .shiki .line {
+  position: relative;
+  display: block;
+  min-height: 1.55em;
+  padding-left: 3.6em;
+}
+
+.fv-shiki .shiki .line::before {
+  position: absolute;
+  left: 0;
+  width: 2.6em;
+  color: var(--faint);
+  text-align: right;
+  content: counter(fv-line);
+  counter-increment: fv-line;
+  user-select: none;
+}
+
+html[data-theme="light"] .fv-shiki .shiki,
+html[data-theme="light"] .fv-shiki .shiki span {
+  color: var(--shiki-light);
+}
+
+html[data-theme="dark"] .fv-shiki .shiki,
+html[data-theme="dark"] .fv-shiki .shiki span {
+  color: var(--shiki-dark);
+}
+
+.fv-shiki.fv-wrap .shiki {
+  overflow: visible;
+}
+
+.fv-shiki.fv-wrap .line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Markdown đã render ---- */
+.fv-switch {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.fv-markdown {
+  max-width: 76ch;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.fv-markdown > :first-child {
+  margin-top: 0;
+}
+
+.fv-markdown h1,
+.fv-markdown h2,
+.fv-markdown h3,
+.fv-markdown h4 {
+  margin: 1.2em 0 0.5em;
+  line-height: 1.3;
+}
+
+.fv-markdown h1 {
+  font-size: 24px;
+}
+
+.fv-markdown h2 {
+  font-size: 19px;
+}
+
+.fv-markdown h3 {
+  font-size: 16px;
+}
+
+.fv-markdown p,
+.fv-markdown ul,
+.fv-markdown ol,
+.fv-markdown blockquote,
+.fv-markdown pre,
+.fv-markdown table {
+  margin: 0 0 12px;
+}
+
+.fv-markdown ul,
+.fv-markdown ol {
+  padding-left: 22px;
+}
+
+.fv-markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.fv-markdown code {
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.9em;
+}
+
+.fv-markdown pre {
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+}
+
+.fv-markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.fv-markdown blockquote {
+  padding-left: 12px;
+  color: var(--muted);
+  border-left: 3px solid var(--border);
+}
+
+.fv-markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.fv-markdown table {
+  border-collapse: collapse;
+}
+
+.fv-markdown th,
+.fv-markdown td {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+}
+
+/* ---- Thông báo loại tệp không hỗ trợ ---- */
+.fv-notice {
+  display: flex;
+  max-width: 520px;
+  margin: 24px auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.fv-notice p {
+  margin: 0;
+}

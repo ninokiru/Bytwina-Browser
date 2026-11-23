@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { cmd } from "./tabs";
-import { getLang } from "./i18n";
+import { getLang, setLang, useLang } from "./i18n";
 import { ACCENTS, applyAccent, applyTheme } from "./theme";
 import { TERMS_SECTIONS } from "./terms";
 import "./Onboarding.css";
@@ -237,6 +237,8 @@ function ThemePreview({ variant, label }: { variant: ThemeChoice; label: string 
 }
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {
+  // useLang: đổi ngôn ngữ ngay tại màn chào mừng thì toàn bộ onboarding vẽ lại.
+  useLang();
   const lang: Lang = getLang() === "en" ? "en" : "vi";
   const T = TEXT[lang];
   const [step, setStep] = useState(0);
@@ -263,6 +265,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     setTheme(next);
     // Xem trước ngay; giá trị được lưu khi hoàn tất.
     applyTheme(next);
+  };
+
+  const changeLanguage = (code: Lang) => {
+    setLang(code);
+    // Lưu ngay để app mở đúng ngôn ngữ kể cả khi người dùng thoát giữa chừng.
+    void cmd("settings_set", { key: "language", value: code }).catch(() => undefined);
   };
 
   const pickAccent = (id: string) => {
@@ -353,6 +361,20 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           <div className="ob-body" key={step}>
             {step === 0 && (
               <>
+                <div className="ob-lang" role="radiogroup" aria-label={lang === "en" ? "Language" : "Ngôn ngữ"}>
+                  {(["vi", "en"] as const).map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      role="radio"
+                      aria-checked={lang === code}
+                      className={`ob-lang-option${lang === code ? " on" : ""}`}
+                      onClick={() => changeLanguage(code)}
+                    >
+                      {code === "vi" ? "Tiếng Việt" : "English"}
+                    </button>
+                  ))}
+                </div>
                 <img className="ob-logo" src="/brand-mark.png" alt="" />
                 <h1>{T.welcomeTitle}</h1>
                 <p>{T.welcomeBody}</p>

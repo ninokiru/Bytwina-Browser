@@ -4,6 +4,7 @@ import { cmd, type TabInfo } from "./tabs";
 import { t, useLang, type Key } from "./i18n";
 import Settings from "./Settings";
 import ExtensionsPanel from "./ExtensionsPanel";
+import Scratchpad from "./Scratchpad";
 import {
   AlertIcon,
   BackupIcon,
@@ -63,7 +64,8 @@ export type PanelKind =
   | "notes"
   | "sessions"
   | "extensions"
-  | "menu";
+  | "menu"
+  | "scratch";
 
 interface DownloadItem {
   id: number;
@@ -82,6 +84,12 @@ export interface MenuActions {
   vertical: boolean;
   settingsPage: string;
   onNewTab: () => void;
+  /** Mở khung xem tệp cục bộ (Ctrl+O). */
+  onOpenFile: () => void;
+  /** Mở mã QR cho trang hiện tại (Ctrl+Shift+Q). */
+  onOpenQRCode: () => void;
+  /** Mở Color Picker (Ctrl+Shift+C). */
+  onOpenColorPicker: () => void;
   onBookmark: (url: string, title: string) => void;
   onZoom: (percent: number) => void;
   onVertical: (vertical: boolean) => void;
@@ -635,6 +643,10 @@ export default function Panel({
       body = <ExtensionsPanel />;
       break;
 
+    case "scratch":
+      body = <Scratchpad />;
+      break;
+
     case "menu":
       body = (
         <div className="menu-list">
@@ -643,6 +655,33 @@ export default function Panel({
             label={t("menu.newTab")}
             shortcut="Ctrl+T"
             onClick={() => menu?.onNewTab()}
+          />
+          <MenuItem
+            icon={<FileTextIcon />}
+            label={t("menu.openFile")}
+            shortcut="Ctrl+O"
+            onClick={() => {
+              menu?.onOpenFile();
+              onClose();
+            }}
+          />
+          <MenuItem
+            icon={<GridIcon />}
+            label={t("menu.qrCode")}
+            shortcut="Ctrl+Shift+Q"
+            onClick={() => {
+              menu?.onOpenQRCode();
+              onClose();
+            }}
+          />
+          <MenuItem
+            icon={<PaletteIcon />}
+            label={t("menu.colorPicker")}
+            shortcut="Ctrl+Shift+C"
+            onClick={() => {
+              menu?.onOpenColorPicker();
+              onClose();
+            }}
           />
           <button
             type="button"
@@ -875,6 +914,8 @@ function titleKey(kind: PanelKind): Key {
       return "title.sessions";
     case "extensions":
       return "title.extensions";
+    case "scratch":
+      return "title.scratch";
     case "menu":
       return "bar.menu";
     default:
@@ -902,6 +943,8 @@ function titleIcon(kind: PanelKind): ReactNode {
       return <LayersIcon />;
     case "extensions":
       return <PuzzleIcon />;
+    case "scratch":
+      return <FileTextIcon />;
     case "menu":
       return <MoreIcon />;
     default:

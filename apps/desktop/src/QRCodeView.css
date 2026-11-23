@@ -1,0 +1,127 @@
+/* QR Code View — hiện đại, bo góc, màu nhẹ */
+.qr-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 10, 16, 0.35);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.qr-panel {
+  width: 100%;
+  max-width: 380px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: qr-panel-in 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes qr-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.qr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface-2);
+}
+
+.qr-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qr-close {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+}
+.qr-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.qr-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px;
+  gap: 12px;
+}
+
+.qr-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.qr-url {
+  margin: 0;
+  max-width: 100%;
+  color: var(--faint);
+  font-size: 11px;
+  word-break: break-all;
+  text-align: center;
+}
+
+.qr-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  text-align: center;
+}
+
+.qr-foot {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--divider);
+}
+
+.qr-btn {
+  flex: 1;
+  height: 34px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.qr-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.qr-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

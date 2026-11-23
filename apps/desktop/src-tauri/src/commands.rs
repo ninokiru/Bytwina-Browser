@@ -1,5 +1,6 @@
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
+use reqwest::Client;
 // Cho `app.autolaunch()` (bật/tắt khởi động cùng Windows) — gọi phía Rust nên
 // không cần mục quyền trong capabilities, vốn chỉ gate lời gọi từ JS.
 use tauri_plugin_autostart::ManagerExt as _;
@@ -8,6 +9,7 @@ use crate::browser::{self, BrowserState};
 use crate::extensions;
 use crate::navigation::{self, PopupQueue, NEW_TAB_URL};
 use crate::terms;
+use dom_smoothie;
 /// Lệnh IPC duy nhất toolbar được gọi. Tham số đầu luôn là action string;
 /// mọi lệnh async để tránh deadlock WebView2 trên Windows (ADR-001).
 #[tauri::command]
@@ -127,6 +129,93 @@ pub async fn browser_command(
         "stop" => {
             browser::stop_active(&app, &state);
             Ok(Value::Null)
+        }
+        // Tìm trong trang (Ctrl+F): tìm và tô màu, cuộn đến kết quả.
+        "webview_find" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            let text = arg("text")?;
+            let forward: bool = arg("forward")?.parse().unwrap_or(true);
+            let case_sensitive: bool = arg("caseSensitive")?.parse().unwrap_or(false);
+            let highlight_all: bool = arg("highlightAll")?.parse().unwrap_or(true);
+            browser::webview_find(&app, &state, id, &text, forward, case_sensitive, highlight_all)?;
+            Ok(Value::Null)
+        }
+        "webview_find_count" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            let count = browser::webview_find_count(&app, &state, id)?;
+            Ok(serde_json::json!({ "count": count }))
+        }
+        "webview_find_next" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            let forward: bool = arg("forward")?.parse().unwrap_or(true);
+            browser::webview_find_next(&app, &state, id, forward)?;
+            Ok(Value::Null)
+        }
+        "webview_find_clear" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            browser::webview_find_clear(&app, &state, id)?;
+            Ok(Value::Null)
+        }
+        // In trang (Ctrl+P).
+        "webview_print" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            browser::webview_print(&app, &state, id)?;
+            Ok(Value::Null)
+        }
+        // Lưu trang dưới dạng HTML (Ctrl+S).
+        "webview_save" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            browser::webview_save(&app, &state, id)?;
+            Ok(Value::Null)
+        }
+        // Cửa sổ mới (Ctrl+N).
+        "new_window" => {
+            // Tạo tab mới trên cửa sổ hiện tại (cửa sổ hoàn toàn mới đòi hỏi Tauri WindowBuilder;
+            // giữ lại stub để UI không bị treo, CI sẽ verify khi có MSVC).
+            let _ = state.add_tab("about:blank".to_string());
+            Ok(Value::Null)
+        }
+        // Mở DevTools cho tab (F12 / Ctrl+Shift+I).
+        "webview_devtools" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            browser::webview_devtools(&app, &state, id)?;
+            Ok(Value::Null)
+        }
+        // Mở Console cho tab (Ctrl+Shift+J).
+        "webview_console" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            browser::webview_console(&app, &state, id)?;
+            Ok(Value::Null)
+        }
+        // Xem mã nguồn trang (Ctrl+U).
+        "webview_view_source" => {
+            let id = arg("id")?.parse::<u32>().map_err(|_| "id không hợp lệ")?;
+            browser::webview_view_source(&app, &state, id)?;
+            Ok(Value::Null)
+        }
+        // Chế độ đọc: fetch trang, trích xuất nội dung bài viết bằng dom_smoothie.
+        "reader_extract" => {
+            let url = arg("url")?;
+            let client = Client::builder()
+                .timeout(std::time::Duration::from_secs(15))
+                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Bytwina Reader/0.1")
+                .build()
+                .map_err(|e| format!("không tạo HTTP client: {e}"))?;
+            let response = client
+                .get(url)
+                .send()
+                .await
+                .map_err(|e| format!("không tải được trang: {e}"))?;
+            let html = response
+                .text()
+                .await
+                .map_err(|e| format!("không đọc được nội dung: {e}"))?;
+            let extracted = dom_smoothie::extract(&html)
+                .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
+            Ok(serde_json::json!({
+                "html": extracted.content_html,
+                "title": extracted.title.unwrap_or_default(),
+            }))
         }
         "popup_allow" => Err("popup_allow đã bỏ: popup luôn mở thành tab nền".into()),
         "popup_drain" => {
@@ -370,6 +459,33 @@ pub async fn browser_command(
             }
             Ok(Value::String(out))
         }),
+        // ===== Xem tệp cục bộ (Ctrl+O) =====
+        // Hộp thoại native chặn luồng nên đẩy sang luồng blocking của Tokio;
+        // chỉ tệp vừa chọn trong phiên này mới đọc được (allowlist).
+        "file_pick" => {
+            let picker = app.clone();
+            let task = tauri::async_runtime::spawn_blocking(move || crate::fileview::pick(&picker));
+            let picked = task.await.map_err(|e| e.to_string())??;
+            let Some(path) = picked else {
+                return Ok(Value::Null);
+            };
+            let access = app.state::<crate::fileview::FileAccess>();
+            let path = access.allow(&path)?;
+            crate::fileview::read(&path)
+        }
+        "file_read" => {
+            let path = arg("path")?;
+            let access = app.state::<crate::fileview::FileAccess>();
+            let path = access.check(std::path::Path::new(&path))?;
+            crate::fileview::read(&path)
+        }
+        "file_open_external" => {
+            let path = arg("path")?;
+            let access = app.state::<crate::fileview::FileAccess>();
+            let path = access.check(std::path::Path::new(&path))?;
+            tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+            Ok(Value::Null)
+        }
         // ===== Hệ tiện ích (v1) =====
         "ext_list" => with_db(&app, |db| {
             let rows = db.list_extensions()?;

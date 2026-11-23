@@ -35,6 +35,16 @@
 - **Giới hạn quan trọng:** content script chạy trong **main world** của trang. Bridge hiện đặt trên `window` và có `get(id)`; vì vậy các tiện ích khớp cùng trang không được cô lập đáng tin cậy, và mã trang có thể tương tác với bridge. Đây là tính năng preview, không nên dùng với tiện ích không tin cậy. Chưa có background script, popup hay options page kiểu Chrome; không có tiến trình chạy nền bền vững.
 - Việc bật/tắt/đổi quyền tải lại các tab đang mở để nạp lại script `document_start`; trạng thái trang (vị trí cuộn, form) sẽ mất.
 
+## Xem tệp cục bộ (Ctrl+O)
+
+- Khung xem tệp không dùng `file://` trong tab web và không tạo webview mới: nội dung do Rust đọc rồi trả qua IPC cho thanh công cụ.
+- Đường dẫn chỉ đến từ hộp thoại chọn tệp của hệ điều hành. Rust canonicalize đường dẫn, ghi vào allowlist của phiên chạy và kiểm tra lại allowlist trước mỗi lần đọc hoặc mở ngoài — JavaScript không thể tự đọc tệp tùy ý dù giao diện bị XSS.
+- Giới hạn dung lượng: ảnh 20 MB, văn bản/code 2 MB (cắt phần dư), PDF 25 MB. Tệp nhị phân bị nhận diện và không hiển thị dạng văn bản. SVG không nằm trong danh sách ảnh vì có thể chứa script.
+- Markdown được render bằng `pulldown-cmark` và làm sạch bằng `ammonia` phía Rust trước khi đưa vào DOM; không render Markdown thô ở JS.
+- Code được tô màu bằng Shiki và PDF được vẽ bằng pdf.js từ dữ liệu Rust trả về. Cả hai chạy cục bộ, không tải nội dung tệp lên mạng; worker pdf.js được phục vụ từ asset của chính ứng dụng.
+- CSP của giao diện app cho phép `worker-src 'self' blob:`, `'wasm-unsafe-eval'` (cho WebAssembly của pdf.js) và `blob:` cho ảnh/font/khung xem. Đây là thay đổi có chủ đích, không mở `file://`, `unsafe-eval` hay `*`.
+- Chưa kiểm chứng runtime Windows: hành vi hộp thoại native, lớp chữ của pdf.js, worker/WebAssembly dưới CSP và giới hạn bộ nhớ khi tệp lớn chưa được đo thực tế.
+
 ## Trạng thái các biện pháp bảo mật (M15)
 
 | Biện pháp | Trạng thái trong mã / mức xác minh |
@@ -47,3 +57,4 @@
 | Kết nối mạng | Có updater, tải danh sách lọc, tải favicon và tải nguồn tiện ích theo yêu cầu người dùng; xem `PRIVACY.md` |
 | Dữ liệu SQLite | Chưa mã hóa toàn bộ DB; các bảng ngoài vault vẫn có thể chứa dữ liệu chữ rõ |
 | Khóa tiện ích mặc định | Tắt mặc định; khi bật preview, bridge main-world chưa cô lập extension với nhau hoặc với trang |
+| Đọc tệp cục bộ | Chỉ đọc tệp đã chọn qua hộp thoại native và nằm trong allowlist phiên chạy; giới hạn dung lượng; chưa kiểm chứng runtime |

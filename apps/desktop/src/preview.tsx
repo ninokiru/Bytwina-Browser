@@ -5,12 +5,29 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles.css";
 
+// Mock @tauri-apps/api/event cho preview (trình duyệt thường).
+const eventListeners: Map<string, Set<(payload: unknown) => void>> = new Map();
+const mockListen = async <T,>(event: string, handler: (e: { payload: T }) => void) => {
+  if (!eventListeners.has(event)) eventListeners.set(event, new Set());
+  eventListeners.get(event)!.add(handler as (payload: unknown) => void);
+  return () => {
+    eventListeners.get(event)?.delete(handler as (payload: unknown) => void);
+  };
+};
+const mockEmit = (event: string, data: unknown) => {
+  eventListeners.get(event)?.forEach((h) => h(data));
+};
+
+// Gán mock vào global để App.tsx dùng được.
+(window as any).__TAURI_EVENT_MOCK__ = { listen: mockListen, emit: mockEmit };
+
 const theme = new URLSearchParams(location.search).get("theme") ?? "light";
 const params = new URLSearchParams(location.search);
 const panel = params.get("panel");
 const vertical = params.get("vertical") === "1";
 const split = params.get("split") === "1";
 const newtab = params.get("newtab") === "1";
+const onboarded = params.get("onboarded") === "1";
 
 const tabs = [
   {
@@ -111,7 +128,21 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
     if (args.key === "theme") return theme;
     if (args.key === "homeUrl") return "https://bytwina.dev/";
     if (args.key === "tabLayout") return vertical ? "vertical" : "horizontal";
+    if (args.key === "onboardingDone") return onboarded ? "1" : "0";
     return null;
+  },
+  // bytwina://... navigation: emit browser://page event for internal pages.
+  navigate: (args) => {
+    const input = String(args.input ?? "");
+    if (input.startsWith("bytwina://")) {
+      const page = input.split("://")[1].split(/[\/?#]/)[0].toLowerCase();
+      // Emit event to toolbar (simulated by setting panel state)
+      if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
+        (window as any).__TAURI_INTERNALS__.emit?.("browser://page", page);
+      }
+      return { internal: page };
+    }
+    return { url: input }; // real navigation would happen in Rust
   },
   state: () => state,
   popup_drain: () => ({ urls: [] }),
@@ -242,6 +273,63 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
       : null,
   note_set: () => null,
   note_delete: () => null,
+  // Xem tệp: trả mẫu theo tham số ?file=type để test các loại tệp.
+  file_pick: () => {
+    const type = params.get("file") ?? "code";
+    switch (type) {
+      case "json":
+        return {
+          kind: "text",
+          path: "C:/demo/data.json",
+          name: "data.json",
+          size: 212,
+          text: '{\n  "name": "Bytwina",\n  "version": "0.0.5",\n  "features": ["pdf", "code", "markdown", "image"],\n  "config": { "theme": "dark", "lang": "vi" }\n}',
+          truncated: false,
+          markdown: false,
+        };
+      case "markdown":
+        return {
+          kind: "text",
+          path: "C:/demo/readme.md",
+          name: "readme.md",
+          size: 345,
+          text: "# Bytwina Browser\n\n**Trình duyệt tối giản, riêng tư** cho người dùng Việt Nam.\n\n## Tính năng\n- Xem PDF (pdf.js)\n- Highlight code (Shiki)\n- Markdown reader\n- Image viewer\n\n> \"Đơn giản nhưng mạnh mẽ\"\n\n```ts\nconsole.log('Hello Bytwina');\n```",
+          truncated: false,
+          markdown: true,
+        };
+      case "pdf":
+        return {
+          kind: "pdf",
+          path: "C:/demo/sample.pdf",
+          name: "sample.pdf",
+          size: 102400,
+          mime: "application/pdf",
+          base64: "JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSPj4Kc3RyZWFtCkJUCi9GMSAxMiBUZgo1MCA3MDAgVGQKKFN0aWxsIGV4YW1wbGUpIFRqCkVUCmVuZHN0cmVhbQplbmRvYmoKMyAwIG9iago8PC9MZW5ndGggNDQ+PgpzdHJlYW0KZW5kc3RyZWFtCmVuZG9iago0IDAgb2JqCjw8L1R5cGUgL1BhZ2UvUGFyZW50IDUgMCBSL1Jlc291cmNlcyA2IDAgUi9NZWRpYUJveCBbMCAwIDYxMiA3OTJdPj4KZW5kb2JqCjUgMCBvYmoKPDwvVHlwZSAvUGFnZXMvS2lkcyBbNCAwIFJdL0NvdW50IDE+PgplbmRvYmoKNiAwIG9iago8PC9Gb250IDw8L0YxIDIgMCBSPj4+PgplbmRvYmoKeHJlZgowIDcKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDEwIDAwMDAwIG4gCjAwMDAwMDAwNzkgMDAwMDAgbiAKMDAwMDAwMDE3MyAwMDAwMCBuIAowMDAwMDAwMzAxIDAwMDAwIG4gCjAwMDAwMDAzODAgMDAwMDAgbiAKMDAwMDAwMDQ2MCAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNy9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjU1MgolJUVPRgo=",
+        };
+      case "image":
+        return {
+          kind: "image",
+          path: "C:/demo/photo.jpg",
+          name: "photo.jpg",
+          size: 512000,
+          mime: "image/jpeg",
+          dataUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPlRlc3QgSW1hZ2U8L3RleHQ+PC9zdmc+",
+        };
+      case "code":
+      default:
+        return {
+          kind: "text",
+          path: "C:/demo/hello.ts",
+          name: "hello.ts",
+          size: 84,
+          text: "export function hello(name: string) {\n  return `Xin chào, ${name}!`;\n}\n",
+          truncated: false,
+          markdown: false,
+        };
+    }
+  },
+  file_read: () => null,
+  file_open_external: () => null,
   note_render: (args) => {
     const text = String(args.content ?? "")
       .replace(/&/g, "&amp;")
@@ -277,6 +365,11 @@ const replies: Record<string, (args: Record<string, unknown>) => unknown> = {
       return replies[action]?.(args) ?? null;
     }
     return null;
+  },
+  // Giả lập event emit (browser://page, browser://permission, v.v.)
+  emit: (event: string, data: unknown) => {
+    const mock = (window as any).__TAURI_EVENT_MOCK__;
+    if (mock?.emit) mock.emit(event, data);
   },
 };
 

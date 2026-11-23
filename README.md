@@ -15,7 +15,7 @@
   <a href="LICENSE"><img alt="Giấy phép" src="https://img.shields.io/badge/gi%E1%BA%A5y%20ph%C3%A9p-MIT-blue"></a>
 </p>
 
-> **Bản thử nghiệm (0.0.5).** Đủ tính năng để dùng hằng ngày, nhưng chưa được kiểm thử tay đầy đủ trên mọi cấu hình Windows và chưa ký số — SmartScreen sẽ cảnh báo khi cài.
+> **Phiên bản 0.0.1.** Đủ tính năng để dùng hằng ngày, nhưng chưa được kiểm thử tay đầy đủ trên mọi cấu hình Windows và chưa ký số — SmartScreen sẽ cảnh báo khi cài.
 
 ## Tải và cài
 
@@ -25,66 +25,66 @@
 
 ## Hình ảnh
 
-| Trang tab mới | Đang duyệt |
+| 1. Trang tab mới | 2. Đang duyệt |
 |---|---|
 | ![Trang tab mới](docs/screenshots/new-tab.png) | ![Đang duyệt](docs/screenshots/browsing.png) |
 
-| Menu ⋮ | Cài đặt |
+| 3. Menu ⋮ | 4. Cài đặt |
 |---|---|
-| ![Menu](docs/screenshots/menu.png) | ![Cài đặt](docs/screenshots/settings.png) |
+| ![Menu ⋮](docs/screenshots/menu.png) | ![Cài đặt](docs/screenshots/settings.png) |
 
-| Tab dọc | Giao diện tối |
+| 5. Kho mật khẩu | 6. Giao diện tối |
 |---|---|
-| ![Tab dọc](docs/screenshots/vertical-tabs.png) | ![Giao diện tối](docs/screenshots/dark-mode.png) |
+| ![Kho mật khẩu](docs/screenshots/passwords.png) | ![Giao diện tối](docs/screenshots/dark-mode.png) |
 
-| Kho mật khẩu | |
+| 7. Tab dọc | 8. Xem tệp cục bộ |
 |---|---|
-| ![Kho mật khẩu](docs/screenshots/passwords.png) | |
+| ![Tab dọc](docs/screenshots/vertical-tabs.png) | ![Xem tệp cục bộ](docs/screenshots/file-viewer.png) |
 
 Ảnh do workflow `screenshots.yml` chụp tự động từ `preview.html` bằng đúng React/CSS của ứng dụng (xem [scripts/capture-screens.mjs](scripts/capture-screens.mjs)) — không phải mockup.
 
-## Chức năng
+## Chức năng chính
 
 **Duyệt web**
-- Đa tab với WebView2 thật (mỗi tab một webview, tab ngủ khi rảnh để tiết kiệm RAM).
-- Tab dọc/ngang, ghim tab, nhóm tab, chia màn hình (split view), tìm tab.
-- Thanh địa chỉ: nhận tên miền, `localhost:3000`, `host:port`; từ khóa còn lại đi qua công cụ tìm kiếm đã chọn (DuckDuckGo/Google).
-- Trang nội bộ `bytwina://settings`, `bytwina://history`… bắt ngay trong ô địa chỉ.
-- Popup `target=_blank` thành tab nền (tối đa 16 tab/lượt), chặn mở cửa sổ lạ.
+- Đa tab WebView2 thật, tab dọc/ngang, ghim tab, nhóm tab, chia màn hình (split view).
+- Thanh địa chỉ thông minh: nhận tên miền, `localhost:3000`, từ khóa tìm kiếm.
+- Trang nội bộ `bytwina://settings`, `bytwina://history`, `bytwina://downloads`…
 
-**Riêng tư và bảo mật**
-- Chế độ riêng tư dùng InPrivate thật của WebView2; không ghi lịch sử, không ghi phiên.
-- Chặn quảng cáo và tracker ở tầng request (adblock-rust) với EasyList, EasyPrivacy, uBlock filters, ABPvn; tắt theo từng trang bằng nút khiên.
-- Ẩn phần tử quảng cáo bằng CSS (lọc thẩm mỹ) sau khi trang tải xong.
-- Quyền trang web (camera, micro, thông báo, vị trí, clipboard, âm thanh tự phát) hỏi từng lần, lưu quyết định theo origin.
-- Kho mật khẩu mã hóa từng mục bằng AES-256-GCM; khóa suy ra với Argon2id (64 MiB, 3 vòng, 4 lanes), chỉ giữ trong RAM và tự khóa theo thời gian hoặc sau 30 giây mất focus.
-- Chặn trang `http://` không mã hóa (trừ localhost) — xem [ADR-011](docs/DECISIONS.md).
-- IPC chỉ nhận từ webview toolbar; trang web không gọi được lệnh của ứng dụng.
+**Xem tệp cục bộ (Ctrl+O)**
+- Hộp thoại native chọn tệp; Rust đọc và hiển thị trong khung riêng, không nạp `file://` vào tab.
+- Ảnh, văn bản/code, Markdown (Xem trước/Nguồn), PDF (pdf.js: phân trang, zoom, nền tối, chọn/copy chữ).
+- JSON tự định dạng, XML nút Định dạng/Nguồn.
 
-**Dữ liệu**
-- SQLite tại chỗ: lịch sử, dấu trang, danh sách đọc, tải xuống, cài đặt, phiên.
-- Khôi phục phiên sau khi thoát (chế độ "mở lại trang đã dùng").
-- Sao lưu/khôi phục CSDL (`VACUUM INTO`, áp dụng ở lần khởi động sau); xóa dữ liệu theo khoảng thời gian.
-- Tải xuống có tiến trình, mở thư mục chứa file.
+**Công cụ nhanh**
+- **Ctrl+F** tìm trong trang; **Ctrl+P** in; **Ctrl+S** lưu HTML.
+- **Ctrl+Shift+Q** mã QR trang hiện tại; **Ctrl+Shift+C** lấy màu từ trang; **Ctrl+Shift+R** chế độ đọc.
+- **Ctrl+Shift+B** hiển thị/ẩn thanh dấu trang.
+
+**Riêng tư & bảo mật**
+- Chế độ riêng tư InPrivate; chặn quảng cáo/tracker (EasyList, uBlock, ABPvn).
+- Kho mật khẩu mã hóa AES-256-GCM (khóa từ Argon2id).
+- Chặn `http://` không mã hóa (trừlocalhost); quyền trang hỏi từng lần.
 
 **Giao diện**
-- Sáng/tối/theo hệ thống, chọn ngôn ngữ Việt/Anh.
-- Cài đặt kiểu master–detail như Cốc Cốc, có ô tìm kiếm trong trang cài đặt.
-- Menu ⋮ có cột phím tắt, hàng thu phóng, hồ sơ khách.
-- Khởi động cùng Windows, mở "Ứng dụng mặc định" của Windows, đặt lại cài đặt.
-- Tự cập nhật từ GitHub Releases (có chữ ký) — bật bằng menu ⋮ → "Cập nhật Bytwina".
+- Sáng/tối/theo hệ thống, ngôn ngữ Việt/Anh.
+- Trang tab mới: Blank / Dashboard / Focus.
+- Thanh dấu trang, cài đặt kiểu master-detail.
 
-**Phím tắt** (khi tiêu điểm ở thanh công cụ)
+**Phím tắt** (tiêu điểm ở thanh công cụ)
 
 | Phím | Việc |
 |---|---|
 | Ctrl+T / Ctrl+L / Ctrl+R | Tab mới / chọn ô địa chỉ / tải lại |
-| Ctrl+Shift+N | Bật/tắt chế độ riêng tư |
+| Ctrl+Shift+N | Chế độ riêng tư |
 | Ctrl+H / Ctrl+J / Ctrl+Shift+O | Lịch sử / tải xuống / dấu trang |
-| Ctrl+D | Đánh dấu trang này |
-| Ctrl+Shift+Delete | Mở phần xóa dữ liệu |
-| Ctrl+Tab | Tab tiếp theo (Shift: lùi) |
-| Alt+← / Alt+→ | Lùi / tiến |
+| Ctrl+O | Mở tệp trên máy |
+| Ctrl+F / F3 / Shift+F3 | Tìm trong trang |
+| Ctrl+P / Ctrl+S | In trang / lưu HTML |
+| Ctrl+Shift+Q / C / R / B / D | Mã QR / màu / đọc / dấu trang / đánh dấu tất cả tab |
+| Ctrl+\\ | Chia màn hình |
+| F12 / Ctrl+Shift+I | DevTools |
+| Ctrl+U | Xem mã nguồn |
+| Ctrl+Shift+F | Chế độ tập trung |
 | Ctrl+Q | Thoát |
 
 ## Kỹ thuật và thư viện
@@ -125,10 +125,10 @@ Dữ liệu lưu ở đâu và app kết nối tới đâu: [docs/PRIVACY.md](do
 
 ## Chưa có (nói thẳng)
 
-- Reader Mode và in/xuất PDF: chưa làm.
 - Tự động điền mật khẩu từ kho: mới có kho, chưa bắt form đăng nhập.
 - Nhiều hồ sơ người dùng tách biệt: chưa.
 - Luật chặn phần tử **chung** (`.advert` không kèm tên miền) hiện chưa khớp; luật theo tên miền (`site##.advert`) vẫn chạy. Xem [docs/ROADMAP.md](docs/ROADMAP.md).
+- Chưa ký số code signing; chưa có bản Linux/macOS.
 - Chưa ký số code signing; chưa có bản Linux/macOS.
 
 ## Build từ mã nguồn

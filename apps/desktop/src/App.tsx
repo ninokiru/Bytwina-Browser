@@ -9,10 +9,18 @@ import UpdateWelcome from "./UpdateWelcome";
 import { TERMS_SECTIONS } from "./terms";
 import { setLang, t, useLang, type Lang } from "./i18n";
 import { applyAccent, applyMotion, applyRadius, applyTheme } from "./theme";
-import { evaluateArithmetic } from "./calc";
+import "./Polish.css";
+import { evaluateWithUnits } from "./calc";
 import { FaviconImg } from "./favicon";
 import CommandPalette, { type PaletteAction } from "./CommandPalette";
 import ShortcutHelp from "./ShortcutHelp";
+import FileViewer from "./FileViewer";
+import QRCodeView from "./QRCodeView";
+import DownloadOverlay from "./DownloadOverlay";
+import ColorPicker from "./ColorPicker";
+import FindBar from "./FindBar";
+import BookmarksBar from "./BookmarksBar";
+import ReaderView from "./ReaderView";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -99,6 +107,15 @@ export default function App() {
   // Bảng lệnh Ctrl+K.
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
+  const [viewer, setViewer] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [newTabLayout, setNewTabLayout] = useState<"blank" | "dashboard" | "focus">("dashboard");
+  const [colorPicker, setColorPicker] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [showBookmarksBar, setShowBookmarksBar] = useState(true);
+  const [readerOpen, setReaderOpen] = useState(false);
+  const [readerUrl, setReaderUrl] = useState("");
+  const [readerTitle, setReaderTitle] = useState("");
   const [startupUpdateVisible, setStartupUpdateVisible] = useState(false);
 
   useEffect(() => {
@@ -131,6 +148,11 @@ export default function App() {
       .then((v) => setOnboarded(v === "1"))
       // Không đọc được CSDL thì bỏ qua onboarding thay vì chặn người dùng.
       .catch(() => setOnboarded(true));
+    void cmd("settings_get", { key: "newTabLayout" })
+      .then((v) => {
+        if (v === "blank" || v === "dashboard" || v === "focus") setNewTabLayout(v);
+      })
+      .catch(() => undefined);
     loadZoom();
   }, []);
 
@@ -210,7 +232,10 @@ export default function App() {
       setSuggestions([]);
       return;
     }
-    setCalcResult(evaluateArithmetic(val));
+    void (async () => {
+      const result = await evaluateWithUnits(val);
+      if (editing && input.trim() === val) setCalcResult(result);
+    })();
     // Chuỗi trông như URL thì không cần gợi ý tìm kiếm.
     if (val.length < 2 || /^[a-z][a-z0-9+.-]*:\/\//i.test(val)) {
       setSuggestions([]);
@@ -455,14 +480,117 @@ export default function App() {
         e.preventDefault();
         if (active) void cmd("navigate", { id: String(active.id), input: home });
       }
+      // Ctrl+O: xem tệp trên máy (ảnh, văn bản/code, Markdown, PDF)
+      else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        setViewer(true);
+      }
+      // Ctrl+Shift+Q: mã QR cho trang hiện tại
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "q") {
+        e.preventDefault();
+        if (active?.url) setQrUrl(active.url);
+      }
+      // Ctrl+Shift+C: Color Picker
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        setColorPicker(true);
+      }
+      // Ctrl+F: Tìm trong trang
+      else if (mod && e.key.toLowerCase() === "f" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (active) {
+          setFindOpen(true);
+        }
+      }
+      // Ctrl+Shift+R: Chế độ đọc (Reader Mode)
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (active && /^https?:/i.test(active.url)) {
+          setReaderUrl(active.url);
+          setReaderTitle(active.title || active.url);
+          setReaderOpen(true);
+        }
+      }
+      // Ctrl+P: In trang hiện tại
+      else if (mod && e.key.toLowerCase() === "p" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (active) void cmd("webview_print", { id: String(active.id) }).catch(() => undefined);
+      }
+      // Ctrl+S: Lưu trang hiện tại dưới dạng HTML
+      else if (mod && e.key.toLowerCase() === "s" && !e.shiftKey && !e.altKey && !editing) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (active) void cmd("webview_save", { id: String(active.id) }).catch(() => undefined);
+      }
+      // Ctrl+N: Cửa sổ mới
+      else if (mod && e.key.toLowerCase() === "n" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        void cmd("new_window").catch(() => undefined);
+      }
+      // Ctrl+Shift+B: Hiện/ẩn thanh dấu trang
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowBookmarksBar((v) => !v);
+      }
+      // F3: Tìm kết quả tiếp theo trong trang
+      else if (!mod && e.key === "F3") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (findOpen && active) void cmd("webview_find_next", { id: String(active.id), forward: true }).catch(() => undefined);
+      }
+      // Shift+F3: Tìm kết quả trước đó trong trang
+      else if (!mod && e.shiftKey && e.key === "F3") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (findOpen && active) void cmd("webview_find_next", { id: String(active.id), forward: false }).catch(() => undefined);
+      }
+      // Ctrl+Shift+D: Đánh dấu tất cả tab đang mở
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        e.stopPropagation();
+        void bookmarkAllTabs();
+      }
+      // F12 / Ctrl+Shift+I: Mở DevTools
+      else if (e.key === "F12" || (mod && e.shiftKey && e.key.toLowerCase() === "i")) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (active) void cmd("webview_devtools", { id: String(active.id) }).catch(() => undefined);
+      }
+      // Ctrl+Shift+J: Mở Console
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (active) void cmd("webview_console", { id: String(active.id) }).catch(() => undefined);
+      }
+      // Ctrl+U: Xem mã nguồn trang
+      else if (mod && e.key.toLowerCase() === "u" && !e.shiftKey && !e.altKey && !editing) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (active) void cmd("webview_view_source", { id: String(active.id) }).catch(() => undefined);
+      }
+      // Ctrl+\\: Chia màn hình (toggle split với tab hiện tại)
+      else if (mod && e.key === "\\") {
+        e.preventDefault();
+        if (active) void cmd("split_set", { id: state.splitTab ? "" : String(active.id) });
+      }
       // F1 hoặc Ctrl+/: Bảng phím tắt
       else if (e.key === "F1" || (mod && e.key === "/")) {
         e.preventDefault();
         setHelp((v) => !v);
       }
-      // Escape: Đóng bảng phím tắt, panel, hoặc dừng tải
+      // Escape: Đóng bảng phím tắt, panel, QR, Color Picker, FindBar, Reader, hoặc dừng tải
       else if (e.key === "Escape") {
         if (help) setHelp(false);
+        else if (viewer) setViewer(false);
+        else if (qrUrl) setQrUrl(null);
+        else if (colorPicker) setColorPicker(false);
+        else if (findOpen) setFindOpen(false);
+        else if (readerOpen) setReaderOpen(false);
         else if (panel) setPanel(null);
         else void cmd("stop");
       }
@@ -472,7 +600,7 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", onKey, { capture: true });
     };
-  }, [state, panel, active, home, zoom, help]);
+  }, [state, panel, active, home, zoom, help, viewer]);
 
   // Phím tắt bắt từ trang nội dung (Rust chuyển qua browser://key): phát lại như keydown
   // của chính thanh công cụ để mọi nhánh ở trên xử lý giống nhau.
@@ -512,7 +640,7 @@ export default function App() {
 
   // Bảng nổi và trang tab mới nằm trong webview thanh công cụ: mở chúng thì nới
   // webview này phủ toàn cửa sổ và ẩn webview nội dung, đóng thì trả bố cục cũ.
-  const overlay = panel != null || showNewTab || palette || help || startupUpdateVisible;
+  const overlay = panel != null || showNewTab || palette || help || viewer || qrUrl || colorPicker || findOpen || readerOpen || startupUpdateVisible;
   useEffect(() => {
     void cmd("panel_open", { on: overlay ? "1" : "0" }).catch(() => undefined);
     // Bảng mở thì focus phải nằm ở thanh công cụ (webview nội dung đã bị ẩn), để Esc đóng được bảng.
@@ -628,6 +756,18 @@ export default function App() {
     void cmd("bookmark_add", { title: active.title || active.url, url: active.url, folder: "" })
       .then(() => setStarred(true))
       .catch(() => setStarred(false));
+  };
+
+  // Đánh dấu tất cả tab đang mở (Ctrl+Shift+D).
+  const bookmarkAllTabs = async () => {
+    for (const tb of state.tabs) {
+      if (!tb.url || tb.url === "about:blank" || tb.url === "") continue;
+      try {
+        await cmd("bookmark_add", { title: tb.title || tb.url, url: tb.url, folder: "" });
+      } catch {
+        // Bỏ qua lỗi (ví dụ dấu trang đã có) rồi tiếp tục tab tiếp theo.
+      }
+    }
   };
 
   const closedRef = useRef<string[]>([]);
@@ -1047,6 +1187,11 @@ export default function App() {
           {active?.loading && <span className="omni-spinner" />}
         </div>
 
+        {/* Thanh dấu trang ngay dưới ô địa chỉ (Ctrl+Shift+B để ẩn/hiện). */}
+        {showBookmarksBar && !showNewTab && panel == null && active && (
+          <BookmarksBar onNavigate={(url) => void cmd("navigate", { id: String(active.id), input: url }).catch(() => undefined)} />
+        )}
+
         <label className="group-field" title={t("bar.group")}>
           <TagIcon />
           <input
@@ -1104,6 +1249,7 @@ export default function App() {
             if (active) void cmd("navigate", { id: String(active.id), input: value });
           }}
           onOpenSettings={() => setPanel("settings")}
+          layout={newTabLayout}
         />
       )}
 
@@ -1128,6 +1274,9 @@ export default function App() {
             vertical: state.vertical,
             settingsPage,
             onNewTab: newTab,
+            onOpenFile: () => setViewer(true),
+            onOpenQRCode: () => active?.url && setQrUrl(active.url),
+            onOpenColorPicker: () => setColorPicker(true),
             onBookmark: bookmarkCurrent,
             onZoom: applyZoom,
             onVertical: (vertical) =>
@@ -1179,6 +1328,9 @@ export default function App() {
               vertical: state.vertical,
               settingsPage,
               onNewTab: newTab,
+              onOpenFile: () => setViewer(true),
+              onOpenQRCode: () => active?.url && setQrUrl(active.url),
+              onOpenColorPicker: () => setColorPicker(true),
               onBookmark: bookmarkCurrent,
               onZoom: applyZoom,
               onVertical: (vertical) =>
@@ -1206,6 +1358,20 @@ export default function App() {
         </div>
       ) : null}
 
+      {viewer && <FileViewer onClose={() => setViewer(false)} />}
+      {qrUrl && <QRCodeView url={qrUrl} onClose={() => setQrUrl(null)} />}
+      {colorPicker && <ColorPicker onClose={() => setColorPicker(false)} />}
+      {findOpen && active && (
+        <FindBar tabId={active.id} onClose={() => setFindOpen(false)} />
+      )}
+      {readerOpen && (
+        <ReaderView
+          url={readerUrl}
+          title={readerTitle}
+          onClose={() => setReaderOpen(false)}
+        />
+      )}
+      <DownloadOverlay />
       <ShortcutHelp open={help} onClose={() => setHelp(false)} />
       <CommandPalette
         open={palette}

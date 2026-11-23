@@ -1,0 +1,121 @@
+/* Tìm trong trang (Ctrl+F) — hiện đại, bo tròn, nổi lên */
+.findbar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: 13px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  animation: findbar-in 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes findbar-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.findbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.find-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.find-input::placeholder {
+  color: var(--faint);
+}
+.find-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.find-case {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.find-case input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.find-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.find-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.find-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+}
+.find-btn.find-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 0;
+}
+.find-btn.find-close:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.find-status {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 44px;
+  text-align: right;
+}
+.find-error {
+  color: var(--danger);
+  font-size: 11px;
+  margin-left: 6px;
+}

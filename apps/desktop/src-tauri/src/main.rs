@@ -14,6 +14,7 @@ mod cosmetic;
 mod db;
 mod diagnostics;
 mod extensions;
+mod fileview;
 mod filters;
 mod navigation;
 mod matcher;
@@ -54,6 +55,8 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .manage(BrowserState::new())
         .manage(PopupQueue::default())
+        // Xem tệp: chỉ đọc những đường dẫn người dùng đã chọn trong phiên này.
+        .manage(fileview::FileAccess::default())
         // M11: khóa kho mật khẩu chỉ nằm trong bộ nhớ phiên chạy.
         .manage(passwords::PasswordVault::default())
         // MacosLauncher bắt buộc trong chữ ký nhưng bị bỏ qua trên Windows.

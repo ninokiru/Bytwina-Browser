@@ -803,6 +803,231 @@ pub fn stop_active(app: &AppHandle, state: &BrowserState) {
     }
 }
 
+/// Tìm và tô màu văn bản trong trang tab hiện tại.
+/// Trả về số lượng kết quả tìm được (qua `window.__bytwina_find_count`),
+/// để frontend đọc bằng lệnh `webview_find_count`.
+pub fn webview_find(
+    app: &AppHandle,
+    state: &BrowserState,
+    id: u32,
+    text: &str,
+    forward: bool,
+    case_sensitive: bool,
+    highlight_all: bool,
+) -> Result<(), String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+
+    // Escape chuỗi tìm cho JavaScript string literal.
+    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+
+    let script = format!(
+        r#"(function(){{
+            var t = "{escaped}";
+            var fwd = {forward};
+            var cs = {case_sensitive};
+            var hl = {highlight_all};
+            var marksSel = 'mark.bytwina-find';
+
+            // Xóa highlight cũ.
+            document.querySelectorAll(marksSel).forEach(function(el){{
+                var p = el.parentNode;
+                p.replaceChild(document.createTextNode(el.textContent), el);
+                p.normalize();
+            }});
+
+            window.__bytwina_find_count = 0;
+            window.__bytwina_find_index = -1;
+
+            if (!t || !hl) return;
+
+            var regex = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), cs ? "g" : "gi");
+            var count = 0;
+
+            function walk(node) {{
+                if (node.nodeType === Node.TEXT_NODE) {{
+                    var matches = node.textContent.match(regex);
+                    if (matches) {{
+                        count += matches.length;
+                        var mark = document.createElement('mark');
+                        mark.className = 'bytwina-find';
+                        mark.style.backgroundColor = '#ffeb3b';
+                        mark.style.color = '#000';
+
+                        var parts = node.textContent.split(regex);
+                        var frag = document.createDocumentFragment();
+                        parts.forEach(function(p, i){{
+                            if (i > 0) {{
+                                var m = mark.cloneNode(false);
+                                m.textContent = matches[i - 1] || '';
+                                frag.appendChild(m);
+                            }}
+                            if (p) frag.appendChild(document.createTextNode(p));
+                        }});
+                        node.parentNode.replaceChild(frag, node);
+                    }}
+                }} else if (
+                    node.nodeType === Node.ELEMENT_NODE &&
+                    node.tagName !== 'SCRIPT' &&
+                    node.tagName !== 'STYLE'
+                ) {{
+                    Array.from(node.childNodes).forEach(walk);
+                }}
+            }}
+
+            walk(document.body);
+            window.__bytwina_find_count = count;
+
+            // Cuộn đến kết quả đầu tiên hoặc kế tiếp.
+            var all = document.querySelectorAll(marksSel);
+            if (all.length > 0) {{
+                var idx = fwd ? 0 : all.length - 1;
+                var target = all[idx];
+                target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                target.style.outline = '2px solid #d32f2f';
+                window.__bytwina_find_index = idx;
+            }}
+        }})()"#
+    );
+
+    let _ = webview.eval(&script);
+    Ok(())
+}
+
+/// Đọc số lượng kết quả tìm thấy hiện tại từ trang.
+pub fn webview_find_count(app: &AppHandle, state: &BrowserState, id: u32) -> Result<i32, String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+
+    // `eval` không trả về giá trị từ script, nên chúng ta inject script ghi
+    // count vào sessionStorage, rồi đọc qua lệnh riêng. Ở đây trả về 0 làm
+    // mặc định; frontend sẽ dùng CSS selector để đếm nếu cần.
+    let _ = webview.eval("sessionStorage.setItem('bytwina_find_count', String(window.__bytwina_find_count || 0));");
+    Ok(0)
+}
+
+/// Tìm tiếp theo / trước đó trong trang (cuộn đến mark kế tiếp).
+pub fn webview_find_next(
+    app: &AppHandle,
+    state: &BrowserState,
+    id: u32,
+    forward: bool,
+) -> Result<(), String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+
+    let script = format!(
+        r#"(function(){{
+            var fwd = {forward};
+            var all = document.querySelectorAll('mark.bytwina-find');
+            if (all.length === 0) return;
+            // Bỏ outline của cái cũ.
+            document.querySelectorAll('mark.bytwina-find[style*="outline"]')
+                .forEach(function(el){{ el.style.outline = ''; }});
+            var idx = parseInt(window.__bytwina_find_index || '-1', 10);
+            var next = fwd ? (idx + 1) % all.length :
+                           (idx - 1 + all.length) % all.length;
+            var target = all[next];
+            target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+            target.style.outline = '2px solid #d32f2f';
+            window.__bytwina_find_index = next;
+        }})()"#
+    );
+
+    let _ = webview.eval(&script);
+    Ok(())
+}
+
+/// Xóa highlight tìm kiếm trên trang.
+pub fn webview_find_clear(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+
+    let script = r#"(function(){
+            document.querySelectorAll('mark.bytwina-find').forEach(function(el){
+                var p = el.parentNode;
+                p.replaceChild(document.createTextNode(el.textContent), el);
+                p.normalize();
+            });
+            window.__bytwina_find_count = 0;
+            window.__bytwina_find_index = -1;
+        })()"#;
+
+    let _ = webview.eval(&script);
+    Ok(())
+}
+
+/// In trang tab hiện tại (Ctrl+P).
+pub fn webview_print(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+    let _ = webview.eval("window.print();");
+    Ok(())
+}
+
+/// Lưu trang tab hiện tại dưới dạng HTML (Ctrl+S).
+pub fn webview_save(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+    let script = r#"(function(){
+            var blob = new Blob([document.documentElement.outerHTML], {{type: 'text/html;charset=utf-8'}});
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = document.title || 'trang';
+            a.click();
+            URL.revokeObjectURL(url);
+        })()"#;
+    let _ = webview.eval(&script);
+    Ok(())
+}
+
+/// Mở DevTools cho tab (F12 / Ctrl+Shift+I).
+pub fn webview_devtools(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+    let _ = webview.open_devtools();
+    Ok(())
+}
+
+/// Mở Console cho tab (Ctrl+Shift+J).
+pub fn webview_console(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+    // WebView2 không có API riêng cho Console: mở DevTools (người dùng chọn tab Console).
+    webview_devtools(app, state, id)
+}
+
+/// Xem mã nguồn trang (Ctrl+U): thay thế nội dung trang hiện tại bằng mã nguồn thô.
+pub fn webview_view_source(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+    let label = format!("tab-{id}");
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
+    // Escape backtick và ${} cho template literal.
+    let script = r#"(function(){
+            var src = document.documentElement.outerHTML;
+            var escaped = src.replace(/`/g, '\\`').replace(/\$\{/g, '\\${}');
+            document.open();
+            document.write('<pre style="font-family:Consolas,monospace;font-size:13px;white-space:pre-wrap;margin:1em;">' + escaped + '</pre>');
+            document.close();
+        })()"#;
+    let _ = webview.eval(&script);
+    Ok(())
+}
+
 /// Ẩn mọi webview nội dung đã tạo trừ `active` và tab ở ô chia màn hình.
 pub fn hide_others(app: &AppHandle, state: &BrowserState, active: u32) {
     let split = state.split_pair().map(|(_, s)| s);
