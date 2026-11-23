@@ -22,8 +22,6 @@
     "createUpdaterArtifacts": false,
     "windows": {
       "nsis": {
-        "headerImage": "windows/header.bmp",
-        "sidebarImage": "windows/sidebar.bmp",
         "installerHooks": "windows/hooks.nsh"
       }
     }
