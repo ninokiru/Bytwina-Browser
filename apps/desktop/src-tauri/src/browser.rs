@@ -812,7 +812,7 @@ pub fn stop_active(app: &AppHandle, state: &BrowserState) {
 /// để frontend đọc bằng lệnh `webview_find_count`.
 pub fn webview_find(
     app: &AppHandle,
-    state: &BrowserState,
+    _state: &BrowserState,
     id: u32,
     text: &str,
     forward: bool,
@@ -904,7 +904,7 @@ pub fn webview_find(
 }
 
 /// Đọc số lượng kết quả tìm thấy hiện tại từ trang.
-pub fn webview_find_count(app: &AppHandle, state: &BrowserState, id: u32) -> Result<i32, String> {
+pub fn webview_find_count(app: &AppHandle, _state: &BrowserState, id: u32) -> Result<i32, String> {
     let label = format!("tab-{id}");
     let webview = app
         .get_webview(&label)
@@ -922,7 +922,7 @@ pub fn webview_find_count(app: &AppHandle, state: &BrowserState, id: u32) -> Res
 /// Tìm tiếp theo / trước đó trong trang (cuộn đến mark kế tiếp).
 pub fn webview_find_next(
     app: &AppHandle,
-    state: &BrowserState,
+    _state: &BrowserState,
     id: u32,
     forward: bool,
 ) -> Result<(), String> {
@@ -954,7 +954,7 @@ pub fn webview_find_next(
 }
 
 /// Xóa highlight tìm kiếm trên trang.
-pub fn webview_find_clear(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+pub fn webview_find_clear(app: &AppHandle, _state: &BrowserState, id: u32) -> Result<(), String> {
     let label = format!("tab-{id}");
     let webview = app
         .get_webview(&label)
@@ -975,7 +975,7 @@ pub fn webview_find_clear(app: &AppHandle, state: &BrowserState, id: u32) -> Res
 }
 
 /// In trang tab hiện tại (Ctrl+P).
-pub fn webview_print(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+pub fn webview_print(app: &AppHandle, _state: &BrowserState, id: u32) -> Result<(), String> {
     let label = format!("tab-{id}");
     let webview = app
         .get_webview(&label)
@@ -985,7 +985,7 @@ pub fn webview_print(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(
 }
 
 /// Lưu trang tab hiện tại dưới dạng HTML (Ctrl+S).
-pub fn webview_save(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+pub fn webview_save(app: &AppHandle, _state: &BrowserState, id: u32) -> Result<(), String> {
     let label = format!("tab-{id}");
     let webview = app
         .get_webview(&label)
@@ -1020,7 +1020,7 @@ pub fn webview_console(app: &AppHandle, state: &BrowserState, id: u32) -> Result
 }
 
 /// Xem mã nguồn trang (Ctrl+U): thay thế nội dung trang hiện tại bằng mã nguồn thô.
-pub fn webview_view_source(app: &AppHandle, state: &BrowserState, id: u32) -> Result<(), String> {
+pub fn webview_view_source(app: &AppHandle, _state: &BrowserState, id: u32) -> Result<(), String> {
     let label = format!("tab-{id}");
     let webview = app
         .get_webview(&label)

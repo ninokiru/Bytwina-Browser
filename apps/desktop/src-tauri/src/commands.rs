@@ -203,11 +203,7 @@ pub async fn browser_command(
         // Chế độ đọc: fetch trang, trích xuất nội dung bài viết bằng dom_smoothie.
         "reader_extract" => {
             let url = arg("url")?;
-            let agent = ureq::AgentBuilder::new()
-                .timeout_build(std::time::Duration::from_secs(15))
-                .build();
-            let response = agent
-                .get(url)
+            let response = ureq::get(url)
                 .set(
                     "User-Agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Bytwina Reader/0.1",
@@ -217,11 +213,14 @@ pub async fn browser_command(
             let html = response
                 .into_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
-            let extracted = dom_smoothie::readability::extract(&html)
+            let readability = dom_smoothie::Readability::new(html, Some(url.as_str()), None)
+                .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
+            let article = readability
+                .parse()
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
             Ok(serde_json::json!({
-                "html": extracted.content_html,
-                "title": extracted.title.unwrap_or_default(),
+                "html": article.content.into_string(),
+                "title": article.title,
             }))
         }
         "popup_allow" => Err("popup_allow đã bỏ: popup luôn mở thành tab nền".into()),
