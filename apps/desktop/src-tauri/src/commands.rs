@@ -1,6 +1,5 @@
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
-use reqwest::Client;
 // Cho `app.autolaunch()` (bật/tắt khởi động cùng Windows) — gọi phía Rust nên
 // không cần mục quyền trong capabilities, vốn chỉ gate lời gọi từ JS.
 use tauri_plugin_autostart::ManagerExt as _;
@@ -137,7 +136,15 @@ pub async fn browser_command(
             let forward: bool = arg("forward")?.parse().unwrap_or(true);
             let case_sensitive: bool = arg("caseSensitive")?.parse().unwrap_or(false);
             let highlight_all: bool = arg("highlightAll")?.parse().unwrap_or(true);
-            browser::webview_find(&app, &state, id, &text, forward, case_sensitive, highlight_all)?;
+            browser::webview_find(
+                &app,
+                &state,
+                id,
+                &text,
+                forward,
+                case_sensitive,
+                highlight_all,
+            )?;
             Ok(Value::Null)
         }
         "webview_find_count" => {
@@ -196,19 +203,16 @@ pub async fn browser_command(
         // Chế độ đọc: fetch trang, trích xuất nội dung bài viết bằng dom_smoothie.
         "reader_extract" => {
             let url = arg("url")?;
-            let client = Client::builder()
+            let response = ureq::get(url)
                 .timeout(std::time::Duration::from_secs(15))
-                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Bytwina Reader/0.1")
-                .build()
-                .map_err(|e| format!("không tạo HTTP client: {e}"))?;
-            let response = client
-                .get(url)
-                .send()
-                .await
+                .set(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Bytwina Reader/0.1",
+                )
+                .call()
                 .map_err(|e| format!("không tải được trang: {e}"))?;
             let html = response
-                .text()
-                .await
+                .into_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
             let extracted = dom_smoothie::extract(&html)
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
@@ -267,7 +271,9 @@ pub async fn browser_command(
                         if let Ok(json) = serde_json::from_str::<Value>(&content) {
                             if let Some(roots) = json.get("roots").and_then(|r| r.as_object()) {
                                 fn extract_bm(node: &Value, list: &mut Vec<(String, String)>) {
-                                    if let Some(children) = node.get("children").and_then(|c| c.as_array()) {
+                                    if let Some(children) =
+                                        node.get("children").and_then(|c| c.as_array())
+                                    {
                                         for child in children {
                                             extract_bm(child, list);
                                         }
@@ -275,7 +281,8 @@ pub async fn browser_command(
                                         node.get("name").and_then(|n| n.as_str()),
                                         node.get("url").and_then(|u| u.as_str()),
                                     ) {
-                                        if url.starts_with("http://") || url.starts_with("https://") {
+                                        if url.starts_with("http://") || url.starts_with("https://")
+                                        {
                                             list.push((name.to_string(), url.to_string()));
                                         }
                                     }
@@ -297,7 +304,7 @@ pub async fn browser_command(
                 }
             }
             Ok(serde_json::json!({ "imported": count }))
-        },
+        }
         "history_search" => with_db(&app, |db| {
             let q = args
                 .as_ref()
@@ -336,23 +343,23 @@ pub async fn browser_command(
             }
             with_db(&app, |db| {
                 let snap = state.snapshot();
-            let active_index = snap
-                .active_tab
-                .and_then(|a| snap.tabs.iter().position(|t| t.id == a))
-                .map(|p| p as i64)
-                .unwrap_or(-1);
-            let tabs = snap
-                .tabs
-                .iter()
-                .map(|t| crate::db::SessionTab {
-                    url: t.url.clone(),
-                    title: t.title.clone(),
-                    pinned: t.pinned,
-                    group: t.group.clone(),
-                })
-                .collect::<Vec<_>>();
-            db.save_session(&tabs, active_index)?;
-            Ok(())
+                let active_index = snap
+                    .active_tab
+                    .and_then(|a| snap.tabs.iter().position(|t| t.id == a))
+                    .map(|p| p as i64)
+                    .unwrap_or(-1);
+                let tabs = snap
+                    .tabs
+                    .iter()
+                    .map(|t| crate::db::SessionTab {
+                        url: t.url.clone(),
+                        title: t.title.clone(),
+                        pinned: t.pinned,
+                        group: t.group.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                db.save_session(&tabs, active_index)?;
+                Ok(())
             })
         }
         "session_load" => with_db(&app, |db| db.load_session()),
@@ -386,7 +393,8 @@ pub async fn browser_command(
             let mapped = list
                 .into_iter()
                 .map(|(name, json, created_at)| {
-                    let tabs: Vec<crate::db::SessionTab> = serde_json::from_str(&json).unwrap_or_default();
+                    let tabs: Vec<crate::db::SessionTab> =
+                        serde_json::from_str(&json).unwrap_or_default();
                     serde_json::json!({
                         "name": name,
                         "tabCount": tabs.len(),
@@ -405,8 +413,11 @@ pub async fn browser_command(
                     .map(|(_, j, _)| j)
                     .ok_or_else(|| "không tìm thấy phiên lưu".to_string())
             })?;
-            let tabs_str = tabs_json.as_str().ok_or_else(|| "dữ liệu không hợp lệ".to_string())?;
-            let tabs: Vec<crate::db::SessionTab> = serde_json::from_str(tabs_str).map_err(|e| e.to_string())?;
+            let tabs_str = tabs_json
+                .as_str()
+                .ok_or_else(|| "dữ liệu không hợp lệ".to_string())?;
+            let tabs: Vec<crate::db::SessionTab> =
+                serde_json::from_str(tabs_str).map_err(|e| e.to_string())?;
             // Mở lại các tab trong phiên
             for t in tabs {
                 let id = state.add_tab(t.url);
@@ -443,10 +454,7 @@ pub async fn browser_command(
         // tránh hai bộ lọc lệch nhau.
         "note_render" => {
             let content = arg("content")?;
-            let parser = pulldown_cmark::Parser::new_ext(
-                &content,
-                pulldown_cmark::Options::all(),
-            );
+            let parser = pulldown_cmark::Parser::new_ext(&content, pulldown_cmark::Options::all());
             let mut html = String::new();
             pulldown_cmark::html::push_html(&mut html, parser);
             Ok(Value::String(ammonia::clean(&html)))
@@ -529,9 +537,11 @@ pub async fn browser_command(
             let logs = db
                 .extension_logs(&id, limit)?
                 .into_iter()
-                .map(|(level, message, created_at)| serde_json::json!({
-                    "level": level, "message": message, "createdAt": created_at
-                }))
+                .map(|(level, message, created_at)| {
+                    serde_json::json!({
+                        "level": level, "message": message, "createdAt": created_at
+                    })
+                })
                 .collect();
             Ok(Value::Array(logs))
         }),
@@ -546,7 +556,10 @@ pub async fn browser_command(
             let installed = db_handle(&app)?.get_extension(&id)?.is_some();
             if let Some(obj) = info.as_object_mut() {
                 obj.insert("installed".into(), Value::Bool(installed));
-                obj.insert("capabilities".into(), serde_json::json!(extensions::CAPABILITIES));
+                obj.insert(
+                    "capabilities".into(),
+                    serde_json::json!(extensions::CAPABILITIES),
+                );
                 obj.insert(
                     "defaultCapabilities".into(),
                     serde_json::json!(extensions::DEFAULT_CAPABILITIES),
@@ -568,7 +581,10 @@ pub async fn browser_command(
             let installed = db_handle(&app)?.get_extension(&id)?.is_some();
             if let Some(obj) = info.as_object_mut() {
                 obj.insert("installed".into(), Value::Bool(installed));
-                obj.insert("capabilities".into(), serde_json::json!(extensions::CAPABILITIES));
+                obj.insert(
+                    "capabilities".into(),
+                    serde_json::json!(extensions::CAPABILITIES),
+                );
                 obj.insert(
                     "defaultCapabilities".into(),
                     serde_json::json!(extensions::DEFAULT_CAPABILITIES),
@@ -578,10 +594,22 @@ pub async fn browser_command(
         }
         "ext_test" => {
             let name = arg("name")?;
-            let version = args.as_ref().and_then(|a| a.get("version")).and_then(|v| v.as_str()).unwrap_or("1.0.0");
+            let version = args
+                .as_ref()
+                .and_then(|a| a.get("version"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("1.0.0");
             let pattern = arg("match_pattern")?;
-            let js = args.as_ref().and_then(|a| a.get("js")).and_then(|v| v.as_str()).unwrap_or("");
-            let css = args.as_ref().and_then(|a| a.get("css")).and_then(|v| v.as_str()).unwrap_or("");
+            let js = args
+                .as_ref()
+                .and_then(|a| a.get("js"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let css = args
+                .as_ref()
+                .and_then(|a| a.get("css"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let manifest = serde_json::json!({
                 "manifest_version": 1, "name": name, "version": version,
                 "content_scripts": [{ "matches": [pattern],
@@ -593,14 +621,29 @@ pub async fn browser_command(
         }
         "ext_add" => {
             let name = arg("name")?;
-            let version = args.as_ref().and_then(|a| a.get("version")).and_then(|v| v.as_str()).unwrap_or("1.0.0");
+            let version = args
+                .as_ref()
+                .and_then(|a| a.get("version"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("1.0.0");
             let match_pattern = arg("match_pattern")?;
-            let js = args.as_ref().and_then(|a| a.get("js")).and_then(|v| v.as_str()).unwrap_or("");
-            let css = args.as_ref().and_then(|a| a.get("css")).and_then(|v| v.as_str()).unwrap_or("");
+            let js = args
+                .as_ref()
+                .and_then(|a| a.get("js"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let css = args
+                .as_ref()
+                .and_then(|a| a.get("css"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if js.trim().is_empty() && css.trim().is_empty() {
                 return Err("cần nhập JavaScript hoặc CSS".into());
             }
-            let temp = std::env::temp_dir().join(format!("bytwina-ext-editor-{}", uuid::Uuid::new_v4().simple()));
+            let temp = std::env::temp_dir().join(format!(
+                "bytwina-ext-editor-{}",
+                uuid::Uuid::new_v4().simple()
+            ));
             std::fs::create_dir_all(&temp).map_err(|e| e.to_string())?;
             let result = (|| {
                 let manifest = serde_json::json!({
@@ -614,15 +657,25 @@ pub async fn browser_command(
                         "run_at": "document_end"
                     }]
                 });
-                std::fs::write(temp.join("manifest.json"), serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-                if !js.trim().is_empty() { std::fs::write(temp.join("content.js"), js).map_err(|e| e.to_string())?; }
-                if !css.trim().is_empty() { std::fs::write(temp.join("content.css"), css).map_err(|e| e.to_string())?; }
+                std::fs::write(
+                    temp.join("manifest.json"),
+                    serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
+                )
+                .map_err(|e| e.to_string())?;
+                if !js.trim().is_empty() {
+                    std::fs::write(temp.join("content.js"), js).map_err(|e| e.to_string())?;
+                }
+                if !css.trim().is_empty() {
+                    std::fs::write(temp.join("content.css"), css).map_err(|e| e.to_string())?;
+                }
                 let dir = extensions_dir(&app)?;
                 let db = db_handle(&app)?;
                 let outcome = extensions::install_source(&db, &temp, &dir, &[], None, false)?;
                 reload_extensions(&app, &db);
                 extensions::apply_to_tabs(&app, &state);
-                Ok::<_, String>(serde_json::json!({"id": outcome.id, "name": outcome.name, "version": outcome.version, "active": false}))
+                Ok::<_, String>(
+                    serde_json::json!({"id": outcome.id, "name": outcome.name, "version": outcome.version, "active": false}),
+                )
             })();
             let _ = std::fs::remove_dir_all(&temp);
             result
@@ -650,7 +703,14 @@ pub async fn browser_command(
                 .unwrap_or(false);
             let dir = extensions_dir(&app)?;
             let db = db_handle(&app)?;
-            let outcome = extensions::install_source(&db, std::path::Path::new(&path), &dir, &grants, expected_sha256, allow_unsafe)?;
+            let outcome = extensions::install_source(
+                &db,
+                std::path::Path::new(&path),
+                &dir,
+                &grants,
+                expected_sha256,
+                allow_unsafe,
+            )?;
             reload_extensions(&app, &db);
             extensions::apply_to_tabs(&app, &state);
             Ok(serde_json::json!({
@@ -666,7 +726,11 @@ pub async fn browser_command(
                 .as_ref()
                 .and_then(|a| a.get("grants"))
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
                 .unwrap_or_default();
             let expected_sha256 = args
                 .as_ref()
@@ -680,7 +744,14 @@ pub async fn browser_command(
             let downloaded = extensions::download_source(&url)?;
             let dir = extensions_dir(&app)?;
             let db = db_handle(&app)?;
-            let result = extensions::install_source(&db, &downloaded, &dir, &grants, expected_sha256, allow_unsafe);
+            let result = extensions::install_source(
+                &db,
+                &downloaded,
+                &dir,
+                &grants,
+                expected_sha256,
+                allow_unsafe,
+            );
             let _ = std::fs::remove_file(&downloaded);
             let outcome = result?;
             reload_extensions(&app, &db);
@@ -696,9 +767,11 @@ pub async fn browser_command(
             let id = arg("id")?;
             let dest = std::path::PathBuf::from(arg("path")?);
             let db = db_handle(&app)?;
-            tauri::async_runtime::spawn_blocking(move || extensions::export_source(&db, &id, &dest))
-                .await
-                .map_err(|e| e.to_string())??;
+            tauri::async_runtime::spawn_blocking(move || {
+                extensions::export_source(&db, &id, &dest)
+            })
+            .await
+            .map_err(|e| e.to_string())??;
             Ok(Value::Null)
         }
         "ext_toggle" => {
@@ -849,7 +922,9 @@ pub async fn browser_command(
         }
         // F11: bật/tắt toàn màn hình cho cửa sổ chính.
         "fullscreen_toggle" => {
-            let window = app.get_window("main").ok_or("không tìm thấy cửa sổ chính")?;
+            let window = app
+                .get_window("main")
+                .ok_or("không tìm thấy cửa sổ chính")?;
             let on = window.is_fullscreen().map_err(|e| e.to_string())?;
             window.set_fullscreen(!on).map_err(|e| e.to_string())?;
             Ok(Value::Null)
@@ -1026,20 +1101,14 @@ pub async fn browser_command(
         // Dựng lại engine tốn giây nên chạy ngoài luồng UI.
         // Tải danh sách + dựng lại engine: tốn giây nên chạy ngoài luồng UI.
         "adblock_update" => {
-            let handle = app
-                .state::<crate::filters::BlockerHandle>()
-                .0
-                .clone();
+            let handle = app.state::<crate::filters::BlockerHandle>().0.clone();
             let downloaded = tauri::async_runtime::spawn_blocking(move || handle.update())
                 .await
                 .map_err(|e| e.to_string())??;
             Ok(serde_json::json!({ "downloaded": downloaded }))
         }
         "adblock_reload" => {
-            let handle = app
-                .state::<crate::filters::BlockerHandle>()
-                .0
-                .clone();
+            let handle = app.state::<crate::filters::BlockerHandle>().0.clone();
             let lists = tauri::async_runtime::spawn_blocking(move || handle.reload())
                 .await
                 .map_err(|e| e.to_string())??;
@@ -1048,14 +1117,18 @@ pub async fn browser_command(
         "adblock_custom_get" => {
             let dir = app.state::<crate::filters::BlockerHandle>().0.status().dir;
             let path = std::path::PathBuf::from(dir).join("custom.txt");
-            Ok(Value::String(std::fs::read_to_string(path).unwrap_or_default()))
+            Ok(Value::String(
+                std::fs::read_to_string(path).unwrap_or_default(),
+            ))
         }
         "adblock_custom_set" => {
             let rules = arg("rules")?;
             if rules.len() > 2 * 1024 * 1024 {
                 return Err("custom rules quá lớn (tối đa 2 MB)".into());
             }
-            let dir = std::path::PathBuf::from(app.state::<crate::filters::BlockerHandle>().0.status().dir);
+            let dir = std::path::PathBuf::from(
+                app.state::<crate::filters::BlockerHandle>().0.status().dir,
+            );
             std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             let path = dir.join("custom.txt");
             let tmp = dir.join("custom.txt.part");
@@ -1205,11 +1278,11 @@ pub async fn browser_command(
             let check = db
                 .get_setting("vaultCheck")?
                 .ok_or_else(|| "kho mật khẩu chưa được thiết lập".to_string())?;
-            let key = crate::passwords::derive_key(
-                master.as_str(),
-                &crate::passwords::decode(&salt)?,
-            )?;
-            if let Err(error) = crate::passwords::verify_check(&key, &crate::passwords::decode(&check)?) {
+            let key =
+                crate::passwords::derive_key(master.as_str(), &crate::passwords::decode(&salt)?)?;
+            if let Err(error) =
+                crate::passwords::verify_check(&key, &crate::passwords::decode(&check)?)
+            {
                 vault.record_unlock_failure();
                 return Err(error);
             }
@@ -1222,7 +1295,9 @@ pub async fn browser_command(
             Ok(Value::Null)
         }
         "password_autolock" => {
-            let minutes: u64 = arg("minutes")?.parse().map_err(|_| "số phút không hợp lệ")?;
+            let minutes: u64 = arg("minutes")?
+                .parse()
+                .map_err(|_| "số phút không hợp lệ")?;
             if minutes > 1440 {
                 return Err("thời gian tự khóa tối đa 1440 phút".into());
             }
@@ -1235,19 +1310,20 @@ pub async fn browser_command(
         "password_add" => with_vault(&app, |key, db| {
             let field = |k: &str| optional_arg(&args, k);
             let blob = secret_blob(key, &field("password"), &field("note"))?;
-            let id = db.add_password(
-                &field("title"),
-                &field("url"),
-                &field("username"),
-                &blob,
-            )?;
+            let id = db.add_password(&field("title"), &field("url"), &field("username"), &blob)?;
             Ok(serde_json::json!({ "id": id }))
         }),
         "password_update" => with_vault(&app, |key, db| {
             let id = arg("id")?.parse::<i64>().map_err(|_| "id không hợp lệ")?;
             let field = |k: &str| optional_arg(&args, k);
             let blob = secret_blob(key, &field("password"), &field("note"))?;
-            db.update_password(id, &field("title"), &field("url"), &field("username"), &blob)?;
+            db.update_password(
+                id,
+                &field("title"),
+                &field("url"),
+                &field("username"),
+                &blob,
+            )?;
             Ok(Value::Null)
         }),
         // Xóa/sửa mục vẫn phải hỏi khóa: khóa là bằng chứng "kho đang mở", không
@@ -1284,9 +1360,10 @@ pub async fn browser_command(
                 .ok_or("lưu trữ chưa khả dụng")?;
             let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
             // VACUUM đọc toàn bộ CSDL: chạy ở luồng nền để không đứng chắn UI.
-            let info = tauri::async_runtime::spawn_blocking(move || crate::backup::create(&db, &dir))
-                .await
-                .map_err(|e| e.to_string())??;
+            let info =
+                tauri::async_runtime::spawn_blocking(move || crate::backup::create(&db, &dir))
+                    .await
+                    .map_err(|e| e.to_string())??;
             to_json(info)
         }
         "backup_list" => {
@@ -1347,8 +1424,7 @@ fn with_vault<R>(
 ) -> Result<R, String> {
     let db = db_handle(app)?;
     let timeout = vault_timeout(&db);
-    app
-        .state::<crate::passwords::PasswordVault>()
+    app.state::<crate::passwords::PasswordVault>()
         .with_key(timeout, |key| f(key, &db))
 }
 
@@ -1442,12 +1518,7 @@ fn answer_permission(_app: &AppHandle, _id: u64, _allowed: bool) -> Result<(), S
 }
 
 /// Ghi lựa chọn vào bảng nhớ trong bộ nhớ rồi xuống CSDL.
-fn persist_rule(
-    app: &AppHandle,
-    origin: &str,
-    kind: &str,
-    allowed: bool,
-) -> Result<Value, String> {
+fn persist_rule(app: &AppHandle, origin: &str, kind: &str, allowed: bool) -> Result<Value, String> {
     let origin = checked_origin(origin)?;
     let key = crate::permissions::Kind::from_key(kind)
         .ok_or("loại quyền không biết")?

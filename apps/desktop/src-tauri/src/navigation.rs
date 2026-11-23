@@ -27,7 +27,11 @@ pub fn internal_page(input: &str) -> Option<Internal> {
     if !scheme.eq_ignore_ascii_case("bytwina") {
         return None;
     }
-    let name = rest.split(['/', '?', '#']).next().unwrap_or_default().to_ascii_lowercase();
+    let name = rest
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let page = match name.as_str() {
         "settings" => "settings",
         "history" => "history",
@@ -202,12 +206,21 @@ mod tests {
     fn app_origin_never_reaches_a_tab() {
         let app_page = "https://tauri.localhost/index.html";
         // Ô địa chỉ: coi như tìm kiếm, không điều hướng.
-        assert_eq!(to_url(app_page), format!("{SEARCH_ENGINE}{}", urlencode(app_page)));
+        assert_eq!(
+            to_url(app_page),
+            format!("{SEARCH_ENGINE}{}", urlencode(app_page))
+        );
         assert!(!page_navigation_allowed(&Url::parse(app_page).unwrap()));
-        assert!(!page_navigation_allowed(&Url::parse("http://ipc.localhost/").unwrap()));
+        assert!(!page_navigation_allowed(
+            &Url::parse("http://ipc.localhost/").unwrap()
+        ));
         // Trang thường và cổng phát triển vẫn đi qua.
-        assert!(page_navigation_allowed(&Url::parse("https://news.example/").unwrap()));
-        assert!(page_navigation_allowed(&Url::parse("http://localhost:3000/").unwrap()));
+        assert!(page_navigation_allowed(
+            &Url::parse("https://news.example/").unwrap()
+        ));
+        assert!(page_navigation_allowed(
+            &Url::parse("http://localhost:3000/").unwrap()
+        ));
     }
 
     #[test]

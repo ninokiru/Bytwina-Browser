@@ -629,7 +629,11 @@ fn is_shortcut_url(url: &Url) -> bool {
 /// Đọc payload phím từ URL giả và gửi cho toolbar, rồi chuyển focus về toolbar để
 /// App.tsx nhận keydown như bình thường.
 fn forward_shortcut(app: &AppHandle, url: &Url) {
-    let Some(raw) = url.query_pairs().find(|(k, _)| k == "d").map(|(_, v)| v.into_owned()) else {
+    let Some(raw) = url
+        .query_pairs()
+        .find(|(k, _)| k == "d")
+        .map(|(_, v)| v.into_owned())
+    else {
         return;
     };
     if raw.len() > 400 {
@@ -821,7 +825,10 @@ pub fn webview_find(
         .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
 
     // Escape chuỗi tìm cho JavaScript string literal.
-    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
 
     let script = format!(
         r#"(function(){{
@@ -906,7 +913,9 @@ pub fn webview_find_count(app: &AppHandle, state: &BrowserState, id: u32) -> Res
     // `eval` không trả về giá trị từ script, nên chúng ta inject script ghi
     // count vào sessionStorage, rồi đọc qua lệnh riêng. Ở đây trả về 0 làm
     // mặc định; frontend sẽ dùng CSS selector để đếm nếu cần.
-    let _ = webview.eval("sessionStorage.setItem('bytwina_find_count', String(window.__bytwina_find_count || 0));");
+    let _ = webview.eval(
+        "sessionStorage.setItem('bytwina_find_count', String(window.__bytwina_find_count || 0));",
+    );
     Ok(0)
 }
 
