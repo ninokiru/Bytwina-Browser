@@ -8,7 +8,6 @@ use crate::browser::{self, BrowserState};
 use crate::extensions;
 use crate::navigation::{self, PopupQueue, NEW_TAB_URL};
 use crate::terms;
-use dom_smoothie;
 /// Lệnh IPC duy nhất toolbar được gọi. Tham số đầu luôn là action string;
 /// mọi lệnh async để tránh deadlock WebView2 trên Windows (ADR-001).
 #[tauri::command]
@@ -207,7 +206,7 @@ pub async fn browser_command(
                 .call()
                 .map_err(|e| format!("không tải được trang: {e}"))?;
             let html = response
-                .to_string()
+                .into_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
             let readability = dom_smoothie::Readability::new(html, Some(url.as_str()), None)
                 .map_err(|e| format!("không trích xuất nội dung: {e}"))?;
