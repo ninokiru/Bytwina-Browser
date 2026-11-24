@@ -62,18 +62,13 @@ uuid = "1"
 mime_guess = "2"
 # Tìm kiếm toàn văn (engine kiểu Lucene) cho lịch sử và ghi chú.
 tantivy = "0.27"
-# Tìm mờ kiểu fzf (gõ "fce" ra "facebook").
-fuzzy-matcher = "0.3"
 # HTTP client có hỗ trợ tải tiếp (resume); bên cạnh ureq đang dùng cho danh sách lọc.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
-# Xử lý async song song.
-futures = "0.3"
 # Giải nén gzip/deflate và zstd.
 flate2 = "1"
 zstd = "0.14"
 # Xử lý ảnh, đổi kích thước favicon, đọc .ico và WebP.
 image = "0.25"
-ico = "0.5"
 webp = "0.3"
 # Crypto tổng hợp và hash SHA-2.
 ring = "0.17"
@@ -98,13 +93,11 @@ tauri-plugin-process = "2.3"
 dom_smoothie = "0.18"
 scraper = "0.29"
 html5ever = "0.40"
-comrak = "1"
 lopdf = "0.46"
 printpdf = "0.12"
 
 # ===== Tiện ích hệ thống =====
 dirs = "7"
-directories = "6"
 notify = "8"
 arboard = "3"
 chrono = "0.4"

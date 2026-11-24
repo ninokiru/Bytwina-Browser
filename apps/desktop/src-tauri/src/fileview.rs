@@ -12,7 +12,9 @@
 //!   chưa đọc được (cần thư viện ngoài); UI chỉ mời mở bằng ứng dụng khác.
 //! - Chưa kiểm chứng runtime Windows cho module này.
 
-use lopdf::{Document, Object, ObjectId};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine as _;
+use lopdf::{Document, Object};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -373,85 +375,73 @@ fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
     String::from_utf16_lossy(&units)
 }
 
+/// Helper: lấy string từ Object (lopdf 0.46)
+fn obj_to_string(obj: &Object) -> Option<String> {
+    match obj {
+        Object::String(bytes, _) => Some(String::from_utf8_lossy(bytes).to_string()),
+        Object::Name(name) => Some(String::from_utf8_lossy(name).to_string()),
+        _ => None,
+    }
+}
+
+/// Helper: lấy i64 từ Object
+fn obj_to_i64(obj: &Object) -> Option<i64> {
+    match obj {
+        Object::Integer(i) => Some(*i),
+        Object::Real(f) => Some(*f as i64),
+        _ => None,
+    }
+}
+
 /// Trích xuất các trường form (AcroForm) từ PDF.
 /// Trả về JSON: { fields: [{ name, type, value, options?, required? }] }
 pub fn pdf_get_form_fields(path: &Path) -> Result<Value, String> {
     let doc = Document::load(path).map_err(|e| format!("không tải được PDF: {e}"))?;
     let mut fields = Vec::new();
 
-    // Kiểm tra AcroForm
-    if let Ok(trailer) = doc.trailer {
-        if let Ok(root_ref) = trailer.get(b"Root") {
-            if let Ok(root_obj) = doc.get_object(root_ref) {
-                if let Ok(root_dict) = root_obj.as_dict() {
-                    if let Ok(acroform_ref) = root_dict.get(b"AcroForm") {
-                        if let Ok(acroform_obj) = doc.get_object(acroform_ref) {
-                            if let Ok(acroform_dict) = acroform_obj.as_dict() {
-                                if let Ok(fields_ref) = acroform_dict.get(b"Fields") {
-                                    if let Ok(fields_array) = fields_ref.as_array() {
-                                        for field_ref in fields_array {
-                                            if let Ok(field_obj) = doc.get_object(field_ref) {
-                                                if let Ok(field_dict) = field_obj.as_dict() {
-                                                    let name = field_dict
-                                                        .get(b"T")
-                                                        .and_then(|o| o.as_string().ok())
-                                                        .map(|s| String::from_utf8_lossy(&s).to_string())
-                                                        .unwrap_or_default();
-                                                    let field_type = field_dict
-                                                        .get(b"FT")
-                                                        .and_then(|o| o.as_name().ok())
-                                                        .map(|s| String::from_utf8_lossy(&s).to_string())
-                                                        .unwrap_or_default();
-                                                    let value = field_dict
-                                                        .get(b"V")
-                                                        .and_then(|o| o.as_string().ok())
-                                                        .map(|s| String::from_utf8_lossy(&s).to_string())
-                                                        .unwrap_or_default();
-                                                    let default_value = field_dict
-                                                        .get(b"DV")
-                                                        .and_then(|o| o.as_string().ok())
-                                                        .map(|s| String::from_utf8_lossy(&s).to_string())
-                                                        .unwrap_or_default();
-                                                    let required = field_dict
-                                                        .get(b"Ff")
-                                                        .and_then(|o| o.as_i64().ok())
-                                                        .map(|f| (f & 2) != 0)
-                                                        .unwrap_or(false);
+    // Kiểm tra AcroForm trong trailer
+    let trailer = doc.trailer();
+    let root_ref = trailer.get(b"Root").ok()?;
+    let root_obj = doc.get_object(root_ref).ok()?;
+    let root_dict = root_obj.as_dict().ok()?;
+    let acroform_ref = root_dict.get(b"AcroForm").ok()?;
+    let acroform_obj = doc.get_object(acroform_ref).ok()?;
+    let acroform_dict = acroform_obj.as_dict().ok()?;
+    let fields_ref = acroform_dict.get(b"Fields").ok()?;
+    let fields_array = fields_ref.as_array().ok()?;
 
-                                                    let mut options = Vec::new();
-                                                    if field_type == "Ch" {
-                                                        if let Ok(opt_ref) = field_dict.get(b"Opt") {
-                                                            if let Ok(opt_array) = opt_ref.as_array() {
-                                                                for opt in opt_array {
-                                                                    if let Ok(opt_obj) = doc.get_object(opt) {
-                                                                        if let Ok(s) = opt_obj.as_string() {
-                                                                            options.push(String::from_utf8_lossy(&s).to_string());
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
+    for field_ref in fields_array {
+        let field_obj = doc.get_object(field_ref).ok()?;
+        let field_dict = field_obj.as_dict().ok()?;
 
-                                                    fields.push(json!({
-                                                        "name": name,
-                                                        "type": field_type,
-                                                        "value": value,
-                                                        "defaultValue": default_value,
-                                                        "required": required,
-                                                        "options": options,
-                                                    }));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+        let name = field_dict.get(b"T").and_then(obj_to_string).unwrap_or_default();
+        let field_type = field_dict.get(b"FT").and_then(obj_to_string).unwrap_or_default();
+        let value = field_dict.get(b"V").and_then(obj_to_string).unwrap_or_default();
+        let default_value = field_dict.get(b"DV").and_then(obj_to_string).unwrap_or_default();
+        let required = field_dict.get(b"Ff").and_then(obj_to_i64).map(|f| (f & 2) != 0).unwrap_or(false);
+
+        let mut options = Vec::new();
+        if field_type == "Ch" {
+            if let Ok(opt_ref) = field_dict.get(b"Opt") {
+                if let Ok(opt_array) = opt_ref.as_array() {
+                    for opt in opt_array {
+                        let opt_obj = doc.get_object(opt).ok()?;
+                        if let Some(s) = obj_to_string(opt_obj) {
+                            options.push(s);
                         }
                     }
                 }
             }
         }
+
+        fields.push(json!({
+            "name": name,
+            "type": field_type,
+            "value": value,
+            "defaultValue": default_value,
+            "required": required,
+            "options": options,
+        }));
     }
 
     Ok(json!({ "fields": fields }))
@@ -465,16 +455,12 @@ pub fn pdf_fill_form(path: &Path, fields_json: &str) -> Result<Value, String> {
         .map_err(|e| format!("fields JSON không hợp lệ: {e}"))?;
 
     // Tìm AcroForm trong trailer
-    let trailer = doc.trailer.clone();
+    let trailer = doc.trailer();
     let root_ref = trailer.get(b"Root").map_err(|e| format!("không tìm thấy Root: {e}"))?;
-    let root_obj = doc.get_object(root_ref).map_err(|e| format!("không lấy được Root obj: {e}"))?;
-    let root_dict = root_obj.as_dict().map_err(|e| format!("Root không phải dict: {e}"))?;
+    let root_obj = doc.get_object_mut(root_ref).map_err(|e| format!("không lấy được Root obj: {e}"))?;
+    let root_dict = root_obj.as_dict_mut().map_err(|e| format!("Root không phải dict: {e}"))?;
 
-    let acroform_ref = root_dict.get(b"AcroForm").ok();
-    if acroform_ref.is_none() {
-        return Err("PDF không có AcroForm".into());
-    }
-    let acroform_ref = acroform_ref.unwrap();
+    let acroform_ref = root_dict.get(b"AcroForm").ok_or("PDF không có AcroForm")?;
     let acroform_obj = doc.get_object_mut(acroform_ref).map_err(|e| format!("không lấy được AcroForm: {e}"))?;
     let acroform_dict = acroform_obj.as_dict_mut().map_err(|e| format!("AcroForm không phải dict: {e}"))?;
 
@@ -486,12 +472,9 @@ pub fn pdf_fill_form(path: &Path, fields_json: &str) -> Result<Value, String> {
     for field_ref in fields_array.iter() {
         if let Ok(field_obj) = doc.get_object_mut(field_ref) {
             if let Ok(field_dict) = field_obj.as_dict_mut() {
-                if let Ok(name_obj) = field_dict.get(b"T") {
-                    if let Ok(name_str) = name_obj.as_string() {
-                        let name = String::from_utf8_lossy(&name_str).to_string();
-                        if let Some(value) = fields.get(&name) {
-                            field_dict.set(b"V", Object::string_literal(value));
-                        }
+                if let Some(name) = field_dict.get(b"T").and_then(obj_to_string) {
+                    if let Some(value) = fields.get(&name) {
+                        field_dict.set(b"V", Object::string_literal(value));
                     }
                 }
             }
@@ -506,8 +489,6 @@ pub fn pdf_fill_form(path: &Path, fields_json: &str) -> Result<Value, String> {
     doc.save(&mut buf).map_err(|e| format!("không lưu được PDF: {e}"))?;
 
     // Trả về base64
-    use base64::engine::general_purpose::STANDARD;
-    use base64::Engine as _;
     Ok(json!({
         "base64": STANDARD.encode(&buf),
         "size": buf.len(),
