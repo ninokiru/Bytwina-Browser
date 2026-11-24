@@ -711,6 +711,14 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
                 navigation::handle_new_window(queue, url)
             }
         });
+    // Chống fingerprint: init script được WebView2 chạy lại ở mỗi lần điều hướng,
+    // khác với eval một lần chỉ có tác dụng trên trang about:blank.
+    if app
+        .try_state::<crate::fingerprint::FingerprintState>()
+        .is_some_and(|fp| fp.inner().is_enabled())
+    {
+        builder = builder.initialization_script(crate::fingerprint::script());
+    }
     // Workspace riêng: cookie/đăng nhập lưu ở thư mục riêng (chưa kiểm chứng trên Windows).
     if let Some(dir) = workspace_dir(app) {
         builder = builder.data_directory(dir);
@@ -753,12 +761,6 @@ pub fn ensure_webview(app: &AppHandle, state: &BrowserState, id: u32) {
             crate::extensions::webview2::attach(&wv, app.clone());
             // Phóng to theo cài đặt đã lưu (áp dụng cho webview mới tạo).
             let _ = wv.set_zoom(zoom_factor(app));
-            // Chống fingerprint: inject script vào webview tab nếu bật.
-            if let Some(fp) = app.try_state::<crate::fingerprint::FingerprintState>() {
-                if fp.is_enabled() {
-                    let _ = crate::fingerprint::inject(&app, &label);
-                }
-            }
         }
         Err(e) => log::error!("không tạo được webview {label}: {e}"),
     }

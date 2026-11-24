@@ -685,8 +685,14 @@ export default function Settings({
                 type="checkbox"
                 checked={fingerprintEnabled}
                 onChange={(e) => {
-                  setFingerprintEnabled(e.target.checked);
-                  void cmd("fingerprint_toggle").catch(() => undefined);
+                  const want = e.target.checked;
+                  setFingerprintEnabled(want);
+                  void cmd("fingerprint_toggle")
+                    .then((v) => {
+                      const r = (v ?? {}) as { enabled?: boolean };
+                      if (typeof r.enabled === "boolean") setFingerprintEnabled(r.enabled);
+                    })
+                    .catch(() => setFingerprintEnabled(!want));
                 }}
               />
             </label>

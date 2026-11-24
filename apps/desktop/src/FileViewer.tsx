@@ -257,7 +257,9 @@ export default function FileViewer({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {loaded?.kind === "pdf" && <PdfView base64={loaded.base64} name={loaded.name} />}
+          {loaded?.kind === "pdf" && (
+            <PdfView base64={loaded.base64} name={loaded.name} path={loaded.path} />
+          )}
 
           {loaded?.kind === "text" && (
             <>

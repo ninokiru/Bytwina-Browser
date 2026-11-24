@@ -59,7 +59,15 @@ async function downloadBase64Pdf(base64: string, name: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function PdfView({ base64, name }: { base64: string; name: string }) {
+export default function PdfView({
+  base64,
+  name,
+  path,
+}: {
+  base64: string;
+  name: string;
+  path: string;
+}) {
   const en = getLang() === "en";
   const [doc, setDoc] = useState<any>(null);
   const [pdfjsModule, setPdfjsModule] = useState<any>(null);
@@ -132,7 +140,7 @@ export default function PdfView({ base64, name }: { base64: string; name: string
         );
       });
     // Load form fields từ Rust
-    void cmd("pdf_get_form_fields", { path: name })
+    void cmd("pdf_get_form_fields", { path })
       .then((result) => {
         if (!alive) return;
         const r = (result ?? {}) as { fields?: FormField[] };
@@ -154,7 +162,7 @@ export default function PdfView({ base64, name }: { base64: string; name: string
       void task.destroy();
       URL.revokeObjectURL(url);
     };
-  }, [base64, en, name]);
+  }, [base64, en, path]);
 
   // Vừa khung: tính lại tỉ lệ theo bề rộng vùng xem.
   useEffect(() => {
@@ -275,7 +283,7 @@ export default function PdfView({ base64, name }: { base64: string; name: string
     setFilling(true);
     try {
       const result = await cmd("pdf_fill_form", {
-        path: name,
+        path,
         fields: JSON.stringify(formValues),
       });
       const r = (result ?? {}) as { base64?: string; size?: number };

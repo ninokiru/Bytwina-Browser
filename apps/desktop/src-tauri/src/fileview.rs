@@ -14,7 +14,7 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
-use lopdf::{Document, Object};
+use lopdf::{Document, Object, ObjectId};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -375,60 +375,98 @@ fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
     String::from_utf16_lossy(&units)
 }
 
-/// Helper: lấy string từ Object (lopdf 0.46)
+/// Lấy chuỗi từ một Object (String hoặc Name).
 fn obj_to_string(obj: &Object) -> Option<String> {
     match obj {
-        Object::String(bytes, _) => Some(String::from_utf8_lossy(bytes).to_string()),
-        Object::Name(name) => Some(String::from_utf8_lossy(name).to_string()),
-        _ => None,
-    }
-}
-
-/// Helper: lấy i64 từ Object
-fn obj_to_i64(obj: &Object) -> Option<i64> {
-    match obj {
-        Object::Integer(i) => Some(*i),
-        Object::Real(f) => Some(*f as i64),
+        Object::String(bytes, _) | Object::Name(bytes) => {
+            Some(String::from_utf8_lossy(bytes).into_owned())
+        }
         _ => None,
     }
 }
 
 /// Trích xuất các trường form (AcroForm) từ PDF.
-/// Trả về JSON: { fields: [{ name, type, value, options?, required? }] }
+/// Trả về JSON: { fields: [{ name, type, value, defaultValue, required, options }] }
 pub fn pdf_get_form_fields(path: &Path) -> Result<Value, String> {
     let doc = Document::load(path).map_err(|e| format!("không tải được PDF: {e}"))?;
     let mut fields = Vec::new();
 
-    // Kiểm tra AcroForm trong trailer
-    let trailer = &doc.trailer;
-    let root_ref = trailer.get(b"Root").ok_or("không tìm thấy Root")?;
-    let root_obj = doc.get_object(root_ref).map_err(|e| format!("không lấy được Root obj: {e}"))?;
-    let root_dict = root_obj.as_dict().map_err(|e| format!("Root không phải dict: {e}"))?;
-    let acroform_ref = root_dict.get(b"AcroForm").ok_or("không tìm thấy AcroForm")?;
-    let acroform_obj = doc.get_object(acroform_ref).map_err(|e| format!("không lấy được AcroForm obj: {e}"))?;
-    let acroform_dict = acroform_obj.as_dict().map_err(|e| format!("AcroForm không phải dict: {e}"))?;
-    let fields_ref = acroform_dict.get(b"Fields").ok_or("không tìm thấy Fields")?;
-    let fields_array = fields_ref.as_array().map_err(|e| format!("Fields không phải array: {e}"))?;
+    let catalog = doc
+        .catalog()
+        .map_err(|e| format!("không đọc được catalog: {e}"))?;
+    let acroform = catalog
+        .get_deref(b"AcroForm", &doc)
+        .map_err(|_| "PDF không có form (AcroForm)".to_string())?;
+    let acroform_dict = acroform
+        .as_dict()
+        .map_err(|e| format!("AcroForm không phải dict: {e}"))?;
+    let fields_obj = acroform_dict
+        .get_deref(b"Fields", &doc)
+        .map_err(|e| format!("không tìm thấy Fields: {e}"))?;
+    let fields_array = fields_obj
+        .as_array()
+        .map_err(|e| format!("Fields không phải array: {e}"))?;
 
-    for field_ref in fields_array {
-        let field_obj = doc.get_object(field_ref).map_err(|e| format!("không lấy được field obj: {e}"))?;
-        let field_dict = field_obj.as_dict().map_err(|e| format!("field không phải dict: {e}"))?;
+    for entry in fields_array {
+        // Mỗi trường có thể là tham chiếu hoặc dict viết trực tiếp.
+        let Ok((_, field_obj)) = doc.dereference(entry) else {
+            continue;
+        };
+        let Ok(field_dict) = field_obj.as_dict() else {
+            continue;
+        };
 
-        let name = field_dict.get(b"T").and_then(obj_to_string).unwrap_or_default();
-        let field_type = field_dict.get(b"FT").and_then(obj_to_string).unwrap_or_default();
-        let value = field_dict.get(b"V").and_then(obj_to_string).unwrap_or_default();
-        let default_value = field_dict.get(b"DV").and_then(obj_to_string).unwrap_or_default();
-        let required = field_dict.get(b"Ff").and_then(obj_to_i64).map(|f| (f & 2) != 0).unwrap_or(false);
+        let name = field_dict
+            .get_deref(b"T", &doc)
+            .ok()
+            .and_then(obj_to_string)
+            .unwrap_or_default();
+        // Widget/trường con không có /T riêng thì bỏ qua.
+        if name.is_empty() {
+            continue;
+        }
+        let field_type = field_dict
+            .get_deref(b"FT", &doc)
+            .ok()
+            .and_then(obj_to_string)
+            .unwrap_or_default();
+        let value = field_dict
+            .get_deref(b"V", &doc)
+            .ok()
+            .and_then(obj_to_string)
+            .unwrap_or_default();
+        let default_value = field_dict
+            .get_deref(b"DV", &doc)
+            .ok()
+            .and_then(obj_to_string)
+            .unwrap_or_default();
+        let required = field_dict
+            .get_deref(b"Ff", &doc)
+            .ok()
+            .and_then(|obj| obj.as_i64().ok())
+            .is_some_and(|flags| flags & 2 != 0);
 
         let mut options = Vec::new();
-        if field_type == "Ch" {
-            if let Ok(opt_ref) = field_dict.get(b"Opt") {
-                if let Ok(opt_array) = opt_ref.as_array() {
-                    for opt in opt_array {
-                        let opt_obj = doc.get_object(opt).map_err(|e| format!("không lấy được opt obj: {e}"))?;
-                        if let Some(s) = obj_to_string(opt_obj) {
-                            options.push(s);
-                        }
+        let opt_list = if field_type == "Ch" {
+            field_dict
+                .get_deref(b"Opt", &doc)
+                .ok()
+                .and_then(|obj| obj.as_array().ok())
+        } else {
+            None
+        };
+        if let Some(list) = opt_list {
+            for item in list {
+                let target = match doc.dereference(item) {
+                    Ok((_, obj)) => obj,
+                    Err(_) => item,
+                };
+                if let Some(text) = obj_to_string(target) {
+                    options.push(text);
+                } else if let Ok(pair) = target.as_array() {
+                    // Mục dạng [giá trị xuất, nhãn hiển thị]: lấy nhãn.
+                    if let Some(text) = pair.last().and_then(obj_to_string) {
+                        options.push(text);
                     }
                 }
             }
@@ -451,44 +489,61 @@ pub fn pdf_get_form_fields(path: &Path) -> Result<Value, String> {
 /// `fields_json`: JSON string dạng { "field_name": "value", ... }
 pub fn pdf_fill_form(path: &Path, fields_json: &str) -> Result<Value, String> {
     let mut doc = Document::load(path).map_err(|e| format!("không tải được PDF: {e}"))?;
-    let fields: HashMap<String, String> = serde_json::from_str(fields_json)
+    let values: HashMap<String, String> = serde_json::from_str(fields_json)
         .map_err(|e| format!("fields JSON không hợp lệ: {e}"))?;
 
-    // Tìm AcroForm trong trailer
-    let trailer = &doc.trailer;
-    let root_ref = trailer.get(b"Root").ok_or("không tìm thấy Root")?;
-    let root_obj = doc.get_object_mut(root_ref).map_err(|e| format!("không lấy được Root obj: {e}"))?;
-    let root_dict = root_obj.as_dict_mut().map_err(|e| format!("Root không phải dict: {e}"))?;
+    let acro_id = {
+        let catalog = doc
+            .catalog()
+            .map_err(|e| format!("không đọc được catalog: {e}"))?;
+        let acroform = catalog
+            .get(b"AcroForm")
+            .map_err(|_| "PDF không có form (AcroForm)".to_string())?;
+        doc.dereference(acroform)
+            .map_err(|e| format!("không đọc được AcroForm: {e}"))?
+            .0
+            .ok_or("AcroForm phải là đối tượng gián tiếp để điền form")?
+    };
 
-    let acroform_ref = root_dict.get(b"AcroForm").ok_or("PDF không có AcroForm")?;
-    let acroform_obj = doc.get_object_mut(acroform_ref).map_err(|e| format!("không lấy được AcroForm: {e}"))?;
-    let acroform_dict = acroform_obj.as_dict_mut().map_err(|e| format!("AcroForm không phải dict: {e}"))?;
+    // Gom ObjectId trước để không mượn `doc` trùng lúc sửa.
+    let field_ids: Vec<ObjectId> = {
+        let acroform = doc
+            .get_dictionary(acro_id)
+            .map_err(|e| format!("không lấy được AcroForm: {e}"))?;
+        let fields_obj = acroform
+            .get_deref(b"Fields", &doc)
+            .map_err(|e| format!("không tìm thấy Fields: {e}"))?;
+        let fields_array = fields_obj
+            .as_array()
+            .map_err(|e| format!("Fields không phải array: {e}"))?;
+        fields_array
+            .iter()
+            .filter_map(|entry| doc.dereference(entry).ok().and_then(|(id, _)| id))
+            .collect()
+    };
 
-    // Lấy danh sách Fields
-    let fields_ref = acroform_dict.get(b"Fields").map_err(|e| format!("không tìm thấy Fields: {e}"))?;
-    let fields_array = fields_ref.as_array().map_err(|e| format!("Fields không phải array: {e}"))?;
-
-    // Duyệt qua các field và cập nhật giá trị
-    for field_ref in fields_array.iter() {
-        if let Ok(field_obj) = doc.get_object_mut(field_ref) {
-            if let Ok(field_dict) = field_obj.as_dict_mut() {
-                if let Some(name) = field_dict.get(b"T").and_then(obj_to_string) {
-                    if let Some(value) = fields.get(&name) {
-                        field_dict.set(b"V", Object::string_literal(value));
-                    }
-                }
-            }
+    for id in field_ids {
+        let Ok(field_dict) = doc.get_dictionary_mut(id) else {
+            continue;
+        };
+        let Some(name) = field_dict.get(b"T").ok().and_then(obj_to_string) else {
+            continue;
+        };
+        if let Some(value) = values.get(&name) {
+            field_dict.set(b"V", Object::string_literal(value.clone()));
         }
     }
 
-    // Cần thiết lập NeedAppearances = true để PDF viewer render lại form
-    acroform_dict.set(b"NeedAppearances", Object::Boolean(true));
+    // Trình xem PDF chỉ vẽ lại nội dung form khi NeedAppearances = true.
+    let acroform = doc
+        .get_dictionary_mut(acro_id)
+        .map_err(|e| format!("không lấy được AcroForm: {e}"))?;
+    acroform.set(b"NeedAppearances", Object::Boolean(true));
 
-    // Lưu vào buffer
     let mut buf = Vec::new();
-    doc.save(&mut buf).map_err(|e| format!("không lưu được PDF: {e}"))?;
+    doc.save_to(&mut buf)
+        .map_err(|e| format!("không lưu được PDF: {e}"))?;
 
-    // Trả về base64
     Ok(json!({
         "base64": STANDARD.encode(&buf),
         "size": buf.len(),

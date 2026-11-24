@@ -203,12 +203,11 @@ pub async fn browser_command(
         // Chế độ đọc: fetch trang, trích xuất nội dung bài viết bằng dom_smoothie.
         "reader_extract" => {
             let url = arg("url")?;
-            let url_for_req = url.clone();
-            let response = ureq::get(url_for_req)
+            let response = ureq::get(&url)
                 .call()
                 .map_err(|e| format!("không tải được trang: {e}"))?;
-            let html = response
-                .into_body()
+            let mut body = response.into_body();
+            let html = body
                 .read_to_string()
                 .map_err(|e| format!("không đọc được nội dung: {e}"))?;
             let mut readability = dom_smoothie::Readability::new(html, Some(url.as_str()), None)

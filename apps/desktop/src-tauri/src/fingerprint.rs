@@ -1,11 +1,9 @@
 //! Chống fingerprint cho webview tab.
 //!
-//! Inject JavaScript vào mỗi trang để làm khó các kỹ thuật vân tay trình duyệt:
-//! canvas, WebRTC, AudioContext, navigator properties, geolocation.
-//! Script chạy qua `webview.eval()` sau khi tạo webview, có thể bật/tắt động.
+//! Script được gắn bằng `initialization_script` khi tạo webview, nên WebView2
+//! chạy lại ở mỗi lần điều hướng. Bật/tắt có hiệu lực với tab tạo sau đó.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::AppHandle;
 
 /// Trạng thái bật/tắt chống fingerprint cho toàn bộ phiên chạy.
 #[derive(Default)]
@@ -16,10 +14,6 @@ pub struct FingerprintState {
 impl FingerprintState {
     pub fn is_enabled(&self) -> bool {
         self.enabled.load(Ordering::SeqCst)
-    }
-
-    pub fn set_enabled(&self, on: bool) {
-        self.enabled.store(on, Ordering::SeqCst);
     }
 
     pub fn toggle(&self) -> bool {
@@ -172,11 +166,7 @@ const FINGERPRINT_JS: &str = r##"
 })();
 "##;
 
-/// Inject script chống fingerprint vào webview đã có.
-pub fn inject(app: &AppHandle, webview_label: &str) -> Result<(), String> {
-    let Some(webview) = app.get_webview(webview_label) else {
-        return Err(format!("không tìm thấy webview {webview_label}"));
-    };
-    let _ = webview.eval(FINGERPRINT_JS);
-    Ok(())
+/// Script JavaScript chống fingerprint, chạy trong ngữ cảnh trang web.
+pub fn script() -> &'static str {
+    FINGERPRINT_JS
 }
