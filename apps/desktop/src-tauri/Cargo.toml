@@ -57,7 +57,10 @@ zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 # thuộc, khai báo ở đây để dùng trực tiếp.
 psl = "2"
 # Định danh duy nhất và đoán loại MIME từ đuôi file.
-uuid = "1"
+# Feature `v4` phải khai báo tường minh: `Uuid::new_v4()` chỉ tồn tại khi có
+# feature này. Trước đây nó được bật ngầm nhờ feature-unification của một crate
+# khác; bỏ crate đó làm mất feature và CI fail với E0599.
+uuid = { version = "1", features = ["v4"] }
 mime_guess = "2"
 # Hash SHA-2 (kiểm tra toàn vẹn tệp tiện ích).
 sha2 = "0.11"
