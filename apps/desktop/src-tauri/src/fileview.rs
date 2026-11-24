@@ -400,19 +400,19 @@ pub fn pdf_get_form_fields(path: &Path) -> Result<Value, String> {
     let mut fields = Vec::new();
 
     // Kiểm tra AcroForm trong trailer
-    let trailer = doc.trailer();
-    let root_ref = trailer.get(b"Root").ok()?;
-    let root_obj = doc.get_object(root_ref).ok()?;
-    let root_dict = root_obj.as_dict().ok()?;
-    let acroform_ref = root_dict.get(b"AcroForm").ok()?;
-    let acroform_obj = doc.get_object(acroform_ref).ok()?;
-    let acroform_dict = acroform_obj.as_dict().ok()?;
-    let fields_ref = acroform_dict.get(b"Fields").ok()?;
-    let fields_array = fields_ref.as_array().ok()?;
+    let trailer = &doc.trailer;
+    let root_ref = trailer.get(b"Root").ok_or("không tìm thấy Root")?;
+    let root_obj = doc.get_object(root_ref).map_err(|e| format!("không lấy được Root obj: {e}"))?;
+    let root_dict = root_obj.as_dict().map_err(|e| format!("Root không phải dict: {e}"))?;
+    let acroform_ref = root_dict.get(b"AcroForm").ok_or("không tìm thấy AcroForm")?;
+    let acroform_obj = doc.get_object(acroform_ref).map_err(|e| format!("không lấy được AcroForm obj: {e}"))?;
+    let acroform_dict = acroform_obj.as_dict().map_err(|e| format!("AcroForm không phải dict: {e}"))?;
+    let fields_ref = acroform_dict.get(b"Fields").ok_or("không tìm thấy Fields")?;
+    let fields_array = fields_ref.as_array().map_err(|e| format!("Fields không phải array: {e}"))?;
 
     for field_ref in fields_array {
-        let field_obj = doc.get_object(field_ref).ok()?;
-        let field_dict = field_obj.as_dict().ok()?;
+        let field_obj = doc.get_object(field_ref).map_err(|e| format!("không lấy được field obj: {e}"))?;
+        let field_dict = field_obj.as_dict().map_err(|e| format!("field không phải dict: {e}"))?;
 
         let name = field_dict.get(b"T").and_then(obj_to_string).unwrap_or_default();
         let field_type = field_dict.get(b"FT").and_then(obj_to_string).unwrap_or_default();
@@ -425,7 +425,7 @@ pub fn pdf_get_form_fields(path: &Path) -> Result<Value, String> {
             if let Ok(opt_ref) = field_dict.get(b"Opt") {
                 if let Ok(opt_array) = opt_ref.as_array() {
                     for opt in opt_array {
-                        let opt_obj = doc.get_object(opt).ok()?;
+                        let opt_obj = doc.get_object(opt).map_err(|e| format!("không lấy được opt obj: {e}"))?;
                         if let Some(s) = obj_to_string(opt_obj) {
                             options.push(s);
                         }
@@ -455,8 +455,8 @@ pub fn pdf_fill_form(path: &Path, fields_json: &str) -> Result<Value, String> {
         .map_err(|e| format!("fields JSON không hợp lệ: {e}"))?;
 
     // Tìm AcroForm trong trailer
-    let trailer = doc.trailer();
-    let root_ref = trailer.get(b"Root").map_err(|e| format!("không tìm thấy Root: {e}"))?;
+    let trailer = &doc.trailer;
+    let root_ref = trailer.get(b"Root").ok_or("không tìm thấy Root")?;
     let root_obj = doc.get_object_mut(root_ref).map_err(|e| format!("không lấy được Root obj: {e}"))?;
     let root_dict = root_obj.as_dict_mut().map_err(|e| format!("Root không phải dict: {e}"))?;
 
