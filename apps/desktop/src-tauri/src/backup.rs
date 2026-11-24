@@ -249,10 +249,7 @@ mod tests {
         assert!(std::fs::read_dir(&d)
             .unwrap()
             .flatten()
-            .any(|e| e
-                .file_name()
-                .to_string_lossy()
-                .starts_with("pre-restore-")));
+            .any(|e| e.file_name().to_string_lossy().starts_with("pre-restore-")));
     }
 
     #[test]

@@ -40,16 +40,13 @@ pub fn stylesheet(engine: &Engine, url: &str, classes: &[String], ids: &[String]
             "#masthead-ad",
             ".ytp-ad-module",
             ".ytp-ad-overlay-container",
-            "tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)"
+            "tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)",
         ] {
             selectors.push(s.to_string());
         }
     } else if url.contains("tiktok.com") {
         // Dùng thuộc tính ổn định data-e2e thay vì hash class
-        for s in [
-            "div[data-e2e='feed-ad']",
-            ".ad-badge"
-        ] {
+        for s in ["div[data-e2e='feed-ad']", ".ad-badge"] {
             selectors.push(s.to_string());
         }
     }
@@ -82,9 +79,17 @@ pub fn is_high_risk(url: &str) -> bool {
         .and_then(|u| u.host_str().map(str::to_ascii_lowercase))
         .unwrap_or_default();
     [
-        "youtube.com", "facebook.com", "instagram.com", "tiktok.com",
-        "vnexpress.net", "dantri.com.vn", "tuoitre.vn", "thanhnien.vn",
-        "kenh14.vn", "cafebiz.vn", "genk.vn",
+        "youtube.com",
+        "facebook.com",
+        "instagram.com",
+        "tiktok.com",
+        "vnexpress.net",
+        "dantri.com.vn",
+        "tuoitre.vn",
+        "thanhnien.vn",
+        "kenh14.vn",
+        "cafebiz.vn",
+        "genk.vn",
     ]
     .iter()
     .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
@@ -92,7 +97,15 @@ pub fn is_high_risk(url: &str) -> bool {
 
 fn generic_selectors(classes: &[String], ids: &[String]) -> Vec<String> {
     const SAFE: &[&str] = &["address-block", "adaptation", "adoption", "badge", "header"];
-    const TERMS: &[&str] = &["ad", "ads", "advert", "advertisement", "banner", "sponsor", "promoted"];
+    const TERMS: &[&str] = &[
+        "ad",
+        "ads",
+        "advert",
+        "advertisement",
+        "banner",
+        "sponsor",
+        "promoted",
+    ];
     let mut out = vec![
         "[id^='banner']:not(#banner-header)".to_string(),
         ".sponsor:not(.sponsor-header)".to_string(),
@@ -102,7 +115,10 @@ fn generic_selectors(classes: &[String], ids: &[String]) -> Vec<String> {
         if SAFE.contains(&lower.as_str()) || !TERMS.iter().any(|term| lower.contains(term)) {
             continue;
         }
-        if class.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        if class
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
             out.push(format!(".{class}"));
         }
     }
@@ -111,7 +127,10 @@ fn generic_selectors(classes: &[String], ids: &[String]) -> Vec<String> {
         if SAFE.contains(&lower.as_str()) || !TERMS.iter().any(|term| lower.contains(term)) {
             continue;
         }
-        if id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        if id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
             out.push(format!("#{id}"));
         }
     }
@@ -194,7 +213,10 @@ mod tests {
                 ["sponsor", "spon"],
                 &all.exceptions,
             );
-            println!("[{label}] hide={:?} by_class={:?}", all.hide_selectors, by_class);
+            println!(
+                "[{label}] hide={:?} by_class={:?}",
+                all.hide_selectors, by_class
+            );
         }
         let p = production_engine(".advert\n");
         println!(
@@ -228,7 +250,11 @@ mod tests {
         let e = engine(".advert\n@@||hide.me$generichide\n");
         let r = e.url_cosmetic_resources("https://hide.me/");
         assert!(r.generichide, "phải bật cờ generichide");
-        assert!(!r.hide_selectors.contains(".advert"), "{:?}", r.hide_selectors);
+        assert!(
+            !r.hide_selectors.contains(".advert"),
+            "{:?}",
+            r.hide_selectors
+        );
     }
 
     #[test]

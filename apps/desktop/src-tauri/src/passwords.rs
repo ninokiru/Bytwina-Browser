@@ -47,8 +47,8 @@ impl SecretKey {
 }
 
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<SecretKey, String> {
-    let params = Params::new(MEM_KIB, TIME_COST, PARALLELISM, Some(KEY_LEN))
-        .map_err(|e| e.to_string())?;
+    let params =
+        Params::new(MEM_KIB, TIME_COST, PARALLELISM, Some(KEY_LEN)).map_err(|e| e.to_string())?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
     argon
@@ -59,7 +59,8 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<SecretKey, String> {
 
 /// Trả về nonce || bản mã. GCM đã xác thực toàn vẹn nên giải mã sai khóa sẽ lỗi.
 pub fn seal(key: &SecretKey, plain: &[u8]) -> Result<Vec<u8>, String> {
-    let cipher = Aes256Gcm::new_from_slice(key.bytes()).map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
+    let cipher = Aes256Gcm::new_from_slice(key.bytes())
+        .map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
     let mut nonce = [0u8; NONCE_LEN];
     OsRng.fill_bytes(&mut nonce);
     let ct = cipher
@@ -75,7 +76,8 @@ pub fn open(key: &SecretKey, blob: &[u8]) -> Result<Vec<u8>, String> {
     if blob.len() <= NONCE_LEN {
         return Err("dữ liệu mã hóa không hợp lệ".into());
     }
-    let cipher = Aes256Gcm::new_from_slice(key.bytes()).map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
+    let cipher = Aes256Gcm::new_from_slice(key.bytes())
+        .map_err(|_| "khóa mã hóa không hợp lệ".to_string())?;
     let (nonce, ct) = blob.split_at(NONCE_LEN);
     cipher
         .decrypt(Nonce::from_slice(nonce), ct)
@@ -130,7 +132,10 @@ impl PasswordVault {
             .unwrap_or_else(|e| e.into_inner());
         if let Some(until) = state.1 {
             if Instant::now() < until {
-                let seconds = until.saturating_duration_since(Instant::now()).as_secs().max(1);
+                let seconds = until
+                    .saturating_duration_since(Instant::now())
+                    .as_secs()
+                    .max(1);
                 return Err(format!("thử quá nhiều lần; hãy chờ {seconds} giây"));
             }
             state.1 = None;

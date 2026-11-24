@@ -80,7 +80,10 @@ pub async fn check(app: AppHandle) -> Option<UpdateInfo> {
 /// Sau mỗi lần thật sự hỏi máy chủ (kể cả lỗi mạng) thì đặt mốc lần kiểm tra kế tiếp.
 pub async fn check_startup(app: AppHandle) -> StartupCheck {
     if !configured(&app) {
-        return StartupCheck { status: "unavailable".into(), info: None };
+        return StartupCheck {
+            status: "unavailable".into(),
+            info: None,
+        };
     }
     let now = now_secs();
     let next = app
@@ -90,7 +93,10 @@ pub async fn check_startup(app: AppHandle) -> StartupCheck {
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(0);
     if now < next {
-        return StartupCheck { status: "skipped".into(), info: None };
+        return StartupCheck {
+            status: "skipped".into(),
+            info: None,
+        };
     }
     let result = check_now(app.clone()).await;
     if let Some(db) = app.try_state::<DbState>().and_then(|s| s.0.clone()) {
@@ -101,7 +107,10 @@ pub async fn check_startup(app: AppHandle) -> StartupCheck {
 
 async fn check_now(app: AppHandle) -> StartupCheck {
     if !configured(&app) {
-        return StartupCheck { status: "unavailable".into(), info: None };
+        return StartupCheck {
+            status: "unavailable".into(),
+            info: None,
+        };
     }
     let result = app
         .updater_builder()
@@ -109,15 +118,27 @@ async fn check_now(app: AppHandle) -> StartupCheck {
         .build();
     let updater = match result {
         Ok(updater) => updater,
-        Err(_) => return StartupCheck { status: "failed".into(), info: None },
+        Err(_) => {
+            return StartupCheck {
+                status: "failed".into(),
+                info: None,
+            }
+        }
     };
-    let update = match updater
-        .check()
-        .await
-    {
+    let update = match updater.check().await {
         Ok(Some(update)) => update,
-        Ok(None) => return StartupCheck { status: "latest".into(), info: None },
-        Err(_) => return StartupCheck { status: "failed".into(), info: None },
+        Ok(None) => {
+            return StartupCheck {
+                status: "latest".into(),
+                info: None,
+            }
+        }
+        Err(_) => {
+            return StartupCheck {
+                status: "failed".into(),
+                info: None,
+            }
+        }
     };
     let info = UpdateInfo {
         version: update.version.clone(),
@@ -127,7 +148,10 @@ async fn check_now(app: AppHandle) -> StartupCheck {
     if let Some(state) = app.try_state::<PendingUpdate>() {
         *state.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(update);
     }
-    StartupCheck { status: "available".into(), info: Some(info) }
+    StartupCheck {
+        status: "available".into(),
+        info: Some(info),
+    }
 }
 
 /// Tải và cài bản đang chờ. Trên Windows installer tự thoát app rồi mở lại, nên

@@ -120,7 +120,8 @@ pub fn open(app_data_dir: PathBuf) -> Option<Db> {
     migrate(&conn).ok()?;
     let mut cached = HashMap::new();
     if let Ok(mut stmt) = conn.prepare("SELECT key, value FROM settings") {
-        if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        if let Ok(rows) =
+            stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
         {
             for (k, v) in rows.flatten() {
                 cached.insert(k, v);
@@ -250,7 +251,8 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     }
     if version < 5 {
         // v5: ghi chú gắn liền với URL (URL-Attached Notes) và lưu phiên theo tên (Named Sessions)
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             CREATE TABLE IF NOT EXISTS page_notes (
                 url TEXT PRIMARY KEY,
                 content TEXT NOT NULL,
@@ -262,7 +264,8 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
                 tabs_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL
             );
-        ")?;
+        ",
+        )?;
         conn.execute("INSERT INTO schema_version (version) VALUES (5)", [])?;
     }
     if version < 6 {
@@ -374,7 +377,11 @@ impl Db {
         // Reload và quay tới lui không nên tạo bản trùng: nếu bản ghi mới nhất đã là
         // URL này thì chỉ bổ sung tiêu đề (lần đầu có thể chưa đọc được title).
         let last: Option<String> = c
-            .query_row("SELECT url FROM history ORDER BY id DESC LIMIT 1", [], |r| r.get(0))
+            .query_row(
+                "SELECT url FROM history ORDER BY id DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
             .ok();
         if last.as_deref() == Some(url) {
             if !title.is_empty() {
@@ -409,7 +416,8 @@ impl Db {
             let rows = stmt
                 .query_map(params![limit], history_row)
                 .map_err(|e| e.to_string())?;
-            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?
         } else {
             let pattern = format!("%{keyword}%");
             let mut stmt = c
@@ -421,7 +429,8 @@ impl Db {
             let rows = stmt
                 .query_map(params![pattern, limit], history_row)
                 .map_err(|e| e.to_string())?;
-            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?
         };
         Ok(items)
     }
@@ -444,7 +453,10 @@ impl Db {
     /// Như trên cho danh sách tải xuống; cột thời gian của nó là `finished_at`.
     pub fn clear_downloads_older_than(&self, since: i64) -> Result<usize, String> {
         self.conn()
-            .execute("DELETE FROM downloads WHERE finished_at < ?1", params![since])
+            .execute(
+                "DELETE FROM downloads WHERE finished_at < ?1",
+                params![since],
+            )
             .map_err(|e| e.to_string())
     }
 
@@ -457,7 +469,8 @@ impl Db {
             )
             .map_err(|e| e.to_string())?;
         // Ghi DB xong mới cập nhật bộ nhớ để cache không bao giờ đi trước sự thật.
-        self.settings_cache().insert(key.to_string(), value.to_string());
+        self.settings_cache()
+            .insert(key.to_string(), value.to_string());
         Ok(())
     }
 
@@ -565,9 +578,7 @@ impl Db {
         let mut stmt = c
             .prepare("SELECT content FROM page_notes WHERE url = ?1")
             .map_err(|e| e.to_string())?;
-        let res = stmt
-            .query_row(params![url], |r| r.get::<_, String>(0))
-            .ok();
+        let res = stmt.query_row(params![url], |r| r.get::<_, String>(0)).ok();
         Ok(res)
     }
 
@@ -628,7 +639,9 @@ impl Db {
     pub fn list_named_sessions(&self) -> Result<Vec<(String, String, i64)>, String> {
         let c = self.conn();
         let mut stmt = c
-            .prepare("SELECT name, tabs_json, created_at FROM saved_sessions ORDER BY created_at DESC")
+            .prepare(
+                "SELECT name, tabs_json, created_at FROM saved_sessions ORDER BY created_at DESC",
+            )
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |r| {
@@ -1183,14 +1196,26 @@ impl Db {
     pub fn delete_extension(&self, id: &str) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM ext_permissions WHERE extension_id = ?1", params![id])
-            .map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM ext_storage WHERE extension_id = ?1", params![id])
-            .map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM extension_assets WHERE extension_id = ?1", params![id])
-            .map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM extension_logs WHERE extension_id = ?1", params![id])
-            .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM ext_permissions WHERE extension_id = ?1",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM ext_storage WHERE extension_id = ?1",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM extension_assets WHERE extension_id = ?1",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM extension_logs WHERE extension_id = ?1",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
         tx.execute("DELETE FROM extensions WHERE id = ?1", params![id])
             .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())
@@ -1203,8 +1228,11 @@ impl Db {
     ) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM extension_assets WHERE extension_id = ?1", params![id])
-            .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM extension_assets WHERE extension_id = ?1",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
         for (path, kind, source) in assets {
             tx.execute(
                 "INSERT INTO extension_assets (extension_id, path, kind, source) VALUES (?1, ?2, ?3, ?4)",
@@ -1223,7 +1251,8 @@ impl Db {
         let rows = stmt
             .query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .map_err(|e| e.to_string())?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
     }
 
     pub fn log_extension(&self, id: &str, level: &str, message: &str) -> Result<(), String> {
@@ -1236,15 +1265,22 @@ impl Db {
         Ok(())
     }
 
-    pub fn extension_logs(&self, id: &str, limit: i64) -> Result<Vec<(String, String, i64)>, String> {
+    pub fn extension_logs(
+        &self,
+        id: &str,
+        limit: i64,
+    ) -> Result<Vec<(String, String, i64)>, String> {
         let c = self.conn();
         let mut stmt = c
             .prepare("SELECT level, message, created_at FROM extension_logs WHERE extension_id = ?1 ORDER BY created_at DESC, id DESC LIMIT ?2")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map(params![id, limit.clamp(1, 500)], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .query_map(params![id, limit.clamp(1, 500)], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
             .map_err(|e| e.to_string())?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())
     }
 
     /// Ghi đè toàn bộ quyền đã cấp của một tiện ích.
@@ -1256,8 +1292,11 @@ impl Db {
     ) -> Result<(), String> {
         let mut c = self.conn();
         let tx = c.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM ext_permissions WHERE extension_id = ?1", params![id])
-            .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM ext_permissions WHERE extension_id = ?1",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
         let ts = now();
         for cap in caps {
             tx.execute(
@@ -1349,7 +1388,10 @@ impl Db {
 
     pub fn extension_storage_clear(&self, id: &str) -> Result<(), String> {
         self.conn()
-            .execute("DELETE FROM ext_storage WHERE extension_id = ?1", params![id])
+            .execute(
+                "DELETE FROM ext_storage WHERE extension_id = ?1",
+                params![id],
+            )
             .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -1405,7 +1447,8 @@ mod security_tests {
         let _ = std::fs::remove_dir_all(&dir);
         let db = open(dir.clone()).expect("mở CSDL test");
         // Ghi chú gắn đúng URL, sửa tại chỗ, xoá bằng nội dung rỗng.
-        db.set_note("https://a.test/x", "# Ghi chú\n\nnội dung").unwrap();
+        db.set_note("https://a.test/x", "# Ghi chú\n\nnội dung")
+            .unwrap();
         assert!(db
             .get_note("https://a.test/x")
             .unwrap()
@@ -1420,10 +1463,16 @@ mod security_tests {
         db.delete_note("https://b.test/").unwrap();
         assert!(db.list_notes().unwrap().is_empty());
         // Phiên có tên: lưu đè theo tên, liệt kê và xoá.
-        db.save_named_session("Công việc", r#"[{"url":"https://a.test/","title":"A","pinned":false,"group":null}]"#)
-            .unwrap();
-        db.save_named_session("Công việc", r#"[{"url":"https://b.test/","title":"B","pinned":true,"group":null}]"#)
-            .unwrap();
+        db.save_named_session(
+            "Công việc",
+            r#"[{"url":"https://a.test/","title":"A","pinned":false,"group":null}]"#,
+        )
+        .unwrap();
+        db.save_named_session(
+            "Công việc",
+            r#"[{"url":"https://b.test/","title":"B","pinned":true,"group":null}]"#,
+        )
+        .unwrap();
         let sessions = db.list_named_sessions().unwrap();
         assert_eq!(sessions.len(), 1);
         assert!(sessions[0].1.contains("b.test"));
@@ -1444,16 +1493,28 @@ mod security_tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].username, "a@b.c");
         assert_eq!(db.password_secret(id).unwrap(), b"sealed");
-        db.update_password(id, "Gmail mới", "https://mail.google.com", "x@y.z", b"sealed2")
-            .unwrap();
+        db.update_password(
+            id,
+            "Gmail mới",
+            "https://mail.google.com",
+            "x@y.z",
+            b"sealed2",
+        )
+        .unwrap();
         assert_eq!(db.password_secret(id).unwrap(), b"sealed2");
         assert_eq!(db.count_passwords().unwrap(), 1);
         // Salt/check nằm trong bảng settings và không bị xóa khi đổi cài đặt khác.
         db.set_setting("vaultSalt", "salt").unwrap();
         db.set_setting("vaultCheck", "check").unwrap();
         db.set_setting("homeUrl", "https://x.test/").unwrap();
-        assert_eq!(db.get_setting("vaultSalt").unwrap().as_deref(), Some("salt"));
-        assert_eq!(db.get_setting("vaultCheck").unwrap().as_deref(), Some("check"));
+        assert_eq!(
+            db.get_setting("vaultSalt").unwrap().as_deref(),
+            Some("salt")
+        );
+        assert_eq!(
+            db.get_setting("vaultCheck").unwrap().as_deref(),
+            Some("check")
+        );
         db.remove_password(id).unwrap();
         assert!(db.list_passwords().unwrap().is_empty());
         db.clear_passwords().unwrap();

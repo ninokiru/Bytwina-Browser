@@ -7,8 +7,8 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use tauri::{LogicalPosition, Manager, WebviewBuilder, WebviewUrl, WindowEvent};
 
-mod browser;
 mod backup;
+mod browser;
 mod commands;
 mod cosmetic;
 mod db;
@@ -17,8 +17,8 @@ mod extensions;
 mod fileview;
 mod filters;
 mod fingerprint;
-mod navigation;
 mod matcher;
+mod navigation;
 mod passwords;
 mod permissions;
 mod tabs;
@@ -103,9 +103,8 @@ fn main() {
             app.manage(DbState(storage));
             // Hệ tiện ích: nạp manifest của các tiện ích đang bật trước khi tạo
             // webview đầu tiên, để document_start có sẵn script ngay lượt tải đầu.
-            let registry = extensions::ExtensionsHandle(std::sync::Arc::new(
-                extensions::Registry::new(),
-            ));
+            let registry =
+                extensions::ExtensionsHandle(std::sync::Arc::new(extensions::Registry::new()));
             if let Some(db) = app.state::<DbState>().0.clone() {
                 registry.0.reload(&db);
             }
@@ -117,9 +116,8 @@ fn main() {
                 .app_data_dir()
                 .map(|d| d.join("filters"))
                 .unwrap_or_default();
-            let blocker = filters::BlockerHandle(std::sync::Arc::new(filters::Blocker::new(
-                filters_dir,
-            )));
+            let blocker =
+                filters::BlockerHandle(std::sync::Arc::new(filters::Blocker::new(filters_dir)));
             if let Some(db) = app.state::<DbState>().0.clone() {
                 let enabled = db
                     .get_setting("adblockEnabled")
@@ -251,13 +249,16 @@ fn main() {
                 match event {
                     WindowEvent::Resized(_) => browser::layout(&handle, &layout_state),
                     WindowEvent::Focused(false) => {
-                        let epoch = focus_epoch_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                        let epoch =
+                            focus_epoch_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
                         let delayed_handle = handle.clone();
                         let delayed_epoch = focus_epoch_clone.clone();
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_secs(30));
                             if delayed_epoch.load(std::sync::atomic::Ordering::SeqCst) == epoch {
-                                if let Some(vault) = delayed_handle.try_state::<crate::passwords::PasswordVault>() {
+                                if let Some(vault) =
+                                    delayed_handle.try_state::<crate::passwords::PasswordVault>()
+                                {
                                     vault.lock();
                                 }
                             }

@@ -10,22 +10,23 @@ use std::collections::HashMap;
 
 use tauri::Webview;
 use webview2_com::Microsoft::Web::WebView2::Win32::{
-    COREWEBVIEW2_WEB_RESOURCE_CONTEXT, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+    ICoreWebView2, ICoreWebView2Environment, ICoreWebView2WebResourceRequest,
+    ICoreWebView2WebResourceRequestedEventArgs, ICoreWebView2WebResourceRequestedEventHandler,
+    ICoreWebView2_22, COREWEBVIEW2_WEB_RESOURCE_CONTEXT, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_CSP_VIOLATION_REPORT,
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_EVENT_SOURCE,
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_FETCH, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_FONT,
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_MANIFEST,
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_MEDIA, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_OTHER,
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_PING, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_SCRIPT,
-    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_SIGNED_EXCHANGE, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_STYLESHEET,
-    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_TEXT_TRACK, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_WEBSOCKET,
+    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_SIGNED_EXCHANGE,
+    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_STYLESHEET, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_TEXT_TRACK,
+    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_WEBSOCKET,
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_XML_HTTP_REQUEST,
-    COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL, ICoreWebView2, ICoreWebView2Environment,
-    ICoreWebView2WebResourceRequest, ICoreWebView2WebResourceRequestedEventArgs,
-    ICoreWebView2WebResourceRequestedEventHandler, ICoreWebView2_22,
+    COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL,
 };
 use webview2_com::{take_pwstr, EventClosure, WebResourceRequestedEventHandler};
-use windows::core::{HSTRING, Interface, PCWSTR, PWSTR};
+use windows::core::{Interface, HSTRING, PCWSTR, PWSTR};
 use windows::Win32::System::Com::IStream;
 
 use crate::filters::BlockerHandle;
@@ -158,8 +159,14 @@ unsafe fn on_requested(
 }
 
 fn dangerous_protocol(uri: &str) -> bool {
-    let scheme = uri.split_once(':').map(|(scheme, _)| scheme).unwrap_or_default();
-    matches!(scheme.to_ascii_lowercase().as_str(), "file" | "smb" | "ftp" | "jar")
+    let scheme = uri
+        .split_once(':')
+        .map(|(scheme, _)| scheme)
+        .unwrap_or_default();
+    matches!(
+        scheme.to_ascii_lowercase().as_str(),
+        "file" | "smb" | "ftp" | "jar"
+    )
 }
 
 /// `Uri(LPWSTR*)` cấp phát bằng CoTaskMem; `take_pwstr` lấy chuỗi và giải phóng.

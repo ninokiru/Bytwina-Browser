@@ -8,7 +8,10 @@ tauri-build = "2"
 
 [dependencies]
 # "unstable" bật Window::add_child (xem docs/DECISIONS.md, ADR-001).
-tauri = { version = "2", features = ["unstable"] }
+# "devtools" giữ F12/Ctrl+Shift+I hoạt động ở bản release: Tauri chỉ xuất
+# `Webview::open_devtools()` khi có debug_assertions HOẶC feature này, nếu
+# không thì bản release không biên dịch được.
+tauri = { version = "2", features = ["unstable", "devtools"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 http = "1"
@@ -53,25 +56,10 @@ zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 # `co.uk`/`com.vn` từng bị đoán sai. Đã có sẵn trong Cargo.lock qua chuỗi phụ
 # thuộc, khai báo ở đây để dùng trực tiếp.
 psl = "2"
-# Tìm kiếm thông minh: bỏ dấu tiếng Việt, tìm mờ, đo độ tương tự chuỗi.
-unidecode = "0.3"
-nucleo = "0.5"
-strsim = "0.11"
 # Định danh duy nhất và đoán loại MIME từ đuôi file.
 uuid = "1"
 mime_guess = "2"
-# Tìm kiếm toàn văn (engine kiểu Lucene) cho lịch sử và ghi chú.
-tantivy = "0.27"
-# HTTP client có hỗ trợ tải tiếp (resume); bên cạnh ureq đang dùng cho danh sách lọc.
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
-# Giải nén gzip/deflate và zstd.
-flate2 = "1"
-zstd = "0.14"
-# Xử lý ảnh, đổi kích thước favicon, đọc .ico và WebP.
-image = "0.25"
-webp = "0.3"
-# Crypto tổng hợp và hash SHA-2.
-ring = "0.17"
+# Hash SHA-2 (kiểm tra toàn vẹn tệp tiện ích).
 sha2 = "0.11"
 
 # ===== Plugin Tauri 2 (chỉ plugin được đăng ký trong main.rs mới được khởi tạo) =====
@@ -89,22 +77,9 @@ tauri-plugin-clipboard-manager = "2.5"
 tauri-plugin-http = "2.8"
 tauri-plugin-process = "2.3"
 
-# ===== Đọc bài, HTML, Markdown, PDF =====
+# ===== Đọc bài, Markdown, PDF =====
 dom_smoothie = "0.18"
-scraper = "0.29"
-html5ever = "0.40"
 lopdf = "0.46"
-printpdf = "0.12"
-
-# ===== Tiện ích hệ thống =====
-dirs = "7"
-notify = "8"
-arboard = "3"
-chrono = "0.4"
-parking_lot = "0.12"
-anyhow = "1"
-thiserror = "2"
-tracing = "0.1"
 
 [features]
 default = []
@@ -114,8 +89,6 @@ alloc-mimalloc = ["dep:mimalloc"]
 # (webview2-com 0.39, windows 0.62). Không tự ý nâng: lệch phiên bản là hai bản
 # crate song song và kiểu COM không tương thích nhau.
 [target.'cfg(target_os = "windows")'.dependencies]
-# Đọc registry Windows.
-winreg = "0.56"
 webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com"] }
 

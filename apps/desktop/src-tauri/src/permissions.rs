@@ -133,7 +133,9 @@ impl Permissions {
     /// Tra nhanh trên luồng UI: `None` nghĩa là chưa có lựa chọn => phải hỏi.
     pub fn lookup(&self, origin: &str, kind: &'static str) -> Option<bool> {
         let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
-        rules.get(origin).and_then(|by_kind| by_kind.get(kind).copied())
+        rules
+            .get(origin)
+            .and_then(|by_kind| by_kind.get(kind).copied())
     }
 
     /// Ghi lựa chọn của người dùng và trả JSON đầy đủ để bên gọi lưu xuống CSDL.
@@ -179,11 +181,8 @@ impl Permissions {
     }
 
     pub fn dump(&self) -> String {
-        let map: HashMap<String, HashMap<&'static str, bool>> = self
-            .rules
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
+        let map: HashMap<String, HashMap<&'static str, bool>> =
+            self.rules.read().unwrap_or_else(|e| e.into_inner()).clone();
         serde_json::to_string(&map).unwrap_or_else(|_| "{}".into())
     }
 
@@ -196,7 +195,10 @@ impl Permissions {
         for (origin, by_kind) in parsed {
             for (name, allowed) in by_kind {
                 if let Some(kind) = Kind::from_key(&name) {
-                    rules.entry(origin.clone()).or_default().insert(kind.key(), allowed);
+                    rules
+                        .entry(origin.clone())
+                        .or_default()
+                        .insert(kind.key(), allowed);
                 }
             }
         }

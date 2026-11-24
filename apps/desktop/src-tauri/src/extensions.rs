@@ -276,7 +276,11 @@ impl Manifest {
             None => format!("ext.{}", uuid::Uuid::new_v4().simple()),
         });
         let mut seen = std::collections::HashSet::new();
-        for cap in self.permissions.iter().chain(self.optional_permissions.iter()) {
+        for cap in self
+            .permissions
+            .iter()
+            .chain(self.optional_permissions.iter())
+        {
             if !CAPABILITIES.contains(&cap.as_str()) {
                 return Err(format!("capability không hỗ trợ: {cap}"));
             }
@@ -292,7 +296,10 @@ impl Manifest {
                 return Err(format!("dependency không hợp lệ: {dep}"));
             }
         }
-        for page in [&self.popup, &self.options_page, &self.background].into_iter().flatten() {
+        for page in [&self.popup, &self.options_page, &self.background]
+            .into_iter()
+            .flatten()
+        {
             safe_relative(page)?;
         }
         if self.content_scripts.is_empty() {
@@ -355,7 +362,12 @@ fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     let av: Vec<u64> = a.split('.').map(|p| p.parse().unwrap_or(0)).collect();
     let bv: Vec<u64> = b.split('.').map(|p| p.parse().unwrap_or(0)).collect();
     (0..av.len().max(bv.len()))
-        .map(|i| (av.get(i).copied().unwrap_or(0), bv.get(i).copied().unwrap_or(0)))
+        .map(|i| {
+            (
+                av.get(i).copied().unwrap_or(0),
+                bv.get(i).copied().unwrap_or(0),
+            )
+        })
         .find_map(|(x, y)| (x != y).then_some(x.cmp(&y)))
         .unwrap_or(std::cmp::Ordering::Equal)
 }
@@ -585,12 +597,9 @@ impl Registry {
             if !tokens.contains_key(&ext.record.id) {
                 continue;
             }
-            for (script_index, script) in ext
-                .scripts
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.run_at != RunAt::Start && pattern_hit(&s.matches, &s.exclude, url))
-            {
+            for (script_index, script) in ext.scripts.iter().enumerate().filter(|(_, s)| {
+                s.run_at != RunAt::Start && pattern_hit(&s.matches, &s.exclude, url)
+            }) {
                 out.push_str(&self.end_wrapper(&ext, script, script_index));
             }
         }
@@ -961,7 +970,11 @@ fn source_sha256(root: &Path) -> Result<String, String> {
             if meta.is_dir() {
                 collect(root, &path, files)?;
             } else if meta.is_file() {
-                files.push(path.strip_prefix(root).map_err(|e| e.to_string())?.to_path_buf());
+                files.push(
+                    path.strip_prefix(root)
+                        .map_err(|e| e.to_string())?
+                        .to_path_buf(),
+                );
             }
         }
         Ok(())
@@ -983,7 +996,10 @@ fn source_sha256(root: &Path) -> Result<String, String> {
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn scan_extension_assets(assets: &[(String, String, String)], allow_unsafe: bool) -> Result<(), String> {
+fn scan_extension_assets(
+    assets: &[(String, String, String)],
+    allow_unsafe: bool,
+) -> Result<(), String> {
     if allow_unsafe {
         return Ok(());
     }
@@ -1035,7 +1051,8 @@ pub fn download_source(url: &str) -> Result<PathBuf, String> {
         .get(url)
         .call()
         .map_err(|e| format!("không tải được tiện ích: {e}"))?;
-    let temp = std::env::temp_dir().join(format!("bytwina-ext-{}.zip", uuid::Uuid::new_v4().simple()));
+    let temp =
+        std::env::temp_dir().join(format!("bytwina-ext-{}.zip", uuid::Uuid::new_v4().simple()));
     let mut out = std::fs::File::create(&temp).map_err(|e| e.to_string())?;
     let body = response.body_mut().with_config().limit(MAX_TOTAL_BYTES + 1);
     let bytes = match body.read_to_vec() {
@@ -1249,7 +1266,10 @@ pub fn install_source(
     let existing = db.get_extension(&id)?;
     if let Some(old) = existing.as_ref() {
         if version_cmp(&manifest.version, &old.version) == std::cmp::Ordering::Less {
-            return Err(format!("không thể hạ phiên bản {} xuống {}", old.version, manifest.version));
+            return Err(format!(
+                "không thể hạ phiên bản {} xuống {}",
+                old.version, manifest.version
+            ));
         }
     }
     let previous_permissions = existing
@@ -1265,7 +1285,8 @@ pub fn install_source(
     // bắt đầu copy: zip lỗi/đĩa đầy giữa chừng sẽ làm mất bản cài trước đó.
     let staging = extensions_dir.join(format!(".{id}.install-{}", uuid::Uuid::new_v4().simple()));
     if staging.exists() {
-        std::fs::remove_dir_all(&staging).map_err(|e| format!("không dọn được thư mục tạm: {e}"))?;
+        std::fs::remove_dir_all(&staging)
+            .map_err(|e| format!("không dọn được thư mục tạm: {e}"))?;
     }
     let mut files = 0usize;
     let mut total = 0u64;
@@ -1577,8 +1598,12 @@ async fn dispatch(
             let text = serde_json::to_string(&message).map_err(|e| e.to_string())?;
             let arg = serde_json::to_string(&text).map_err(|e| e.to_string())?;
             for tab in snap.tabs {
-                let Ok(url) = Url::parse(&tab.url) else { continue };
-                if !ext.matches(&url) { continue; }
+                let Ok(url) = Url::parse(&tab.url) else {
+                    continue;
+                };
+                if !ext.matches(&url) {
+                    continue;
+                }
                 if let Some(webview) = app.get_webview(&format!("tab-{}", tab.id)) {
                     let _ = webview.eval(format!(
                         "window.__bytwinaDeliver&&window.__bytwinaDeliver(JSON.parse({arg}));"

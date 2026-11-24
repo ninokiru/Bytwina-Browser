@@ -80,7 +80,7 @@ jobs:
           set +e
           cargo check --all-targets 2>&1 | tee check.txt
           status=${PIPESTATUS[0]}
-          hits=$(grep -E '^error|^warning: unused|-->' check.txt | head -n 12)
+          hits=$(grep -E '^error|^warning: unused|-->' check.txt | head -n 20)
           if [ -z "$hits" ]; then hits=$(tail -n 12 check.txt); fi
           printf '%s\n' "$hits" | while IFS= read -r line; do
             echo "::error::$line"
@@ -100,7 +100,7 @@ jobs:
           cargo clippy --all-targets --message-format=short -- -D warnings 2>&1 | tee clippy.txt
           status=${PIPESTATUS[0]}
           # Ghi lỗi đầu tiên thành annotation để đọc được từ API/Giao diện.
-          hits=$(grep -Ei 'error|warning' clippy.txt | head -n 9)
+          hits=$(grep -Ei 'error|warning' clippy.txt | head -n 20)
           if [ -z "$hits" ]; then hits=$(tail -n 9 clippy.txt); fi
           printf '%s\n' "$hits" | while IFS= read -r line; do
             echo "::error::$line"

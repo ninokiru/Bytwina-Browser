@@ -7,8 +7,8 @@
 //! - Callback chặn chạy trên luồng UI của cửa sổ nên đường đọc phải ngắn: kiểm tra
 //!   `enabled` và danh sách tên miền tắt trước khi chạm engine.
 
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -28,7 +28,10 @@ const CACHE_FILE: &str = "engine.bin";
 /// (EasyList/Matthew Grey, uBlock filters và ABPVN đều GPL-3).
 pub const DEFAULT_LISTS: &[(&str, &str)] = &[
     ("easylist", "https://easylist.to/easylist/easylist.txt"),
-    ("easyprivacy", "https://easylist.to/easylist/easyprivacy.txt"),
+    (
+        "easyprivacy",
+        "https://easylist.to/easylist/easyprivacy.txt",
+    ),
     (
         "ublock-filters",
         "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
@@ -287,7 +290,10 @@ impl Blocker {
         if blocked {
             self.blocked.fetch_add(1, Ordering::Relaxed);
             if !tab_label.is_empty() {
-                let mut counts = self.blocked_by_tab.lock().unwrap_or_else(|e| e.into_inner());
+                let mut counts = self
+                    .blocked_by_tab
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 *counts.entry(tab_label.to_string()).or_default() += 1;
             }
         }
@@ -420,7 +426,11 @@ fn cache_is_fresh(dir: &Path) -> bool {
             continue;
         }
         // `>` chứ không phải `>=`: cache luôn ghi sau .txt nên bằng thời gian là còn hợp lệ.
-        if path.metadata().and_then(|m| m.modified()).is_ok_and(|t| t > cache_time) {
+        if path
+            .metadata()
+            .and_then(|m| m.modified())
+            .is_ok_and(|t| t > cache_time)
+        {
             return false;
         }
     }
@@ -431,7 +441,6 @@ fn host_of(url: &str) -> Option<String> {
     url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(str::to_owned))
-
 }
 
 fn source_host(source_url: &str) -> Option<String> {
@@ -463,9 +472,7 @@ mod tests {
 
     #[test]
     fn blocks_third_party_ad_script() {
-        let b = blocker_with(
-            "! Title: test\n||doubleclick.net^$script,third-party\n",
-        );
+        let b = blocker_with("! Title: test\n||doubleclick.net^$script,third-party\n");
         assert!(b.should_block(
             "https://doubleclick.net/a.js",
             "https://news.example/",
@@ -577,7 +584,11 @@ mod tests {
     fn counter_increments_per_block() {
         let b = blocker_with("||doubleclick.net^\n");
         let before = b.blocked_count();
-        b.should_block("https://doubleclick.net/a.js", "https://n.example/", "script");
+        b.should_block(
+            "https://doubleclick.net/a.js",
+            "https://n.example/",
+            "script",
+        );
         b.should_block("https://ok.example/a.js", "https://n.example/", "script");
         assert_eq!(b.blocked_count(), before + 1);
     }
@@ -667,7 +678,10 @@ mod tests {
             "||doubleclick.net^\n||googlesyndication.com^\n||google-analytics.com^$third-party\n",
         );
         for (label, url) in [
-            ("trúng luật", "https://googleads.g.doubleclick.net/pagead/x.js"),
+            (
+                "trúng luật",
+                "https://googleads.g.doubleclick.net/pagead/x.js",
+            ),
             ("không trúng", "https://news.example.vn/static/app.js"),
         ] {
             let started = std::time::Instant::now();

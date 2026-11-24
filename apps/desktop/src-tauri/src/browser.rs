@@ -1017,7 +1017,8 @@ pub fn webview_devtools(app: &AppHandle, _state: &BrowserState, id: u32) -> Resu
     let webview = app
         .get_webview(&label)
         .ok_or_else(|| format!("không tìm thấy webview {id}"))?;
-    let _ = webview.open_devtools();
+    // `open_devtools` trả về `()` (không phải Result) nên không được gán vào `let _`.
+    webview.open_devtools();
     Ok(())
 }
 

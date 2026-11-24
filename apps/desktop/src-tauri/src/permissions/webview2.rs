@@ -18,10 +18,10 @@ use std::collections::HashMap;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Webview};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
-    COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_STATE,
-    COREWEBVIEW2_PERMISSION_STATE_ALLOW, COREWEBVIEW2_PERMISSION_STATE_DENY, ICoreWebView2,
-    ICoreWebView2Deferral, ICoreWebView2PermissionRequestedEventArgs,
+    ICoreWebView2, ICoreWebView2Deferral, ICoreWebView2PermissionRequestedEventArgs,
     ICoreWebView2PermissionRequestedEventArgs2, ICoreWebView2PermissionRequestedEventHandler,
+    COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_STATE,
+    COREWEBVIEW2_PERMISSION_STATE_ALLOW, COREWEBVIEW2_PERMISSION_STATE_DENY,
 };
 use webview2_com::{take_pwstr, EventClosure, PermissionRequestedEventHandler};
 use windows::core::{Interface, PWSTR};
@@ -178,7 +178,9 @@ pub fn respond(
         .ok_or("webview của tab đã bị đóng")?;
     let _ = webview.with_webview(move |_pv| {
         let entry = PENDING.with(|p| p.borrow_mut().remove(&id));
-        let Some((args, deferral)) = entry else { return };
+        let Some((args, deferral)) = entry else {
+            return;
+        };
         unsafe {
             let _ = args.SetState(state);
             let _ = deferral.Complete();

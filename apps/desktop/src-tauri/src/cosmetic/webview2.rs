@@ -24,7 +24,7 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2_2,
 };
 use webview2_com::{EventClosure, ExecuteScriptCompletedHandler, NavigationCompletedEventHandler};
-use windows::core::{BOOL, HSTRING, Interface};
+use windows::core::{Interface, BOOL, HSTRING};
 
 use crate::filters::BlockerHandle;
 
@@ -256,7 +256,10 @@ mod tests {
         let script = apply_script(".a{content:\"]\"}", false);
         assert!(script.contains("__bytwina_cosmetic__"), "{script}");
         assert!(script.contains(r#"\""#), "phải escape dấu nháy: {script}");
-        assert!(!script.contains("tauri"), "không được lộ API ứng dụng: {script}");
+        assert!(
+            !script.contains("tauri"),
+            "không được lộ API ứng dụng: {script}"
+        );
     }
 
     #[test]

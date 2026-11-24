@@ -362,13 +362,16 @@ fn decode_text(bytes: &[u8]) -> String {
 }
 
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
-    let units: Vec<u16> = bytes
-        .chunks_exact(2)
+    // `as_chunks` (Rust 1.88+) thay cho `chunks_exact`: clippy yêu cầu dùng
+    // `as_chunks` khi kích thước khối là hằng số. Phần dư lẻ bị bỏ qua.
+    let (pairs, _) = bytes.as_chunks::<2>();
+    let units: Vec<u16> = pairs
+        .iter()
         .map(|pair| {
             if little_endian {
-                u16::from_le_bytes([pair[0], pair[1]])
+                u16::from_le_bytes(*pair)
             } else {
-                u16::from_be_bytes([pair[0], pair[1]])
+                u16::from_be_bytes(*pair)
             }
         })
         .collect();
@@ -489,8 +492,8 @@ pub fn pdf_get_form_fields(path: &Path) -> Result<Value, String> {
 /// `fields_json`: JSON string dạng { "field_name": "value", ... }
 pub fn pdf_fill_form(path: &Path, fields_json: &str) -> Result<Value, String> {
     let mut doc = Document::load(path).map_err(|e| format!("không tải được PDF: {e}"))?;
-    let values: HashMap<String, String> = serde_json::from_str(fields_json)
-        .map_err(|e| format!("fields JSON không hợp lệ: {e}"))?;
+    let values: HashMap<String, String> =
+        serde_json::from_str(fields_json).map_err(|e| format!("fields JSON không hợp lệ: {e}"))?;
 
     let acro_id = {
         let catalog = doc
